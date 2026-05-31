@@ -1,6 +1,13 @@
 import { useState } from 'react';
 import { X, Trash2, KeyRound } from 'lucide-react';
-import type { StudioState, CatalogView, InstallPlan, InstallResult } from './types';
+import type {
+  StudioState,
+  CatalogView,
+  InstallPlan,
+  InstallResult,
+  McpHubResult,
+  SkillHubResult,
+} from './types';
 import { api } from './api';
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
@@ -789,7 +796,188 @@ function InstallPanel({ catalog }: { catalog: CatalogView }) {
   );
 }
 
+function HubMcpPanel({
+  state,
+  apply,
+}: {
+  state: StudioState;
+  apply: (p: Promise<StudioState>) => void;
+}) {
+  const [query, setQuery] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [results, setResults] = useState<McpHubResult[]>([]);
+  const [errors, setErrors] = useState<Array<{ source: string; message: string }>>([]);
+  const [searched, setSearched] = useState(false);
+  const added = new Set(state.manifest.components.mcp);
+
+  async function run(): Promise<void> {
+    setLoading(true);
+    try {
+      const r = await api.hubMcp(query);
+      setResults(r.results);
+      setErrors(r.errors);
+      setSearched(true);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">
+        Search the MCP Registry and Smithery. Adding a server brings its credential requirements.
+      </p>
+      <div className="flex gap-2">
+        <Input
+          data-testid="hub-mcp-query"
+          placeholder="e.g. github, postgres, slack"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && run()}
+        />
+        <Button data-testid="hub-mcp-search" onClick={() => run()} disabled={loading}>
+          {loading ? 'Searching…' : 'Search'}
+        </Button>
+      </div>
+      {errors.map((e) => (
+        <p key={e.source} className="text-xs text-amber-500">
+          {e.source} unavailable: {e.message}
+        </p>
+      ))}
+      {searched && results.length === 0 && !loading && (
+        <p className="text-sm text-muted-foreground">No servers found.</p>
+      )}
+      <div className="space-y-2">
+        {results.map((r) => {
+          const isAdded = added.has(r.entry.id);
+          return (
+            <div key={`${r.source}:${r.entry.id}`} className="rounded-lg border p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-sm font-medium">{r.entry.name}</span>
+                    <Badge variant="secondary">{r.source}</Badge>
+                    {typeof r.popularity === 'number' && (
+                      <span className="text-[11px] text-muted-foreground">{r.popularity} uses</span>
+                    )}
+                  </div>
+                  <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
+                    {r.entry.description}
+                  </p>
+                  {r.credentials.length > 0 && (
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      needs {r.credentials.map((c) => c.ref).join(', ')}
+                    </p>
+                  )}
+                </div>
+                <Button
+                  data-testid={`hub-mcp-add-${r.entry.id}`}
+                  size="sm"
+                  variant={isAdded ? 'secondary' : 'outline'}
+                  disabled={isAdded}
+                  onClick={() => apply(api.addHubMcp(r))}
+                >
+                  {isAdded ? 'Added' : 'Add'}
+                </Button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function HubSkillPanel({ apply }: { apply: (p: Promise<StudioState>) => void }) {
+  const [query, setQuery] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [results, setResults] = useState<SkillHubResult[]>([]);
+  const [errors, setErrors] = useState<Array<{ source: string; message: string }>>([]);
+  const [searched, setSearched] = useState(false);
+  const [added, setAdded] = useState<Set<string>>(new Set());
+
+  async function run(): Promise<void> {
+    setLoading(true);
+    try {
+      const r = await api.hubSkills(query);
+      setResults(r.results);
+      setErrors(r.errors);
+      setSearched(true);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">
+        Search GitHub for skill repos (a SKILL.md). Adding imports the SKILL.md from the repo root.
+      </p>
+      <div className="flex gap-2">
+        <Input
+          data-testid="hub-skill-query"
+          placeholder="e.g. code review, security"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && run()}
+        />
+        <Button data-testid="hub-skill-search" onClick={() => run()} disabled={loading}>
+          {loading ? 'Searching…' : 'Search'}
+        </Button>
+      </div>
+      {errors.map((e) => (
+        <p key={e.source} className="text-xs text-amber-500">
+          {e.source} unavailable: {e.message}
+        </p>
+      ))}
+      {searched && results.length === 0 && !loading && (
+        <p className="text-sm text-muted-foreground">No skills found.</p>
+      )}
+      <div className="space-y-2">
+        {results.map((r) => {
+          const key = r.skillUrl ?? r.name;
+          const isAdded = added.has(key);
+          return (
+            <div key={key} className="rounded-lg border p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-sm font-medium">{r.name}</span>
+                    <Badge variant="secondary">{r.source}</Badge>
+                    {typeof r.stars === 'number' && (
+                      <span className="text-[11px] text-muted-foreground">★{r.stars}</span>
+                    )}
+                  </div>
+                  <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
+                    {r.description}
+                  </p>
+                  {r.repo && <p className="mt-1 text-[11px] text-muted-foreground">{r.repo}</p>}
+                </div>
+                <Button
+                  data-testid={`hub-skill-add-${r.name}`}
+                  size="sm"
+                  variant={isAdded ? 'secondary' : 'outline'}
+                  disabled={isAdded || !r.skillUrl}
+                  onClick={() => {
+                    if (!r.skillUrl) return;
+                    apply(api.addHubSkill(r.skillUrl));
+                    setAdded((prev) => new Set(prev).add(key));
+                  }}
+                >
+                  {isAdded ? 'Added' : 'Add'}
+                </Button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function titleFor(selection: string): string {
+  if (selection === 'hub-mcp') return 'Browse MCP hubs';
+  if (selection === 'hub-skills') return 'Browse skill hubs';
   if (selection === 'install') return 'Install';
   if (selection === 'agent') return 'Config';
   if (selection === 'persona') return 'Persona';
@@ -844,6 +1032,8 @@ export function Inspector(props: InspectorProps) {
         {selection === 'new-task' && <TaskEditor apply={apply} />}
         {selection === 'new-skill' && <CustomSkillEditor apply={apply} />}
         {selection === 'new-mcp' && <CustomMcpEditor apply={apply} />}
+        {selection === 'hub-mcp' && <HubMcpPanel state={state} apply={apply} />}
+        {selection === 'hub-skills' && <HubSkillPanel apply={apply} />}
         {selection === 'install' && <InstallPanel catalog={catalog} />}
         {selection.startsWith('cred:') && (
           <CredentialDetails refId={selection.slice(5)} state={state} />

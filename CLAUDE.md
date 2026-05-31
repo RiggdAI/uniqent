@@ -132,8 +132,18 @@ default).
   button and the `uniqent install --target <claude-code|hermes|openclaw>` CLI both drive them; the
   local server is hardened (127.0.0.1-only + localhost Origin/Host guard).
 
+**Hub discovery** — `packages/builder/src/hubs/` adds a framework-agnostic `CatalogSource` layer
+(built once; CLI + Studio consume it). `searchMcpHubs`/`searchSkillHubs` fan out across sources
+with per-source error isolation; sources: the official **MCP Registry** + **Smithery** (MCP) and
+**GitHub** repo search (skills), plus a zero-service **JSON-index** hub (`{ mcp, skills }` at any
+URL). Registry mappers turn server rows into `McpServer` (remotes→streamable-http; packages→stdio;
+secret env vars→`${credentialRef:…}` + explicit `CredentialRequirement`s — no secret value leaks).
+Surfaces: CLI `uniqent hub mcp|skills <query>` and Studio palette **"Browse hubs…"** panels
+(`/api/hub/*`), which add a result as a normal canvas node + its credentials. Mappers tested
+against frozen fixtures of the real responses; verified live and in a browser.
+
 CLI surface:
-`uniqent inspect | install <file|url|slug> | validate <dir|file> | pack <dir> [-o] | search <q>`.
+`uniqent inspect | install <file|url|slug> | validate <dir|file> | pack <dir> [-o] | search <q> | hub <mcp|skills> <q>`.
 `install` accepts a **raw http(s) URL** (no registry needed) **or a registry slug** resolved
 against a JSON index (`--registry <url>` / `UNIQENT_REGISTRY`). The registry is just a hosted
 `index.json` (`registry/index.json` is the sample + format) — **no service required**: `search`

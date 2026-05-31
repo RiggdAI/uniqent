@@ -1,4 +1,14 @@
-import { Brain, Boxes, Sparkles, Database, Settings, Plus, Check, Workflow } from 'lucide-react';
+import {
+  Brain,
+  Boxes,
+  Sparkles,
+  Database,
+  Settings,
+  Plus,
+  Check,
+  Workflow,
+  Globe,
+} from 'lucide-react';
 import type { ComponentType } from 'react';
 import type { StudioState, CatalogView } from './types';
 import { api } from './api';
@@ -110,6 +120,12 @@ export function Palette({ state, catalog, apply, selection, onSelect }: PaletteP
           active={selection === 'new-mcp'}
           onClick={() => onSelect('new-mcp')}
         />
+        <SelectRow
+          icon={Globe}
+          label="Browse hubs…"
+          active={selection === 'hub-mcp'}
+          onClick={() => onSelect('hub-mcp')}
+        />
       </Section>
 
       <Section title="Skills">
@@ -127,6 +143,12 @@ export function Palette({ state, catalog, apply, selection, onSelect }: PaletteP
           label="Custom / import…"
           active={selection === 'new-skill'}
           onClick={() => onSelect('new-skill')}
+        />
+        <SelectRow
+          icon={Globe}
+          label="Browse hubs…"
+          active={selection === 'hub-skills'}
+          onClick={() => onSelect('hub-skills')}
         />
       </Section>
 

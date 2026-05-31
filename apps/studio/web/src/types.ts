@@ -100,3 +100,30 @@ export interface ExportResult {
   signed: boolean;
   verified: boolean;
 }
+
+export interface McpHubResult {
+  source: string;
+  entry: {
+    id: string;
+    name: string;
+    description: string;
+    server: { transport: string; url?: string; command?: string };
+  };
+  credentials: CredentialRequirement[];
+  homepage?: string;
+  popularity?: number;
+}
+
+export interface SkillHubResult {
+  source: string;
+  name: string;
+  description: string;
+  skillUrl?: string;
+  repo?: string;
+  stars?: number;
+}
+
+export interface HubSearch<T> {
+  results: T[];
+  errors: Array<{ source: string; message: string }>;
+}

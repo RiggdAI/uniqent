@@ -5,6 +5,9 @@ import type {
   TaskInput,
   InstallPlan,
   InstallResult,
+  HubSearch,
+  McpHubResult,
+  SkillHubResult,
 } from './types';
 
 async function unwrap<T>(res: Response): Promise<T> {
@@ -58,4 +61,9 @@ export const api = {
     post<InstallPlan>('/api/install/plan', { target, root }),
   install: (target: string, root: string, creds: Record<string, string>) =>
     post<InstallResult>('/api/install', { target, root, creds }),
+  hubMcp: (query: string) => post<HubSearch<McpHubResult>>('/api/hub/mcp/search', { query }),
+  hubSkills: (query: string) =>
+    post<HubSearch<SkillHubResult>>('/api/hub/skills/search', { query }),
+  addHubMcp: (result: McpHubResult) => post<StudioState>('/api/hub/mcp/add', { result }),
+  addHubSkill: (url: string) => post<StudioState>('/api/hub/skill/add', { url }),
 };
