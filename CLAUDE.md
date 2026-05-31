@@ -103,13 +103,23 @@ default).
 
 ## Current status
 
-**M3 complete (canvas Studio).** `packages/spec`, `packages/core`, `packages/builder`, and
-`apps/studio` are implemented. Studio is a local-first web app: a Node API (`StudioSession` over
-the builder) serving a React + Vite SPA with an **n8n-style react-flow canvas** — an agent core
-node wired to component nodes (persona/MCP/skill/memory) and credential→consumer "needs" edges, a
-component palette, and a side-panel inspector. Run it with `pnpm --filter @uniqent/studio build`
-then `pnpm --filter @uniqent/studio start` (serves on `:4173`, override `UNIQENT_STUDIO_PORT`).
-Verified end-to-end in a real browser: build a brain from scratch → export a signed `.uniqent`
-that `core.validateBundle` + `verify` accept. **Next: memory import, then adapters (M4).** No
-adapters or CLI exist yet. When a milestone's acceptance criteria in `docs/BUILD_PLAN.md` pass,
-update this status line and add any newly-discovered exact commands or gotchas above.
+**M3 (Studio) + M4 (Claude Code install) complete.** Packages: `spec`, `core`, `builder`,
+`adapter-sdk`, `adapter-claude-code`, `cli`; app: `studio`.
+
+- **Studio** (`apps/studio`) — local-first React+Vite app over a Node API (`StudioSession` over the
+  builder) with an **n8n-style react-flow canvas**: agent core node wired to component nodes
+  (persona/MCP/skill/memory/channel/flow) + credential→consumer "needs" edges, a palette
+  (catalog + custom/import for skills & MCP, channels, flows), and a side-panel inspector. Memory
+  has single + bulk import (paste / `.txt`/`.md`/`.jsonl`). Run:
+  `pnpm --filter @uniqent/studio build && pnpm --filter @uniqent/studio start` (`:4173`,
+  `UNIQENT_STUDIO_PORT` to override). Verified in a real browser.
+- **Install** — `@uniqent/adapter-sdk` (Adapter interface + conformance harness) +
+  `@uniqent/adapter-claude-code` (skills→`.claude/skills`, persona+memory→`AGENTS.md`,
+  MCP→merged `.mcp.json` with locally-resolved creds injected; channels/tasks/tools reported as
+  lossiness) + `@uniqent/cli` (`uniqent inspect|install <file> --target claude-code --root <dir>
+  --cred ref=val [--allow-unsigned] [--yes]`). Verified: a signed `.uniqent` installs into a
+  sandbox `.claude/` end to end.
+
+**Next: OpenClaw adapter + a Studio "Install" button (M4b), then registry/one-click (M6).** When a
+milestone's acceptance criteria in `docs/BUILD_PLAN.md` pass, update this status line and add any
+newly-discovered exact commands or gotchas above.
