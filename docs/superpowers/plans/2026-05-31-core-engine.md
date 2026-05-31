@@ -43,6 +43,7 @@ Conventions (match `packages/spec`): src imports use `.js` extensions; test impo
 ### Task 0: Add `MemoryItem.visibility` to the spec
 
 **Files:**
+
 - Modify: `packages/spec/src/memory.ts`
 - Test: `packages/spec/test/manifest.test.ts`
 
@@ -51,38 +52,38 @@ Conventions (match `packages/spec`): src imports use `.js` extensions; test impo
 Add to `packages/spec/test/manifest.test.ts` inside the existing `describe('MemoryItem', ...)` block:
 
 ```ts
-  it('defaults visibility to shareable when omitted', () => {
-    const r = MemoryItem.safeParse({
-      id: 'm3',
-      kind: 'fact',
-      text: 'x',
-      createdAt: '2026-05-31T00:00:00.000Z',
-    });
-    expect(r.success).toBe(true);
-    if (r.success) expect(r.data.visibility).toBe('shareable');
+it('defaults visibility to shareable when omitted', () => {
+  const r = MemoryItem.safeParse({
+    id: 'm3',
+    kind: 'fact',
+    text: 'x',
+    createdAt: '2026-05-31T00:00:00.000Z',
   });
+  expect(r.success).toBe(true);
+  if (r.success) expect(r.data.visibility).toBe('shareable');
+});
 
-  it('accepts visibility "personal"', () => {
-    const r = MemoryItem.safeParse({
-      id: 'm4',
-      kind: 'episodic',
-      text: 'x',
-      createdAt: '2026-05-31T00:00:00.000Z',
-      visibility: 'personal',
-    });
-    expect(r.success).toBe(true);
+it('accepts visibility "personal"', () => {
+  const r = MemoryItem.safeParse({
+    id: 'm4',
+    kind: 'episodic',
+    text: 'x',
+    createdAt: '2026-05-31T00:00:00.000Z',
+    visibility: 'personal',
   });
+  expect(r.success).toBe(true);
+});
 
-  it('rejects an invalid visibility', () => {
-    const r = MemoryItem.safeParse({
-      id: 'm5',
-      kind: 'fact',
-      text: 'x',
-      createdAt: '2026-05-31T00:00:00.000Z',
-      visibility: 'secret',
-    });
-    expect(r.success).toBe(false);
+it('rejects an invalid visibility', () => {
+  const r = MemoryItem.safeParse({
+    id: 'm5',
+    kind: 'fact',
+    text: 'x',
+    createdAt: '2026-05-31T00:00:00.000Z',
+    visibility: 'secret',
   });
+  expect(r.success).toBe(false);
+});
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -107,11 +108,13 @@ Expected: PASS (all MemoryItem tests).
 - [ ] **Step 5: Regenerate JSON Schema + SPEC.md and rebuild spec**
 
 Run:
+
 ```bash
 pnpm --filter @uniqent/spec gen
 pnpm --filter @uniqent/spec build
 pnpm --filter @uniqent/spec exec vitest run
 ```
+
 Expected: gen writes the schema + SPEC.md; build succeeds; all spec tests pass (including the drift test, now matching the regenerated schema).
 
 - [ ] **Step 6: Stage (do not commit yet)**
@@ -125,6 +128,7 @@ git add packages/spec/src/memory.ts packages/spec/test/manifest.test.ts packages
 ### Task 1: Scaffold `@uniqent/core` + error classes
 
 **Files:**
+
 - Create: `packages/core/package.json`, `packages/core/tsconfig.json`, `packages/core/vitest.config.ts`, `packages/core/src/errors.ts`, `packages/core/src/index.ts`
 - Test: `packages/core/test/errors.test.ts`
 
@@ -280,6 +284,7 @@ git add packages/core/package.json packages/core/tsconfig.json packages/core/vit
 ### Task 2: `Bundle` model + `PATHS` + test fixture
 
 **Files:**
+
 - Create: `packages/core/src/bundle.ts`, `packages/core/test/helpers.ts`
 - Test: `packages/core/test/bundle.test.ts`
 
@@ -520,14 +525,16 @@ export class Bundle {
 
   manifest(): TManifest {
     const r = Manifest.safeParse(this.parseJson(PATHS.manifest));
-    if (!r.success) throw new BundleFormatError(`${PATHS.manifest} failed schema: ${r.error.message}`);
+    if (!r.success)
+      throw new BundleFormatError(`${PATHS.manifest} failed schema: ${r.error.message}`);
     return r.data;
   }
 
   signature(): TSignature | undefined {
     if (!this.has(PATHS.signature)) return undefined;
     const r = Signature.safeParse(this.parseJson(PATHS.signature));
-    if (!r.success) throw new BundleFormatError(`${PATHS.signature} failed schema: ${r.error.message}`);
+    if (!r.success)
+      throw new BundleFormatError(`${PATHS.signature} failed schema: ${r.error.message}`);
     return r.data;
   }
 
@@ -542,7 +549,8 @@ export class Bundle {
   memoryProfile(): TMemoryProfile | undefined {
     if (!this.has(PATHS.profile)) return undefined;
     const r = MemoryProfile.safeParse(this.parseJson(PATHS.profile));
-    if (!r.success) throw new BundleFormatError(`${PATHS.profile} failed schema: ${r.error.message}`);
+    if (!r.success)
+      throw new BundleFormatError(`${PATHS.profile} failed schema: ${r.error.message}`);
     return r.data;
   }
 
@@ -560,7 +568,8 @@ export class Bundle {
         throw new BundleFormatError(`${path}:${i + 1} is not valid JSON`);
       }
       const r = MemoryItem.safeParse(json);
-      if (!r.success) throw new BundleFormatError(`${path}:${i + 1} failed schema: ${r.error.message}`);
+      if (!r.success)
+        throw new BundleFormatError(`${path}:${i + 1} failed schema: ${r.error.message}`);
       items.push(r.data);
     });
     return items;
@@ -584,7 +593,8 @@ export class Bundle {
   channels(): Channel[] {
     if (!this.has(PATHS.channels)) return [];
     const r = ChannelsFile.safeParse(this.parseJson(PATHS.channels));
-    if (!r.success) throw new BundleFormatError(`${PATHS.channels} failed schema: ${r.error.message}`);
+    if (!r.success)
+      throw new BundleFormatError(`${PATHS.channels} failed schema: ${r.error.message}`);
     return r.data.channels;
   }
 
@@ -609,7 +619,8 @@ export class Bundle {
   runtime(): TRuntimeConfig | undefined {
     if (!this.has(PATHS.runtime)) return undefined;
     const r = RuntimeConfig.safeParse(this.parseJson(PATHS.runtime));
-    if (!r.success) throw new BundleFormatError(`${PATHS.runtime} failed schema: ${r.error.message}`);
+    if (!r.success)
+      throw new BundleFormatError(`${PATHS.runtime} failed schema: ${r.error.message}`);
     return r.data;
   }
 
@@ -640,6 +651,7 @@ git add packages/core/src/bundle.ts packages/core/test/bundle.test.ts packages/c
 ### Task 3: Canonical digest
 
 **Files:**
+
 - Create: `packages/core/src/digest.ts`
 - Test: `packages/core/test/digest.test.ts`
 
@@ -736,6 +748,7 @@ git add packages/core/src/digest.ts packages/core/test/digest.test.ts
 ### Task 4: Secret-scan
 
 **Files:**
+
 - Create: `packages/core/src/secret-scan.ts`
 - Test: `packages/core/test/secret-scan.test.ts`
 
@@ -789,11 +802,11 @@ describe('scanForSecrets', () => {
 
   it('skips signature.json and allowlists author.pubkey', () => {
     const b = Bundle.empty();
-    b.set('signature.json', JSON.stringify({ signature: 'A'.repeat(88), publicKey: 'B'.repeat(64) }));
     b.set(
-      'uniqent.json',
-      JSON.stringify({ author: { name: 'x', pubkey: 'deadbeef'.repeat(8) } }),
+      'signature.json',
+      JSON.stringify({ signature: 'A'.repeat(88), publicKey: 'B'.repeat(64) }),
     );
+    b.set('uniqent.json', JSON.stringify({ author: { name: 'x', pubkey: 'deadbeef'.repeat(8) } }));
     expect(scanForSecrets(b)).toHaveLength(0);
   });
 });
@@ -920,6 +933,7 @@ git add packages/core/src/secret-scan.ts packages/core/test/secret-scan.test.ts
 ### Task 5: Validate
 
 **Files:**
+
 - Create: `packages/core/src/validate.ts`
 - Test: `packages/core/test/validate.test.ts`
 
@@ -950,15 +964,20 @@ describe('validateBundle', () => {
 
   it('errors on a dangling credentialRef', () => {
     const b = makeValidBundle();
-    b.set('mcp/servers.json', JSON.stringify({
-      servers: [{
-        id: 'github',
-        transport: 'streamable-http',
-        url: 'https://example.com/mcp',
-        auth: { type: 'bearer', credentialRef: 'does_not_exist' },
-        tools: { include: 'all' },
-      }],
-    }));
+    b.set(
+      'mcp/servers.json',
+      JSON.stringify({
+        servers: [
+          {
+            id: 'github',
+            transport: 'streamable-http',
+            url: 'https://example.com/mcp',
+            auth: { type: 'bearer', credentialRef: 'does_not_exist' },
+            tools: { include: 'all' },
+          },
+        ],
+      }),
+    );
     const r = validateBundle(b);
     expect(r.errors.some((e) => e.code === 'credential-ref')).toBe(true);
   });
@@ -1093,7 +1112,11 @@ export function validateBundle(bundle: Bundle): ValidationResult {
 
   // 4. Secret-scan.
   for (const f of scanForSecrets(bundle)) {
-    errors.push({ path: f.path, code: 'secret', message: `possible ${f.kind} secret (${f.snippet})` });
+    errors.push({
+      path: f.path,
+      code: 'secret',
+      message: `possible ${f.kind} secret (${f.snippet})`,
+    });
   }
 
   return { ok: errors.length === 0, errors, warnings };
@@ -1131,6 +1154,7 @@ git add packages/core/src/validate.ts packages/core/test/validate.test.ts
 ### Task 6: Signing (keygen / sign / verify)
 
 **Files:**
+
 - Create: `packages/core/src/signing.ts`
 - Test: `packages/core/test/signing.test.ts`
 
@@ -1249,14 +1273,24 @@ export async function verify(bundle: Bundle): Promise<VerifyResult> {
 
   const recomputed = canonicalDigest(bundle);
   if (recomputed !== signature.digest) {
-    return { signed: true, valid: false, reason: 'digest mismatch (content changed)', publicKey: signature.publicKey };
+    return {
+      signed: true,
+      valid: false,
+      reason: 'digest mismatch (content changed)',
+      publicKey: signature.publicKey,
+    };
   }
   const ok = await ed.verifyAsync(
     fromHex(signature.signature),
     enc.encode(signature.digest),
     fromHex(signature.publicKey),
   );
-  return { signed: true, valid: ok, reason: ok ? undefined : 'invalid signature', publicKey: signature.publicKey };
+  return {
+    signed: true,
+    valid: ok,
+    reason: ok ? undefined : 'invalid signature',
+    publicKey: signature.publicKey,
+  };
 }
 ```
 
@@ -1276,6 +1310,7 @@ git add packages/core/src/signing.ts packages/core/test/signing.test.ts
 ### Task 7: Archive (pack / unpack / readDir / writeDir)
 
 **Files:**
+
 - Create: `packages/core/src/archive.ts`
 - Test: `packages/core/test/archive.test.ts`
 
@@ -1373,7 +1408,10 @@ export async function pack(bundle: Bundle, opts: PackOptions = {}): Promise<Uint
   });
 
   for (const [path, bytes] of bundle.entries().sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
-    tar.entry({ name: path, size: bytes.length, mtime: new Date(0), mode: 0o644 }, Buffer.from(bytes));
+    tar.entry(
+      { name: path, size: bytes.length, mtime: new Date(0), mode: 0o644 },
+      Buffer.from(bytes),
+    );
   }
   tar.finalize();
   await done;
@@ -1455,6 +1493,7 @@ git add packages/core/src/archive.ts packages/core/test/archive.test.ts
 ### Task 8: Secret-ref helpers
 
 **Files:**
+
 - Create: `packages/core/src/secret-refs.ts`
 - Test: `packages/core/test/secret-refs.test.ts`
 
@@ -1541,6 +1580,7 @@ git add packages/core/src/secret-refs.ts packages/core/test/secret-refs.test.ts
 ### Task 9: Public exports + full gate + status update
 
 **Files:**
+
 - Modify: `packages/core/src/index.ts`
 - Modify: `CLAUDE.md` (status line)
 - Test: `packages/core/test/index.test.ts`
@@ -1612,9 +1652,11 @@ Expected: PASS.
 - [ ] **Step 5: Run the full repo gate**
 
 Run:
+
 ```bash
 pnpm build && pnpm typecheck && pnpm lint && pnpm test && pnpm format:check
 ```
+
 Expected: all green across `@uniqent/spec` and `@uniqent/core`. If `format:check` flags new files, run `pnpm format` and re-check.
 
 - [ ] **Step 6: Update the status line in CLAUDE.md**

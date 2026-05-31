@@ -13,6 +13,8 @@ export const MemoryItem = z.object({
   createdAt: z.string().datetime(),
   /** 0..1; used when a target must prioritize/truncate under memory limits. */
   importance: z.number().min(0).max(1).optional(),
+  /** Privacy tier; export scrubs "personal" (and episodic) by default. */
+  visibility: z.enum(['shareable', 'personal']).default('shareable'),
   tags: z.array(z.string()).optional(),
 });
 export type MemoryItem = z.infer<typeof MemoryItem>;

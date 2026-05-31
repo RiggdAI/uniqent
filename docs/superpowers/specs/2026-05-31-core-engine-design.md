@@ -25,7 +25,7 @@ In scope for M1:
 - Spec addition: `MemoryItem.visibility?: 'shareable' | 'personal'` (default `'shareable'`).
 
 Out of scope for M1 (later milestones): the builder engine (M2), Studio (M3), adapters and the
-install/export flows (M4–M5), the registry (M6). Export-scrub *behavior* lands with the export flow;
+install/export flows (M4–M5), the registry (M6). Export-scrub _behavior_ lands with the export flow;
 M1 only adds the `visibility` field it will rely on.
 
 ## Runtime assumption
@@ -38,17 +38,17 @@ core/builder; the browser never imports core directly. Therefore core may use `n
 
 Each module has one clear purpose, a well-defined interface, and is independently testable.
 
-| Module | Purpose | Key exports |
-|--------|---------|-------------|
-| `bundle.ts` | The bundle model: ordered `Map<string, Uint8Array>` keyed by POSIX-relative path, with typed accessors that parse + validate against `@uniqent/spec` on demand (cached). | `Bundle` |
-| `digest.ts` | Deterministic content digest. | `canonicalDigest(bundle): string` |
-| `secret-scan.ts` | Detect likely secret values. | `scanForSecrets(bundle): SecretFinding[]` |
-| `validate.ts` | Schema + layout + cross-reference checks; composes secret-scan. | `validateBundle(bundle): ValidationResult`, `assertValid(bundle)` |
-| `signing.ts` | Ed25519 keygen, sign, verify. | `generateKeypair()`, `sign(bundle, privKey)`, `verify(bundle)` |
-| `archive.ts` | `.uniqent` ⇄ `Bundle` ⇄ directory. | `pack()`, `unpack()`, `readDir()`, `writeDir()` |
-| `secret-refs.ts` | Locate/resolve `${credentialRef:<ref>}` placeholders. | `findCredentialRefs(bundle)`, `resolvePlaceholders(value, resolved)` |
-| `errors.ts` | Typed error classes. | `BundleFormatError`, `BundleValidationError`, `SecretScanError` |
-| `index.ts` | Public re-exports. | — |
+| Module           | Purpose                                                                                                                                                                  | Key exports                                                          |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| `bundle.ts`      | The bundle model: ordered `Map<string, Uint8Array>` keyed by POSIX-relative path, with typed accessors that parse + validate against `@uniqent/spec` on demand (cached). | `Bundle`                                                             |
+| `digest.ts`      | Deterministic content digest.                                                                                                                                            | `canonicalDigest(bundle): string`                                    |
+| `secret-scan.ts` | Detect likely secret values.                                                                                                                                             | `scanForSecrets(bundle): SecretFinding[]`                            |
+| `validate.ts`    | Schema + layout + cross-reference checks; composes secret-scan.                                                                                                          | `validateBundle(bundle): ValidationResult`, `assertValid(bundle)`    |
+| `signing.ts`     | Ed25519 keygen, sign, verify.                                                                                                                                            | `generateKeypair()`, `sign(bundle, privKey)`, `verify(bundle)`       |
+| `archive.ts`     | `.uniqent` ⇄ `Bundle` ⇄ directory.                                                                                                                                       | `pack()`, `unpack()`, `readDir()`, `writeDir()`                      |
+| `secret-refs.ts` | Locate/resolve `${credentialRef:<ref>}` placeholders.                                                                                                                    | `findCredentialRefs(bundle)`, `resolvePlaceholders(value, resolved)` |
+| `errors.ts`      | Typed error classes.                                                                                                                                                     | `BundleFormatError`, `BundleValidationError`, `SecretScanError`      |
+| `index.ts`       | Public re-exports.                                                                                                                                                       | —                                                                    |
 
 ### `Bundle` model (Approach A: virtual file map + typed views)
 
@@ -82,6 +82,7 @@ is what `sign` covers and `verify` recomputes.
 `scanForSecrets` runs inside `validate`, `pack`, and `sign`.
 
 **Detects:**
+
 - Known prefixes: `sk-`, `ghp_`, `gho_`, `ghu_`, `ghs_`, `xoxb-`, `xoxp-`, `AKIA` (AWS), and PEM
   blocks (`-----BEGIN … PRIVATE KEY-----`).
 - High-entropy fallback: long base64/hex tokens above a Shannon-entropy threshold.
@@ -89,6 +90,7 @@ is what `sign` covers and `verify` recomputes.
 **Always allowed:** `${credentialRef:<ref>}` placeholders.
 
 **False-positive avoidance for legitimate public key material:**
+
 - Skips `signature.json` entirely (holds the signature, public key, and digest by design).
 - Allowlists `author.pubkey` in the manifest.
 - For JSON/JSONL files it walks string values (so the field allowlist applies); for `.md`/text it

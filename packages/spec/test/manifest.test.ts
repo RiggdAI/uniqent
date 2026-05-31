@@ -130,4 +130,37 @@ describe('MemoryItem', () => {
     };
     expect(MemoryItem.safeParse(bad).success).toBe(false);
   });
+
+  it('defaults visibility to shareable when omitted', () => {
+    const r = MemoryItem.safeParse({
+      id: 'm3',
+      kind: 'fact',
+      text: 'x',
+      createdAt: '2026-05-31T00:00:00.000Z',
+    });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.visibility).toBe('shareable');
+  });
+
+  it('accepts visibility "personal"', () => {
+    const r = MemoryItem.safeParse({
+      id: 'm4',
+      kind: 'episodic',
+      text: 'x',
+      createdAt: '2026-05-31T00:00:00.000Z',
+      visibility: 'personal',
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it('rejects an invalid visibility', () => {
+    const r = MemoryItem.safeParse({
+      id: 'm5',
+      kind: 'fact',
+      text: 'x',
+      createdAt: '2026-05-31T00:00:00.000Z',
+      visibility: 'secret',
+    });
+    expect(r.success).toBe(false);
+  });
 });
