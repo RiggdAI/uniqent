@@ -62,6 +62,22 @@ export interface CatalogView {
     credential?: string;
   }>;
   skills: Array<{ name: string; description: string }>;
+  channels: Array<{
+    id: string;
+    name: string;
+    description: string;
+    kind: string;
+    credential?: string;
+  }>;
+}
+
+export interface TaskInput {
+  name?: string;
+  triggerType?: 'schedule' | 'event' | 'manual';
+  cron?: string;
+  event?: string;
+  actionKind?: string;
+  prompt?: string;
 }
 
 export interface ExportResult {

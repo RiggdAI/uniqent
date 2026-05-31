@@ -1,4 +1,4 @@
-import { Brain, MCP_CATALOG, SKILL_CATALOG } from '@uniqent/builder';
+import { Brain, MCP_CATALOG, SKILL_CATALOG, CHANNEL_CATALOG } from '@uniqent/builder';
 import type { BrainMeta } from '@uniqent/builder';
 import { validateBundle, generateKeypair, sign, pack, verify } from '@uniqent/core';
 import type { ValidationResult, Keypair } from '@uniqent/core';
@@ -23,6 +23,13 @@ export interface CatalogView {
     credential?: string;
   }>;
   skills: Array<{ name: string; description: string }>;
+  channels: Array<{
+    id: string;
+    name: string;
+    description: string;
+    kind: string;
+    credential?: string;
+  }>;
 }
 
 export interface StudioState {
@@ -43,6 +50,7 @@ export class StudioSession {
   private brain: Brain;
   private keypair?: Keypair;
   private factCounter = 0;
+  private taskCounter = 0;
 
   constructor() {
     this.brain = Brain.create({ ...DEFAULT_META });
@@ -51,6 +59,7 @@ export class StudioSession {
   reset(): void {
     this.brain = Brain.create({ ...DEFAULT_META });
     this.factCounter = 0;
+    this.taskCounter = 0;
   }
 
   catalog(): CatalogView {
@@ -63,6 +72,13 @@ export class StudioSession {
         credential: e.credential?.ref,
       })),
       skills: SKILL_CATALOG.map((e) => ({ name: e.name, description: e.description })),
+      channels: CHANNEL_CATALOG.map((e) => ({
+        id: e.id,
+        name: e.name,
+        description: e.description,
+        kind: e.channel.kind,
+        credential: e.credential?.ref,
+      })),
     };
   }
 
@@ -139,6 +155,48 @@ export class StudioSession {
 
   removeSkill(name: string): void {
     this.brain.removeSkill(name);
+  }
+
+  addChannelFromCatalog(id: string): void {
+    this.brain.addChannelFromCatalog(id);
+  }
+
+  removeChannel(id: string): void {
+    this.brain.removeChannel(id);
+  }
+
+  /** Create an automation/flow (scheduled, event-triggered, or manual). */
+  addTask(input: {
+    name?: string;
+    triggerType?: 'schedule' | 'event' | 'manual';
+    cron?: string;
+    event?: string;
+    actionKind?: string;
+    prompt?: string;
+  }): void {
+    const id = `task-${++this.taskCounter}`;
+    const triggerType = input.triggerType ?? 'schedule';
+    const trigger =
+      triggerType === 'schedule'
+        ? {
+            type: 'schedule' as const,
+            cron: input.cron && input.cron.trim() ? input.cron.trim() : '0 9 * * *',
+          }
+        : triggerType === 'event'
+          ? {
+              type: 'event' as const,
+              event: input.event && input.event.trim() ? input.event.trim() : 'mention',
+            }
+          : { type: 'manual' as const };
+    const action: { kind: string; prompt?: string } = {
+      kind: input.actionKind?.trim() || 'prompt',
+    };
+    if (input.prompt && input.prompt.trim()) action.prompt = input.prompt.trim();
+    this.brain.addTask({ id, name: input.name?.trim() || id, trigger, action, enabled: true });
+  }
+
+  removeTask(id: string): void {
+    this.brain.removeTask(id);
   }
 
   state(): StudioState {

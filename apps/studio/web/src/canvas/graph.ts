@@ -29,6 +29,10 @@ export function buildGraph(state: StudioState): { nodes: Node[]; edges: Edge[] }
       label: 'Memory',
       sublabel: `${m.components.memory.facts} fact(s)`,
     });
+  for (const id of m.components.channels)
+    components.push({ id: `channel:${id}`, kind: 'channel', label: id, sublabel: 'channel' });
+  for (const id of m.components.tasks)
+    components.push({ id: `task:${id}`, kind: 'task', label: id, sublabel: 'flow' });
 
   const span = Math.max(components.length - 1, 0) * ROW;
   const agentY = span / 2;

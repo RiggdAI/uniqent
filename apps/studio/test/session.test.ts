@@ -37,6 +37,23 @@ describe('StudioSession', () => {
     expect(mem.episodic).toBe(1);
   });
 
+  it('adds a channel (with its credential) and a task', () => {
+    const s = new StudioSession();
+    s.addChannelFromCatalog('telegram');
+    s.addTask({
+      name: 'Daily triage',
+      triggerType: 'schedule',
+      cron: '0 9 * * *',
+      prompt: 'Triage PRs',
+    });
+    const m = s.state().manifest;
+    expect(m.components.channels).toContain('telegram');
+    expect(m.components.tasks).toHaveLength(1);
+    expect(m.credentials.find((c) => c.ref === 'telegram_bot_token')?.consumedBy).toContain(
+      'channel:telegram',
+    );
+  });
+
   it('removes mcp servers and skills', () => {
     const s = new StudioSession();
     s.addMcpFromCatalog('github');

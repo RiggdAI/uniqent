@@ -26,6 +26,7 @@ import type {
 import { deriveComponents, derivePermissions } from './derive.js';
 import { MCP_CATALOG } from './catalog/mcp.js';
 import { SKILL_CATALOG } from './catalog/skills.js';
+import { CHANNEL_CATALOG } from './catalog/channels.js';
 
 export interface BrainMeta {
   name: string;
@@ -158,6 +159,13 @@ export class Brain {
     const entry = SKILL_CATALOG.find((e) => e.name === name);
     if (!entry) throw new Error(`unknown skill catalog entry: ${name}`);
     this.addSkill(entry.name, entry.skillMd);
+  }
+
+  addChannelFromCatalog(id: string): void {
+    const entry = CHANNEL_CATALOG.find((e) => e.id === id);
+    if (!entry) throw new Error(`unknown channel catalog entry: ${id}`);
+    this.addChannel(entry.channel);
+    if (entry.credential) this.addCredential(entry.credential);
   }
 
   private syncedCredentials(): TCredentialRequirement[] {

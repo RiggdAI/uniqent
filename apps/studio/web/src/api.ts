@@ -1,4 +1,4 @@
-import type { StudioState, CatalogView, ExportResult } from './types';
+import type { StudioState, CatalogView, ExportResult, TaskInput } from './types';
 
 async function unwrap<T>(res: Response): Promise<T> {
   const json = (await res.json()) as T & { error?: string };
@@ -35,6 +35,11 @@ export const api = {
     post<StudioState>(`/api/skill/catalog/${encodeURIComponent(name)}`, {}),
   removeMcp: (id: string) => post<StudioState>('/api/mcp/remove', { id }),
   removeSkill: (name: string) => post<StudioState>('/api/skill/remove', { name }),
+  addChannel: (id: string) =>
+    post<StudioState>(`/api/channel/catalog/${encodeURIComponent(id)}`, {}),
+  removeChannel: (id: string) => post<StudioState>('/api/channel/remove', { id }),
+  addTask: (payload: TaskInput) => post<StudioState>('/api/task/add', payload),
+  removeTask: (id: string) => post<StudioState>('/api/task/remove', { id }),
   reset: () => post<StudioState>('/api/reset', {}),
   export: (sign: boolean) => post<ExportResult>('/api/export', { sign }),
 };

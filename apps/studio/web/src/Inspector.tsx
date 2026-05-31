@@ -291,12 +291,147 @@ function CredentialDetails({ refId, state }: { refId: string; state: StudioState
   );
 }
 
+function ChannelDetails({
+  id,
+  catalog,
+  apply,
+  onClose,
+}: {
+  id: string;
+  catalog: CatalogView;
+  apply: (p: Promise<StudioState>) => void;
+  onClose: () => void;
+}) {
+  const entry = catalog.channels.find((c) => c.id === id);
+  return (
+    <div className="space-y-3 text-sm">
+      <p className="text-muted-foreground">{entry?.description ?? 'Messaging channel.'}</p>
+      <div className="flex flex-wrap gap-2">
+        <Badge variant="secondary">{entry?.kind ?? 'channel'}</Badge>
+        {entry?.credential && (
+          <Badge>
+            <KeyRound className="mr-1 size-3" /> {entry.credential}
+          </Badge>
+        )}
+      </div>
+      <Button
+        variant="destructive"
+        size="sm"
+        onClick={() => {
+          apply(api.removeChannel(id));
+          onClose();
+        }}
+      >
+        <Trash2 className="size-4" /> Remove channel
+      </Button>
+    </div>
+  );
+}
+
+function TaskDetails({
+  id,
+  apply,
+  onClose,
+}: {
+  id: string;
+  apply: (p: Promise<StudioState>) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="space-y-3 text-sm">
+      <p className="text-muted-foreground">Automation / flow.</p>
+      <Badge variant="secondary">{id}</Badge>
+      <div>
+        <Button
+          variant="destructive"
+          size="sm"
+          onClick={() => {
+            apply(api.removeTask(id));
+            onClose();
+          }}
+        >
+          <Trash2 className="size-4" /> Remove flow
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function TaskEditor({ apply }: { apply: (p: Promise<StudioState>) => void }) {
+  const [name, setName] = useState('');
+  const [triggerType, setTriggerType] = useState<'schedule' | 'event' | 'manual'>('schedule');
+  const [cron, setCron] = useState('0 9 * * *');
+  const [event, setEvent] = useState('mention');
+  const [prompt, setPrompt] = useState('');
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">An automation the agent runs on a trigger.</p>
+      <div className="space-y-1.5">
+        <Label>Name</Label>
+        <Input
+          data-testid="task-name"
+          placeholder="e.g. Daily PR triage"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label>Trigger</Label>
+        <select
+          data-testid="task-trigger"
+          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          value={triggerType}
+          onChange={(e) => setTriggerType(e.target.value as 'schedule' | 'event' | 'manual')}
+        >
+          <option value="schedule">Schedule (cron)</option>
+          <option value="event">Event</option>
+          <option value="manual">Manual</option>
+        </select>
+      </div>
+      {triggerType === 'schedule' && (
+        <div className="space-y-1.5">
+          <Label>Cron</Label>
+          <Input value={cron} onChange={(e) => setCron(e.target.value)} />
+        </div>
+      )}
+      {triggerType === 'event' && (
+        <div className="space-y-1.5">
+          <Label>Event</Label>
+          <Input value={event} onChange={(e) => setEvent(e.target.value)} />
+        </div>
+      )}
+      <div className="space-y-1.5">
+        <Label>Action prompt</Label>
+        <Textarea
+          className="min-h-[80px] text-[13px]"
+          placeholder="What should the agent do when this fires?"
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+        />
+      </div>
+      <Button
+        data-testid="task-add"
+        onClick={() => {
+          apply(api.addTask({ name, triggerType, cron, event, prompt }));
+          setName('');
+          setPrompt('');
+        }}
+      >
+        Add flow
+      </Button>
+    </div>
+  );
+}
+
 function titleFor(selection: string): string {
   if (selection === 'agent') return 'Config';
   if (selection === 'persona') return 'Persona';
   if (selection === 'memory') return 'Memory';
+  if (selection === 'new-task') return 'New flow';
   if (selection.startsWith('mcp:')) return selection.slice(4);
   if (selection.startsWith('skill:')) return selection.slice(6);
+  if (selection.startsWith('channel:')) return selection.slice(8);
+  if (selection.startsWith('task:')) return selection.slice(5);
   if (selection.startsWith('cred:')) return 'Credential';
   return 'Inspector';
 }
@@ -326,6 +461,18 @@ export function Inspector(props: InspectorProps) {
             onClose={onClose}
           />
         )}
+        {selection.startsWith('channel:') && (
+          <ChannelDetails
+            id={selection.slice(8)}
+            catalog={catalog}
+            apply={apply}
+            onClose={onClose}
+          />
+        )}
+        {selection.startsWith('task:') && (
+          <TaskDetails id={selection.slice(5)} apply={apply} onClose={onClose} />
+        )}
+        {selection === 'new-task' && <TaskEditor apply={apply} />}
         {selection.startsWith('cred:') && (
           <CredentialDetails refId={selection.slice(5)} state={state} />
         )}

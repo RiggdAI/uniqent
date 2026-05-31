@@ -1,5 +1,14 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { Boxes, Brain, Cpu, Database, KeyRound, Sparkles } from 'lucide-react';
+import {
+  Boxes,
+  Brain,
+  Cpu,
+  Database,
+  KeyRound,
+  Sparkles,
+  MessageSquare,
+  Workflow,
+} from 'lucide-react';
 import type { ComponentType } from 'react';
 import { cn } from '../lib/utils';
 
@@ -38,6 +47,8 @@ const ICONS: Record<string, ComponentType<{ className?: string }>> = {
   mcp: Boxes,
   skill: Sparkles,
   memory: Database,
+  channel: MessageSquare,
+  task: Workflow,
 };
 
 export function ComponentNode({ data, selected }: NodeProps) {

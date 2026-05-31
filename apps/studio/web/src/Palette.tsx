@@ -1,4 +1,4 @@
-import { Brain, Boxes, Sparkles, Database, Settings, Plus, Check } from 'lucide-react';
+import { Brain, Boxes, Sparkles, Database, Settings, Plus, Check, Workflow } from 'lucide-react';
 import type { ComponentType } from 'react';
 import type { StudioState, CatalogView } from './types';
 import { api } from './api';
@@ -82,6 +82,7 @@ function AddRow({
 export function Palette({ state, catalog, apply, selection, onSelect }: PaletteProps) {
   const mcpAdded = new Set(state.manifest.components.mcp);
   const skillAdded = new Set(state.manifest.components.skills);
+  const channelAdded = new Set(state.manifest.components.channels);
   return (
     <nav className="flex w-60 shrink-0 flex-col gap-5 overflow-auto border-r bg-card/40 p-3">
       <Section title="Identity">
@@ -123,6 +124,27 @@ export function Palette({ state, catalog, apply, selection, onSelect }: PaletteP
           label="Add facts"
           active={selection === 'memory'}
           onClick={() => onSelect('memory')}
+        />
+      </Section>
+
+      <Section title="Channels">
+        {catalog.channels.map((c) => (
+          <AddRow
+            key={c.id}
+            label={c.name}
+            added={channelAdded.has(c.id)}
+            onAdd={() => apply(api.addChannel(c.id))}
+            testid={`add-channel-${c.id}`}
+          />
+        ))}
+      </Section>
+
+      <Section title="Flows">
+        <SelectRow
+          icon={Workflow}
+          label="Add task"
+          active={selection === 'new-task'}
+          onClick={() => onSelect('new-task')}
         />
       </Section>
 

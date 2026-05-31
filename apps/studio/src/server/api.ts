@@ -88,6 +88,29 @@ export async function handleApi(
     return ok(session.state());
   }
 
+  const chanMatch = /^\/api\/channel\/catalog\/([^/]+)$/.exec(path);
+  if (method === 'POST' && chanMatch && chanMatch[1]) {
+    try {
+      session.addChannelFromCatalog(decodeURIComponent(chanMatch[1]));
+      return ok(session.state());
+    } catch (e) {
+      return fail(400, (e as Error).message);
+    }
+  }
+  if (method === 'POST' && path === '/api/channel/remove') {
+    if (typeof b.id === 'string') session.removeChannel(b.id);
+    return ok(session.state());
+  }
+
+  if (method === 'POST' && path === '/api/task/add') {
+    session.addTask(b as Parameters<StudioSession['addTask']>[0]);
+    return ok(session.state());
+  }
+  if (method === 'POST' && path === '/api/task/remove') {
+    if (typeof b.id === 'string') session.removeTask(b.id);
+    return ok(session.state());
+  }
+
   if (method === 'POST' && path === '/api/export') {
     return ok(await session.export({ sign: b.sign === true }));
   }
