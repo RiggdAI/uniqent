@@ -5,25 +5,43 @@ on:
     branches: [main]
   pull_request:
 
+# Cancel superseded runs on the same ref (e.g. rapid pushes to a PR).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Validate the engines ">=20" claim on both maintained LTS lines.
+        node-version: [20, 22]
+    name: build (node ${{ matrix.node-version }})
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v4 # version comes from package.json "packageManager"
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ matrix.node-version }}
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
 
-      - run: pnpm lint
+      # Build first: typecheck and tests resolve cross-package imports via each
+      # package's published dist/*.d.ts, which do not exist until tsc emits them.
+      - run: pnpm build
 
       - run: pnpm typecheck
 
-      - run: pnpm build
+      - run: pnpm lint
+
+      - run: pnpm format:check
 
       - run: pnpm test
