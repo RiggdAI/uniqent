@@ -155,6 +155,10 @@ node packages/cli/dist/bin.js install https://example.com/dev-powerpack.uniqent 
 export UNIQENT_REGISTRY=https://raw.githubusercontent.com/maxlibin/uniqent/main/registry/index.json
 node packages/cli/dist/bin.js search coding
 node packages/cli/dist/bin.js install dev-powerpack --target claude-code --root .
+
+# Discover MCP servers + skills across hubs (MCP Registry, Smithery, GitHub):
+node packages/cli/dist/bin.js hub mcp github
+node packages/cli/dist/bin.js hub skills "code review"
 ```
 
 ## Layout
