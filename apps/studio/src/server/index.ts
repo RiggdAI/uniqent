@@ -4,6 +4,7 @@ import { dirname, extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { StudioSession } from './session.js';
 import { handleApi } from './api.js';
+import { isLocalApiRequest } from './guard.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const webRoot = join(here, '../../dist-web');
@@ -45,6 +46,11 @@ const server = createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
 
     if (url.pathname.startsWith('/api')) {
+      if (!isLocalApiRequest(req.headers)) {
+        res.writeHead(403, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ error: 'forbidden: Uniqent Studio only serves local requests' }));
+        return;
+      }
       try {
         let body: unknown = {};
         if (method !== 'GET') {
@@ -67,6 +73,6 @@ const server = createServer((req, res) => {
   })();
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, '127.0.0.1', () => {
   console.log(`Uniqent Studio running at http://localhost:${PORT}`);
 });
