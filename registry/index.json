@@ -1,0 +1,29 @@
+{
+  "$comment": "A Uniqent registry is just this JSON file hosted at any URL. No service required. Publish = host a .uniqent somewhere and add an entry here. Consumers point at it with --registry <url-to-this-file> or UNIQENT_REGISTRY.",
+  "bundles": [
+    {
+      "name": "dev-powerpack",
+      "version": "0.1.0",
+      "description": "Coding agent — GitHub + filesystem + web MCP, code-review & release-notes skills, a daily-standup flow.",
+      "url": "https://github.com/maxlibin/uniqent/releases/download/examples/dev-powerpack.uniqent",
+      "tags": ["coding", "github", "dev"],
+      "author": "uniqent"
+    },
+    {
+      "name": "research-analyst",
+      "version": "0.1.0",
+      "description": "Web-research agent — fetch MCP, a faithful-citation summarize skill.",
+      "url": "https://github.com/maxlibin/uniqent/releases/download/examples/research-analyst.uniqent",
+      "tags": ["research", "web", "writing"],
+      "author": "uniqent"
+    },
+    {
+      "name": "personal-assistant",
+      "version": "0.1.0",
+      "description": "Telegram-reachable assistant — filesystem MCP, a user profile, and a daily-briefing flow.",
+      "url": "https://github.com/maxlibin/uniqent/releases/download/examples/personal-assistant.uniqent",
+      "tags": ["assistant", "telegram", "personal"],
+      "author": "uniqent"
+    }
+  ]
+}

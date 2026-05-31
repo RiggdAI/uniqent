@@ -119,10 +119,14 @@ Pre-1.0, under active development — but the core loop works today:
   Ed25519 signing, and a framework-agnostic engine to assemble a brain. ✅
 - **Uniqent Studio** — a local-first React canvas to build a brain (persona, MCP, skills, memory,
   channels, flows; catalog + custom + import) and export a signed `.uniqent`. ✅
-- **Install** — `@uniqent/adapter-claude-code` + the `uniqent` CLI install an exported brain into
-  Claude Code (skills → `.claude/skills`, persona/memory → `AGENTS.md`, MCP → `.mcp.json`) with
-  credentials resolved locally. ✅
-- **Next** — more adapters (Hermes, OpenClaw), a Studio "Install" button, examples + an open registry.
+- **Install** — three adapters (Claude Code, Hermes, OpenClaw) + the `uniqent` CLI and a Studio
+  "Install" button install an exported brain into the chosen framework, with credentials resolved
+  locally. The **same signed `.uniqent`** installs into all three — Hermes truncates memory to its
+  bounded budget and reports it; Claude Code transforms it. ✅
+- **Distribute** — three example brains in `examples/`, plus a file-based registry (`search` +
+  install-by-slug against any hosted `index.json` — no service required). ✅
+- **Next** — a hosted registry service + a `uniqent://` web "Install" handoff; Codex/Cursor/Gemini
+  adapters.
 
 See [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md) for the plan and [`docs/SPEC.md`](docs/SPEC.md) for the
 bundle-format reference.
@@ -139,9 +143,16 @@ pnpm test
 # Launch the visual builder (local-first); open the URL it prints:
 pnpm --filter @uniqent/studio start
 
-# Inspect or install an exported brain into Claude Code:
-node packages/cli/dist/bin.js inspect my-brain.uniqent
-node packages/cli/dist/bin.js install my-brain.uniqent --target claude-code --root . --cred github_pat=…
+# Pack an example brain and install it into any framework (claude-code | hermes | openclaw):
+node packages/cli/dist/bin.js pack examples/dev-powerpack -o dev-powerpack.uniqent
+node packages/cli/dist/bin.js inspect dev-powerpack.uniqent
+node packages/cli/dist/bin.js install dev-powerpack.uniqent --target hermes --root . --cred github_pat=…
+
+# Install straight from a raw URL (no registry), or by slug from any hosted index.json:
+node packages/cli/dist/bin.js install https://example.com/dev-powerpack.uniqent --target openclaw --root .
+export UNIQENT_REGISTRY=https://raw.githubusercontent.com/maxlibin/uniqent/main/registry/index.json
+node packages/cli/dist/bin.js search coding
+node packages/cli/dist/bin.js install dev-powerpack --target claude-code --root .
 ```
 
 ## Layout
@@ -151,11 +162,13 @@ packages/spec/                 # the .uniqent schema (zod → JSON Schema → SP
 packages/core/                 # bundle read/write, validation, signing, secret-scan      ✅
 packages/builder/              # framework-agnostic "assemble a brain" engine + catalogs   ✅
 apps/studio/                   # Uniqent Studio — the local-first visual builder           ✅
-packages/cli/                  # the `uniqent` CLI (inspect, install)                      ✅
+packages/cli/                  # the `uniqent` CLI (inspect/install/validate/pack/search)   ✅
 packages/adapter-sdk/          # Adapter interface + conformance harness                   ✅
 packages/adapter-claude-code/  # installs a brain into Claude Code                         ✅
-packages/adapter-*/            # more framework adapters (Hermes, OpenClaw)         (upcoming)
-packages/registry/             # optional open registry MVP                         (upcoming)
+packages/adapter-hermes/       # installs into Hermes (bounded memory)                     ✅
+packages/adapter-openclaw/     # installs into OpenClaw                                    ✅
+examples/                      # three ready-to-install example brains                     ✅
+registry/                      # sample registry index.json + format (file-based)          ✅
 docs/                          # SPEC, BUILD_PLAN, GOVERNANCE, CONTRIBUTING, SECURITY
 ```
 

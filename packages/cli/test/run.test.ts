@@ -196,6 +196,99 @@ describe('uniqent cli', () => {
     }
   });
 
+  it('search lists matching bundles from a registry index', async () => {
+    const orig = globalThis.fetch;
+    const index = {
+      bundles: [
+        {
+          name: 'dev',
+          version: '0.1.0',
+          description: 'a coding agent',
+          tags: ['coding'],
+          url: 'https://x/dev.uniqent',
+        },
+        {
+          name: 'writer',
+          version: '0.2.0',
+          description: 'prose helper',
+          tags: ['writing'],
+          url: 'https://x/writer.uniqent',
+        },
+      ],
+    };
+    try {
+      globalThis.fetch = (async () => new Response(JSON.stringify(index))) as typeof fetch;
+      const { io, logs } = capture();
+      const code = await run(['search', 'coding', '--registry', 'https://r/index.json'], io);
+      expect(code).toBe(0);
+      const out = logs.join('\n');
+      expect(out).toContain('dev@0.1.0');
+      expect(out).not.toContain('writer@');
+    } finally {
+      globalThis.fetch = orig;
+    }
+  });
+
+  it('search errors without a registry', async () => {
+    const { io, errs } = capture();
+    expect(await run(['search', 'x'], io)).toBe(1);
+    expect(errs.join('\n')).toContain('no registry');
+  });
+
+  it('installs by registry slug (index → url → install)', async () => {
+    const dir = tmp();
+    const root = tmp();
+    const orig = globalThis.fetch;
+    try {
+      const file = await makeBundleFile(dir, true);
+      const bytes = readFileSync(file);
+      const index = {
+        bundles: [{ name: 'dev', version: '0.1.0', url: 'https://x/dev.uniqent' }],
+      };
+      globalThis.fetch = (async (input: unknown) => {
+        const url = String(input);
+        return url.endsWith('index.json')
+          ? new Response(JSON.stringify(index))
+          : new Response(bytes);
+      }) as typeof fetch;
+      const { io } = capture();
+      const code = await run(
+        [
+          'install',
+          'dev',
+          '--registry',
+          'https://r/index.json',
+          '--target',
+          'claude-code',
+          '--root',
+          root,
+          '--cred',
+          'github_pat=ghp_x',
+          '--yes',
+        ],
+        io,
+      );
+      expect(code).toBe(0);
+      expect(existsSync(join(root, '.mcp.json'))).toBe(true);
+    } finally {
+      globalThis.fetch = orig;
+      rmSync(dir, { recursive: true, force: true });
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('install by slug errors when no registry is configured', async () => {
+    const root = tmp();
+    try {
+      const { io, errs } = capture();
+      const code = await run(['install', 'dev', '--root', root, '--yes'], io);
+      expect(code).toBe(1);
+      expect(errs.join('\n')).toContain('registry slug');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('install refuses an unsigned bundle unless --allow-unsigned', async () => {
     const dir = tmp();
     const root = tmp();
