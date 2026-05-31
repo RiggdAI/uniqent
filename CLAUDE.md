@@ -103,10 +103,9 @@ default).
 
 ## Current status
 
-**M0 complete.** Monorepo + CI + licenses + docs are in place and `packages/spec` is implemented
-(schema → generated JSON Schema → `docs/SPEC.md`), with the `dev-powerpack` example validating.
-**Next: M1 (core engine — bundle r/w, digest, secret-scan gate, Ed25519 sign/verify; add
-`MemoryItem.visibility`), then M2 (builder engine), then M3 (Uniqent Studio — the priority).** No
-`core`, `builder`, `studio`, adapters, or CLI exist yet. When a milestone's acceptance criteria in
-`docs/BUILD_PLAN.md` pass, update this status line and add any newly-discovered exact commands or
-gotchas above.
+**M1 complete.** `packages/spec` and `packages/core` are implemented — bundle model, canonical
+digest, fail-closed secret-scan, validation, Ed25519 sign/verify, archive + directory I/O, and
+credential-ref helpers, all tested. **Next: M2 (builder engine), then M3 (Uniqent Studio — the
+priority).** No `builder`, `studio`, adapters, or CLI exist yet. When a milestone's acceptance
+criteria in `docs/BUILD_PLAN.md` pass, update this status line and add any newly-discovered exact
+commands or gotchas above.

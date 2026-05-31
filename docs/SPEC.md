@@ -636,6 +636,14 @@ One memory line (fact/decision/preference/milestone/episodic).
       "minimum": 0,
       "maximum": 1
     },
+    "visibility": {
+      "type": "string",
+      "enum": [
+        "shareable",
+        "personal"
+      ],
+      "default": "shareable"
+    },
     "tags": {
       "type": "array",
       "items": {
