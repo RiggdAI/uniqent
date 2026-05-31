@@ -25,7 +25,7 @@ describe('Brain', () => {
       createdAt: '2026-05-31T00:00:00.000Z',
     });
     b.addMcpFromCatalog('github');
-    b.addSkillFromCatalog('code-review');
+    b.addSkill('code-review', '---\nname: code-review\n---\nReview code.\n');
     const result = validateBundle(b.toBundle());
     expect(result.ok).toBe(true);
     expect(result.errors).toHaveLength(0);
@@ -67,7 +67,7 @@ describe('Brain', () => {
     b.setPersona('# Persona\nHi.\n');
     b.addMemory({ id: 'f1', kind: 'fact', text: 'x', createdAt: '2026-05-31T00:00:00.000Z' });
     b.addMcpFromCatalog('github');
-    b.addSkillFromCatalog('summarize');
+    b.addSkill('summarize', '---\nname: summarize\n---\nSummarize text.\n');
     const first = b.toBundle();
     const round = Brain.fromBundle(first).toBundle();
     expect(canonicalDigest(round)).toBe(canonicalDigest(first));

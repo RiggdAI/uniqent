@@ -429,6 +429,7 @@ const selectClass =
 function CustomSkillEditor({ apply }: { apply: (p: Promise<StudioState>) => void }) {
   const [name, setName] = useState('');
   const [md, setMd] = useState('');
+  const [url, setUrl] = useState('');
   async function onFile(e: React.ChangeEvent<HTMLInputElement>): Promise<void> {
     const f = e.target.files?.[0];
     e.target.value = '';
@@ -480,6 +481,29 @@ function CustomSkillEditor({ apply }: { apply: (p: Promise<StudioState>) => void
             Upload SKILL.md
             <input type="file" accept=".md,text/markdown" className="hidden" onChange={onFile} />
           </label>
+        </Button>
+      </div>
+
+      <div className="space-y-2 border-t pt-3">
+        <Label>Install from URL</Label>
+        <p className="text-xs text-muted-foreground">Fetch a SKILL.md from anywhere.</p>
+        <Input
+          data-testid="custom-skill-url"
+          placeholder="https://example.com/skills/triage/SKILL.md"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+        />
+        <Button
+          data-testid="custom-skill-url-add"
+          variant="outline"
+          size="sm"
+          disabled={url.trim().length === 0}
+          onClick={() => {
+            apply(api.importSkillFromUrl(url.trim()));
+            setUrl('');
+          }}
+        >
+          Import from URL
         </Button>
       </div>
     </div>
