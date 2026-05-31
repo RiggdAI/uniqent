@@ -1,0 +1,2 @@
+{"id":"f1","kind":"preference","text":"Prefers pnpm and small, focused PRs.","createdAt":"2026-05-31T00:00:00.000Z","importance":0.8,"visibility":"shareable"}
+{"id":"f2","kind":"fact","text":"Primary stack is TypeScript + Node 20 + vitest.","createdAt":"2026-05-31T00:00:00.000Z","importance":0.7,"visibility":"shareable"}

@@ -1,0 +1,13 @@
+{
+  "id": "daily-briefing",
+  "name": "Daily briefing",
+  "trigger": {
+    "type": "schedule",
+    "cron": "0 8 * * *"
+  },
+  "action": {
+    "kind": "prompt",
+    "prompt": "Send a short briefing: calendar, top 3 priorities, anything urgent."
+  },
+  "enabled": true
+}

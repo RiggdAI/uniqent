@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, existsSync, writeFileSync, readFileSync } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Brain } from '@uniqent/builder';
-import { generateKeypair, sign, pack } from '@uniqent/core';
+import { generateKeypair, sign, pack, writeDir } from '@uniqent/core';
 import { run, type CliIo } from '../src/run';
 
 function capture(): { io: CliIo; logs: string[]; errs: string[] } {
@@ -53,6 +53,68 @@ describe('uniqent cli', () => {
       expect(out).toContain('github_pat');
     } finally {
       rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('validates and packs a bundle directory', async () => {
+    const dir = tmp();
+    try {
+      const b = Brain.create({
+        name: 'demo',
+        displayName: 'Demo',
+        version: '0.1.0',
+        description: 'd',
+        author: { name: 'me' },
+        license: 'CC0-1.0',
+        tags: [],
+      });
+      b.setPersona('# Persona\n');
+      b.addMcpFromCatalog('github');
+      b.addSkill('code-review', '---\nname: code-review\n---\nReview.\n');
+      await writeDir(b.toBundle(), dir);
+
+      const v = capture();
+      expect(await run(['validate', dir], v.io)).toBe(0);
+      expect(v.logs.join('\n')).toContain('valid');
+
+      const out = join(dir, 'demo.uniqent');
+      const p = capture();
+      expect(await run(['pack', dir, '-o', out], p.io)).toBe(0);
+      expect(existsSync(out)).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('installs from an http(s) URL', async () => {
+    const dir = tmp();
+    const root = tmp();
+    const orig = globalThis.fetch;
+    try {
+      const file = await makeBundleFile(dir, true);
+      const bytes = readFileSync(file);
+      globalThis.fetch = (async () => new Response(bytes)) as typeof fetch;
+      const { io } = capture();
+      const code = await run(
+        [
+          'install',
+          'https://example.com/dev.uniqent',
+          '--target',
+          'claude-code',
+          '--root',
+          root,
+          '--cred',
+          'github_pat=ghp_x',
+          '--yes',
+        ],
+        io,
+      );
+      expect(code).toBe(0);
+      expect(existsSync(join(root, '.mcp.json'))).toBe(true);
+    } finally {
+      globalThis.fetch = orig;
+      rmSync(dir, { recursive: true, force: true });
+      rmSync(root, { recursive: true, force: true });
     }
   });
 

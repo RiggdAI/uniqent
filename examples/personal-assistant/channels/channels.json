@@ -1,0 +1,9 @@
+{
+  "channels": [
+    {
+      "id": "telegram",
+      "kind": "telegram",
+      "credentialRef": "telegram_bot_token"
+    }
+  ]
+}

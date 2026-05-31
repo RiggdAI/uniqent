@@ -1,0 +1,13 @@
+{
+  "id": "daily-standup",
+  "name": "Daily standup",
+  "trigger": {
+    "type": "schedule",
+    "cron": "0 9 * * 1-5"
+  },
+  "action": {
+    "kind": "prompt",
+    "prompt": "Summarize open PRs and what changed since yesterday."
+  },
+  "enabled": true
+}

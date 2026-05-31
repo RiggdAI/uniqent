@@ -1,0 +1,43 @@
+{
+  "servers": [
+    {
+      "id": "github",
+      "transport": "streamable-http",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "auth": {
+        "type": "bearer",
+        "credentialRef": "github_pat"
+      },
+      "tools": {
+        "include": "all"
+      },
+      "description": "GitHub MCP server"
+    },
+    {
+      "id": "filesystem",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "${HOME}"],
+      "auth": {
+        "type": "none"
+      },
+      "tools": {
+        "include": "all"
+      },
+      "description": "Local filesystem MCP server"
+    },
+    {
+      "id": "fetch",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-fetch"],
+      "auth": {
+        "type": "none"
+      },
+      "tools": {
+        "include": "all"
+      },
+      "description": "Web fetch MCP server"
+    }
+  ]
+}

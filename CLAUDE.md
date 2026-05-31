@@ -131,6 +131,11 @@ default).
   button and the `uniqent install --target <claude-code|hermes|openclaw>` CLI both drive them; the
   local server is hardened (127.0.0.1-only + localhost Origin/Host guard).
 
-**Left for v1: example bundles + the open registry / one-click install (M6).** Codex/Cursor/Gemini
-are post-v1. When a milestone's acceptance criteria in `docs/BUILD_PLAN.md` pass, update this status
-line and add any newly-discovered exact commands or gotchas above.
+CLI surface: `uniqent inspect | install <file|url> | validate <dir|file> | pack <dir> [-o]`.
+`install` accepts a **raw http(s) URL** (no registry needed). Three example brains live in
+`examples/` (canonical source dirs, generated via the builder, guarded by tests).
+
+**Left for v1: the open registry service (publish/search/install-by-slug) + the
+`uniqent://install?bundle=<url>` web handoff (M6b).** Codex/Cursor/Gemini are post-v1. When a
+milestone's acceptance criteria in `docs/BUILD_PLAN.md` pass, update this status line and add any
+newly-discovered exact commands or gotchas above.
