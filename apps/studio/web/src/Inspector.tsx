@@ -62,6 +62,31 @@ function PersonaEditor({ state, apply }: Omit<InspectorProps, 'selection' | 'onC
 function MemoryEditor({ state, apply }: Omit<InspectorProps, 'selection' | 'onClose'>) {
   const [text, setText] = useState('');
   const [importance, setImportance] = useState('0.5');
+  const [bulk, setBulk] = useState('');
+
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>): Promise<void> {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    const content = await file.text();
+    if (file.name.endsWith('.jsonl')) {
+      const items = content
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean)
+        .map((l) => {
+          try {
+            return JSON.parse(l) as unknown;
+          } catch {
+            return { text: l };
+          }
+        });
+      apply(api.importMemory({ items }));
+    } else {
+      apply(api.importMemory({ text: content }));
+    }
+  }
+
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">Durable facts the agent should carry.</p>
@@ -101,6 +126,43 @@ function MemoryEditor({ state, apply }: Omit<InspectorProps, 'selection' | 'onCl
       <p className="text-sm text-muted-foreground">
         facts stored: {state.manifest.components.memory.facts}
       </p>
+
+      <div className="space-y-2 border-t pt-3">
+        <Label>Bulk import</Label>
+        <p className="text-xs text-muted-foreground">One fact per line.</p>
+        <Textarea
+          data-testid="memory-bulk"
+          className="min-h-[100px] text-[13px]"
+          placeholder={'Ships small, focused PRs.\nReviews own code before requesting review.'}
+          value={bulk}
+          onChange={(e) => setBulk(e.target.value)}
+        />
+        <div className="flex items-center gap-2">
+          <Button
+            data-testid="memory-import-lines"
+            variant="outline"
+            size="sm"
+            disabled={bulk.trim().length === 0}
+            onClick={() => {
+              apply(api.importMemory({ text: bulk }));
+              setBulk('');
+            }}
+          >
+            Import lines
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <label className="cursor-pointer">
+              Upload .txt/.md/.jsonl
+              <input
+                type="file"
+                accept=".txt,.md,.jsonl,.json,text/plain"
+                className="hidden"
+                onChange={onFile}
+              />
+            </label>
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

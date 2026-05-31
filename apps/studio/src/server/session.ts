@@ -94,6 +94,37 @@ export class StudioSession {
     this.brain.addMemory(item);
   }
 
+  /** Bulk import: one durable fact per non-empty line. Returns how many were added. */
+  importLines(text: string): number {
+    const lines = text
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean);
+    for (const line of lines) this.addFact({ text: line });
+    return lines.length;
+  }
+
+  /** Import structured memory items (e.g. from a .jsonl export), filling missing fields. */
+  importItems(items: Array<Record<string, unknown>>): number {
+    const KINDS = ['fact', 'decision', 'preference', 'milestone', 'episodic'];
+    let added = 0;
+    for (const raw of items) {
+      const text = typeof raw.text === 'string' ? raw.text.trim() : '';
+      if (!text) continue;
+      const item: Record<string, unknown> = {
+        id: typeof raw.id === 'string' && raw.id ? raw.id : `fact-${++this.factCounter}`,
+        kind: typeof raw.kind === 'string' && KINDS.includes(raw.kind) ? raw.kind : 'fact',
+        text,
+        createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : new Date().toISOString(),
+      };
+      if (typeof raw.importance === 'number') item.importance = raw.importance;
+      if (raw.visibility === 'personal') item.visibility = 'personal';
+      this.brain.addMemory(item);
+      added++;
+    }
+    return added;
+  }
+
   addMcpFromCatalog(id: string): void {
     this.brain.addMcpFromCatalog(id);
   }

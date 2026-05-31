@@ -28,6 +28,8 @@ export const api = {
   setPersona: (persona: string) => post<StudioState>('/api/persona', { persona }),
   addMemory: (text: string, importance?: number) =>
     post<StudioState>('/api/memory', { text, importance }),
+  importMemory: (payload: { text?: string; items?: unknown[] }) =>
+    post<StudioState>('/api/memory/import', payload),
   addMcp: (id: string) => post<StudioState>(`/api/mcp/catalog/${encodeURIComponent(id)}`, {}),
   addSkill: (name: string) =>
     post<StudioState>(`/api/skill/catalog/${encodeURIComponent(name)}`, {}),

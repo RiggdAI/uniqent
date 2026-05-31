@@ -46,6 +46,14 @@ export async function handleApi(
     });
     return ok(session.state());
   }
+  if (method === 'POST' && path === '/api/memory/import') {
+    if (Array.isArray(b.items)) {
+      session.importItems(b.items as Array<Record<string, unknown>>);
+    } else if (typeof b.text === 'string') {
+      session.importLines(b.text);
+    }
+    return ok(session.state());
+  }
   if (method === 'POST' && path === '/api/reset') {
     session.reset();
     return ok(session.state());

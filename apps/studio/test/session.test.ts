@@ -24,6 +24,19 @@ describe('StudioSession', () => {
     expect(cred?.consumedBy).toContain('mcp:github');
   });
 
+  it('imports memory from lines and from structured items', () => {
+    const s = new StudioSession();
+    expect(s.importLines('first fact\n\n second fact \n')).toBe(2);
+    s.importItems([
+      { text: 'a decision', kind: 'decision', importance: 0.9 },
+      { text: '' }, // skipped (blank)
+      { text: 'episodic note', kind: 'episodic' }, // routes to episodic, not facts
+    ]);
+    const mem = s.state().manifest.components.memory;
+    expect(mem.facts).toBe(3); // 2 lines + 1 decision
+    expect(mem.episodic).toBe(1);
+  });
+
   it('removes mcp servers and skills', () => {
     const s = new StudioSession();
     s.addMcpFromCatalog('github');
