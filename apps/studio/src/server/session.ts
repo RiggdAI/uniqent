@@ -260,14 +260,28 @@ export class StudioSession {
     return n;
   }
 
-  /** Search MCP hubs (MCP Registry + Smithery) for servers to add. */
-  searchHubMcp(query: string): Promise<HubSearch<McpHubResult>> {
-    return searchMcpHubs(query, defaultMcpSources());
+  /** Extra "a hub is just a hosted index.json" URLs included in every hub search. */
+  private hubIndexUrls: string[] = [];
+
+  /** Replace the custom hub index URLs (http(s) only, deduped). Returns the stored list. */
+  setHubIndexUrls(urls: string[]): string[] {
+    this.hubIndexUrls = [
+      ...new Set(urls.map((u) => u.trim()).filter((u) => /^https?:\/\//.test(u))),
+    ];
+    return [...this.hubIndexUrls];
+  }
+  listHubIndexUrls(): string[] {
+    return [...this.hubIndexUrls];
   }
 
-  /** Search skill hubs (GitHub repos) for skills to import. */
+  /** Search MCP hubs (MCP Registry + Smithery + any custom JSON indexes) for servers to add. */
+  searchHubMcp(query: string): Promise<HubSearch<McpHubResult>> {
+    return searchMcpHubs(query, defaultMcpSources({ jsonIndexUrls: this.hubIndexUrls }));
+  }
+
+  /** Search skill hubs (GitHub repos + any custom JSON indexes) for skills to import. */
   searchHubSkills(query: string): Promise<HubSearch<SkillHubResult>> {
-    return searchSkillHubs(query, defaultSkillSources());
+    return searchSkillHubs(query, defaultSkillSources({ jsonIndexUrls: this.hubIndexUrls }));
   }
 
   /** Add a discovered MCP server (its server + every declared credential). Throws if invalid. */

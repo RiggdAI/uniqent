@@ -5,7 +5,7 @@
       "name": "dev-powerpack",
       "version": "0.1.0",
       "description": "Coding agent — GitHub + filesystem + web MCP, code-review & release-notes skills, a daily-standup flow.",
-      "url": "https://github.com/maxlibin/uniqent/releases/download/examples/dev-powerpack.uniqent",
+      "url": "https://github.com/RiggdAI/uniqent/releases/download/examples/dev-powerpack.uniqent",
       "tags": ["coding", "github", "dev"],
       "author": "uniqent"
     },
@@ -13,7 +13,7 @@
       "name": "research-analyst",
       "version": "0.1.0",
       "description": "Web-research agent — fetch MCP, a faithful-citation summarize skill.",
-      "url": "https://github.com/maxlibin/uniqent/releases/download/examples/research-analyst.uniqent",
+      "url": "https://github.com/RiggdAI/uniqent/releases/download/examples/research-analyst.uniqent",
       "tags": ["research", "web", "writing"],
       "author": "uniqent"
     },
@@ -21,7 +21,7 @@
       "name": "personal-assistant",
       "version": "0.1.0",
       "description": "Telegram-reachable assistant — filesystem MCP, a user profile, and a daily-briefing flow.",
-      "url": "https://github.com/maxlibin/uniqent/releases/download/examples/personal-assistant.uniqent",
+      "url": "https://github.com/RiggdAI/uniqent/releases/download/examples/personal-assistant.uniqent",
       "tags": ["assistant", "telegram", "personal"],
       "author": "uniqent"
     }

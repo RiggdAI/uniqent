@@ -120,6 +120,50 @@ describe('StudioSession', () => {
     }
   });
 
+  it('stores custom hub index URLs (http(s) only) and uses them in searches', async () => {
+    const s = new StudioSession();
+    expect(s.setHubIndexUrls(['https://team/hub.json', 'notaurl', ' https://b/i.json '])).toEqual([
+      'https://team/hub.json',
+      'https://b/i.json',
+    ]);
+    expect(s.listHubIndexUrls()).toHaveLength(2);
+
+    const orig = globalThis.fetch;
+    const hit: string[] = [];
+    globalThis.fetch = (async (input: unknown) => {
+      const url = String(input);
+      hit.push(url);
+      if (url.startsWith('https://team/hub.json')) {
+        return new Response(
+          JSON.stringify({
+            mcp: [
+              {
+                id: 'teamdb',
+                name: 'Team DB',
+                description: 'internal db',
+                server: {
+                  id: 'teamdb',
+                  transport: 'stdio',
+                  command: 'npx',
+                  auth: { type: 'none' },
+                  tools: { include: 'all' },
+                },
+              },
+            ],
+          }),
+        );
+      }
+      return new Response(JSON.stringify({ servers: [] })); // registry + smithery empty
+    }) as typeof fetch;
+    try {
+      const { results } = await s.searchHubMcp('team');
+      expect(hit.some((u) => u.startsWith('https://team/hub.json'))).toBe(true);
+      expect(results.find((r) => r.entry.id === 'teamdb')).toBeTruthy();
+    } finally {
+      globalThis.fetch = orig;
+    }
+  });
+
   it('imports a skill from a URL', async () => {
     const s = new StudioSession();
     const orig = globalThis.fetch;

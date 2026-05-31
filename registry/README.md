@@ -22,7 +22,7 @@ RegistryEntry = {
 
 ```bash
 # Point at any hosted index (raw GitHub, S3, your own host)
-export UNIQENT_REGISTRY=https://raw.githubusercontent.com/maxlibin/uniqent/main/registry/index.json
+export UNIQENT_REGISTRY=https://raw.githubusercontent.com/RiggdAI/uniqent/main/registry/index.json
 
 uniqent search coding                       # filter by name/description/tags
 uniqent install dev-powerpack --target hermes --root .   # resolve slug → url → install
