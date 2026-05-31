@@ -25,7 +25,7 @@ function makeBundle() {
     createdAt: '2026-05-31T00:00:00.000Z',
   });
   b.addMcpFromCatalog('github');
-  b.addSkillFromCatalog('code-review');
+  b.addSkill('code-review', '---\nname: code-review\n---\nReview code.\n');
   b.addChannelFromCatalog('telegram'); // dropped by Claude Code → exercises lossiness
   return b.toBundle();
 }

@@ -12,7 +12,7 @@ describe('StudioSession', () => {
     s.setMeta({ name: 'demo', displayName: 'Demo', description: 'd' });
     s.setPersona('# Persona\nHi.\n');
     s.addMcpFromCatalog('github');
-    s.addSkillFromCatalog('code-review');
+    s.addCustomSkill('code-review', '---\nname: code-review\n---\nReview.\n');
     s.addFact({ text: 'prefers TS' });
     expect(s.state().validation.ok).toBe(true);
   });
@@ -71,6 +71,19 @@ describe('StudioSession', () => {
     expect(s.state().validation.ok).toBe(true);
   });
 
+  it('imports a skill from a URL', async () => {
+    const s = new StudioSession();
+    const orig = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response('---\nname: triage\n---\nTriage issues.\n')) as typeof fetch;
+    try {
+      await s.importSkillFromUrl('https://example.com/skills/triage/SKILL.md');
+      expect(s.state().manifest.components.skills).toContain('triage');
+    } finally {
+      globalThis.fetch = orig;
+    }
+  });
+
   it('imports mcp servers in bulk', () => {
     const s = new StudioSession();
     expect(
@@ -92,7 +105,7 @@ describe('StudioSession', () => {
   it('removes mcp servers and skills', () => {
     const s = new StudioSession();
     s.addMcpFromCatalog('github');
-    s.addSkillFromCatalog('code-review');
+    s.addCustomSkill('code-review', '---\nname: code-review\n---\nReview.\n');
     s.removeMcp('github');
     s.removeSkill('code-review');
     const m = s.state().manifest;
@@ -105,7 +118,7 @@ describe('StudioSession', () => {
     s.setMeta({ name: 'demo' });
     s.setPersona('# Persona\n');
     s.addMcpFromCatalog('github');
-    s.addSkillFromCatalog('code-review');
+    s.addCustomSkill('code-review', '---\nname: code-review\n---\nReview.\n');
     const res = await s.export({ sign: false });
     const bundle = await unpack(fromBase64(res.bytesBase64));
     expect(validateBundle(bundle).ok).toBe(true);
@@ -116,7 +129,7 @@ describe('StudioSession', () => {
     s.setMeta({ name: 'demo' });
     s.setPersona('# Persona\n');
     s.addMcpFromCatalog('github');
-    s.addSkillFromCatalog('code-review');
+    s.addCustomSkill('code-review', '---\nname: code-review\n---\nReview.\n');
     const res = await s.export({ sign: true });
     expect(res.signed).toBe(true);
     expect(res.verified).toBe(true);

@@ -14,6 +14,18 @@ const DEFAULT_META: BrainMeta = {
   tags: [],
 };
 
+/** Derive a skill name from a SKILL.md URL (…/<name>/SKILL.md or …/<name>.md). */
+function skillNameFromUrl(url: string): string {
+  try {
+    const parts = new URL(url).pathname.split('/').filter(Boolean);
+    let last = parts[parts.length - 1] ?? 'imported-skill';
+    if (/^skill\.md$/i.test(last)) last = parts[parts.length - 2] ?? 'imported-skill';
+    return last.replace(/\.md$/i, '') || 'imported-skill';
+  } catch {
+    return 'imported-skill';
+  }
+}
+
 export interface CatalogView {
   mcp: Array<{
     id: string;
@@ -153,6 +165,13 @@ export class StudioSession {
   addCustomSkill(name: string, skillMd: string): void {
     const md = skillMd.trim() ? skillMd : `---\nname: ${name}\ndescription: ${name}\n---\n`;
     this.brain.addSkill(name, md);
+  }
+
+  /** Install a skill from anywhere: fetch a SKILL.md by URL. */
+  async importSkillFromUrl(url: string): Promise<void> {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`fetch failed: ${res.status} ${res.statusText}`);
+    this.addCustomSkill(skillNameFromUrl(url), await res.text());
   }
 
   /** Ensure a credential requirement exists for an MCP server's auth.credentialRef. */

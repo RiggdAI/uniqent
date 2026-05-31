@@ -117,7 +117,7 @@ default).
   `@uniqent/adapter-claude-code` (skills→`.claude/skills`, persona+memory→`AGENTS.md`,
   MCP→merged `.mcp.json` with locally-resolved creds injected; channels/tasks/tools reported as
   lossiness) + `@uniqent/cli` (`uniqent inspect|install <file> --target claude-code --root <dir>
-  --cred ref=val [--allow-unsigned] [--yes]`). Verified: a signed `.uniqent` installs into a
+--cred ref=val [--allow-unsigned] [--yes]`). Verified: a signed `.uniqent` installs into a
   sandbox `.claude/` end to end.
 
 **Next: OpenClaw adapter + a Studio "Install" button (M4b), then registry/one-click (M6).** When a

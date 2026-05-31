@@ -24,7 +24,7 @@ async function makeBundleFile(dir: string, signed: boolean): Promise<string> {
   });
   b.setPersona('# Persona\nAtlas.');
   b.addMcpFromCatalog('github');
-  b.addSkillFromCatalog('code-review');
+  b.addSkill('code-review', '---\nname: code-review\n---\nReview code.\n');
   let bundle = b.toBundle();
   if (signed) {
     const kp = await generateKeypair();

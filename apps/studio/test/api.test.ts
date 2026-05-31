@@ -14,7 +14,10 @@ describe('handleApi', () => {
     });
     await handleApi(s, 'POST', '/api/persona', { persona: '# Persona\n' });
     await handleApi(s, 'POST', '/api/mcp/catalog/github', {});
-    await handleApi(s, 'POST', '/api/skill/catalog/code-review', {});
+    await handleApi(s, 'POST', '/api/skill/custom', {
+      name: 'code-review',
+      skillMd: '---\nname: code-review\n---\nReview.\n',
+    });
     await handleApi(s, 'POST', '/api/memory', { text: 'prefers TS' });
 
     const state = await handleApi(s, 'GET', '/api/state', null);

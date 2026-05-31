@@ -85,6 +85,16 @@ export async function handleApi(
     return ok(session.state());
   }
 
+  if (method === 'POST' && path === '/api/skill/url') {
+    if (typeof b.url !== 'string' || !b.url.trim()) return fail(400, 'url is required');
+    try {
+      await session.importSkillFromUrl(b.url.trim());
+      return ok(session.state());
+    } catch (e) {
+      return fail(400, (e as Error).message);
+    }
+  }
+
   if (method === 'POST' && path === '/api/mcp/custom') {
     try {
       session.addCustomMcp(b);

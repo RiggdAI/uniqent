@@ -17,7 +17,7 @@ describe('catalogs', () => {
     expect(fs?.server.transport).toBe('stdio');
   });
 
-  it('skill catalog has code-review and summarize', () => {
-    expect(SKILL_CATALOG.map((s) => s.name).sort()).toEqual(['code-review', 'summarize']);
+  it('ships no baked-in skills (skills are custom / imported)', () => {
+    expect(SKILL_CATALOG).toEqual([]);
   });
 });
