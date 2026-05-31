@@ -14,14 +14,21 @@ Today, an agent's "brain" is locked inside whatever framework you built it in. I
 great research agent in OpenClaw, a friend running Hermes or Claude Code can't just _have_ it.
 There's no portable, shareable unit for "a whole agent."
 
-Uniqent makes that unit. **Anyone can assemble a brain** — a persona, a stack of MCP servers,
-skills, memory, tools, automations, channels, and runtime config — **pack it into one open
-`.uniqent` bundle, and publish it. Anyone else can install that bundle in one click into the
-agent framework they already run**, and a per-framework _adapter_ translates the brain into that
-framework's native layout.
+Uniqent makes that unit, and gives you a complete workflow around it: **build → package → share
+→ install.** You **compose a brain** — a persona, a stack of MCP servers, skills, memory, tools,
+automations, channels, and runtime config — in **Uniqent Studio**, a local-first visual builder,
+and export it as one open, signed `.uniqent` bundle. **Anyone else installs that bundle in one
+click into the agent framework they already run**, and a per-framework _adapter_ translates the
+brain into that framework's native layout.
 
-> Think of it as **"export/import a whole agent."** The portability you'd expect from a template
-> or a Docker image — but the thing being shipped is an entire agent's brain.
+> Think **n8n, but for whole agents.** A visual builder to assemble the thing, and a portable
+> artifact you can install anywhere. Uniqent is the builder + packager + translator + installer —
+> not where the agent runs day-to-day (that's your framework). It sits _above_ the frameworks so
+> one brain travels between all of them.
+
+Building a brain from scratch in Studio is the primary path; **capturing an existing agent**
+(`uniqent export`) is the secondary on-ramp. Studio runs locally and open source — your brain and
+your secrets never leave your machine.
 
 ### A "brain" = everything that makes an agent that agent
 
@@ -55,6 +62,16 @@ framework does the translation (each stores brains/memory/config differently):
 
 ---
 
+## Who it's for
+
+- **Team & knowledge continuity** — when a great hire leaves, their agent's "brain" usually leaves
+  with them. Capture it as a bundle and hand it to the next person — the persona, the decisions,
+  the workflows, the context — so institutional knowledge stays with the company.
+- **Onboarding** — give every new hire a working, opinionated agent on day one instead of a blank slate.
+- **Sharing great agents** — publish a brain you built so anyone can run it, regardless of which
+  framework they use.
+- **Switching frameworks** — move your agent from one framework to another without rebuilding it.
+
 ## Why it's different (and defensible)
 
 The idea exists in primitive form elsewhere (e.g. `.dotagents`-style sharing). Uniqent's edge is
@@ -80,14 +97,16 @@ things the primitive versions lack:
 > adapter translates it to that agent's native setup and prompts only for their own credentials.
 
 ```
-   author                         bundle (.uniqent)                  recipient's agent
- ┌─────────┐   pack + sign   ┌──────────────────────┐   install    ┌────────────────────┐
- │ persona │ ─────────────▶  │ manifest + identity   │ ───────────▶ │ adapter.plan()      │
- │ MCP     │                 │ memory + skills + mcp │   (verify →  │  → permissions sheet│
- │ skills  │                 │ tools + tasks + chans │   translate) │  → resolve creds    │
- │ memory  │                 │ setup  (NO secrets)   │              │  → sandbox dry-run  │
- │ config  │                 │ + Ed25519 signature   │              │  → apply (native)   │
- └─────────┘                 └──────────────────────┘              └────────────────────┘
+    BUILD                 PACK + SIGN            SHARE              INSTALL
+ ┌──────────┐  validate  ┌──────────────┐  via  ┌──────────┐      ┌────────────────────┐
+ │  Studio  │ ─────────▶ │   .uniqent   │ ────▶ │ URL / reg│ ───▶ │ verify → translate  │
+ │ (local,  │  secret-   │ persona, MCP │ sign  │ (raw file│      │  → permissions sheet│
+ │  visual) │  scan      │ skills, mem, │       │  works   │      │  → resolve creds    │
+ │          │            │ tools, tasks │       │  too)    │      │  → sandbox dry-run  │
+ │ or export│            │ (NO secrets) │       │          │      │  → apply (native)   │
+ └──────────┘            └──────────────┘       └──────────┘      └────────────────────┘
+       ▲                                                                    │
+       └──────────────── export: capture an existing agent ────────────────┘
 ```
 
 ---
@@ -114,9 +133,12 @@ Requires Node 20+ and pnpm.
 ```
 packages/spec/             # the .uniqent schema (source of truth: zod → JSON Schema → SPEC.md)
 packages/core/             # bundle read/write, validation, signing, secret-scan  (upcoming)
-packages/cli/              # the `uniqent` CLI                                     (upcoming)
+packages/builder/          # framework-agnostic "assemble a brain" engine + catalogs (upcoming)
+apps/studio/               # Uniqent Studio — the local-first visual builder       (upcoming)
+packages/cli/              # the `uniqent` CLI (secondary surface)                 (upcoming)
 packages/adapter-sdk/      # Adapter interface + conformance harness               (upcoming)
 packages/adapter-*/        # one adapter per framework                             (upcoming)
+packages/registry/         # optional open registry MVP                           (upcoming)
 examples/                  # sample bundles (e.g. dev-powerpack)
 docs/                      # SPEC, BUILD_PLAN, GOVERNANCE, CONTRIBUTING, SECURITY
 ```

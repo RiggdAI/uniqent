@@ -4,13 +4,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What Uniqent is
 
-Uniqent is an **open standard + toolchain for portable AI agents**. A user packages a
-complete agent — persona/"brain", memory, skills, MCP servers, tools, automations, channels,
-and runtime config — into a single signed `.uniqent` bundle (a gzipped tar). Anyone can then
-**install that bundle in one click into the agent framework they run** (OpenClaw, Hermes,
-Claude Code, …). A per-framework **adapter** transpiles the canonical bundle into that
-framework's native layout. (n8n's export/import UX is the inspiration — we are NOT building
-anything n8n-related; we package whole agents, not workflows.)
+Uniqent is a **complete, open-source platform for portable AI agents** — an n8n-inspired
+workflow to **build, package, share, and install whole agent "brains."** A user composes a brain
+(persona, memory, skills, MCP servers, tools, automations, channels, runtime config) in a
+**local-first visual builder, Uniqent Studio**, and exports it as a single signed `.uniqent`
+bundle (a gzipped tar). Anyone can then **install that bundle in one click into the agent
+framework they run** (OpenClaw, Hermes, Claude Code, …); a per-framework **adapter** translates
+the canonical bundle into that framework's native layout.
+
+**Authoring from scratch in Studio is the primary path; capturing/exporting an existing agent is
+secondary.** Uniqent is the builder + packager + translator + installer — NOT where the agent
+runs (that's the framework). Unlike n8n (which builds and exports its own workflows), Uniqent sits
+_above_ the frameworks so one brain travels between all of them. The headline use case is
+**institutional-knowledge continuity** — keep a departing person's agent brain and hand it to the
+next hire (see project memory).
 
 Open source: the spec is **CC0** (`LICENSE-SPEC`), the code is **Apache-2.0** (`LICENSE`).
 
@@ -68,25 +75,38 @@ pnpm --filter @uniqent/spec gen
 
 - **`packages/spec`** — the canonical `.uniqent` schema. Everything else depends on it.
 - **`packages/core`** — bundle read/write, validation, canonical digest, the secret-scan gate,
-  and secret-ref resolution helpers. Framework-agnostic.
-- **`packages/cli`** — the `uniqent` CLI (`init/validate/pack/sign/verify/inspect/export/install`).
-  Thin wrappers over core + adapters. The `install` command is a 7-step wizard
-  (verify → pick target → plan/permissions → memory preview → resolve creds → sandbox dry-run → apply).
+  Ed25519 sign/verify, and secret-ref resolution helpers. Framework-agnostic.
+- **`packages/builder`** — the framework-agnostic "assemble a brain" engine + catalogs (MCP,
+  skills). Create/edit a Brain model → live-validate → emit a `Bundle`. **Both Studio and the CLI
+  are thin front-ends over this — build the logic once here.**
+- **`apps/studio`** — **Uniqent Studio**, the local-first visual builder (browser UI + a small
+  local Node server) over `builder` + `core`. **The priority deliverable / product face.** A
+  hosted version is a future, separate offering, NOT part of the open v1.
+- **`packages/cli`** — the `uniqent` CLI. **Secondary / power-user + automation surface**, reusing
+  `builder` + `core` + adapters. `install` is a 7-step flow
+  (verify → pick target → plan/permissions → memory preview → resolve creds → sandbox dry-run → apply),
+  shared with Studio.
 - **`packages/adapter-sdk`** — the `Adapter` interface (`detect/plan/apply/export`) + a
   **conformance harness** that runs `export → pack → validate → plan → apply` into a sandbox and
   asserts: no secrets written, lossiness fully reported, apply idempotent on a second run.
-- **`packages/adapter-{openclaw,hermes,claude-code}`** — one Adapter each. Hermes has bounded
+- **`packages/adapter-{claude-code,openclaw,hermes}`** — one Adapter each. Hermes has bounded
   memory (`MEMORY.md` ~2200 chars, `USER.md` ~1375 chars) and MUST prioritize by `importance`
   and report truncation.
+- **`packages/registry`** — open registry MVP (publish/search/install-by-slug); optional, never a
+  hard dependency.
 
 The translation flow is the moat: a canonical `Bundle` is dry-analyzed by `adapter.plan()` into
 an `InstallPlan` (writes + mcp/channel registrations + a lossiness report + required creds), then
 `adapter.apply()` writes it idempotently using already-resolved credentials. `adapter.export()`
-reverses a native setup back into a canonical bundle.
+reverses a native setup back into a canonical bundle (scrubbing personal/episodic memory by
+default).
 
 ## Current status
 
-**Pre-M0 → M0 in progress.** Monorepo scaffold + licenses + docs being set up; `packages/spec`
-being implemented. No adapters or CLI commands exist yet. When a milestone's acceptance criteria
-in `docs/BUILD_PLAN.md` pass, update this status line and add any newly-discovered exact commands
-or gotchas above.
+**M0 complete.** Monorepo + CI + licenses + docs are in place and `packages/spec` is implemented
+(schema → generated JSON Schema → `docs/SPEC.md`), with the `dev-powerpack` example validating.
+**Next: M1 (core engine — bundle r/w, digest, secret-scan gate, Ed25519 sign/verify; add
+`MemoryItem.visibility`), then M2 (builder engine), then M3 (Uniqent Studio — the priority).** No
+`core`, `builder`, `studio`, adapters, or CLI exist yet. When a milestone's acceptance criteria in
+`docs/BUILD_PLAN.md` pass, update this status line and add any newly-discovered exact commands or
+gotchas above.
