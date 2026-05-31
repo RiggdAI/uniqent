@@ -1,0 +1,59 @@
+{
+  "servers": [
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+        "name": "ac.inference.sh/mcp",
+        "description": "Run 150+ AI apps — image, video, audio, LLMs, 3D and more.",
+        "title": "inference.sh",
+        "version": "1.0.0",
+        "remotes": [{ "type": "streamable-http", "url": "https://api.inference.sh/mcp" }]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": { "status": "active", "isLatest": false }
+      }
+    },
+    {
+      "server": {
+        "name": "ac.inference.sh/mcp",
+        "description": "Run 150+ AI apps — image, video, audio, LLMs, 3D and more.",
+        "title": "inference.sh",
+        "version": "1.0.1",
+        "remotes": [{ "type": "streamable-http", "url": "https://api.inference.sh/mcp" }]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": { "status": "active", "isLatest": true }
+      }
+    },
+    {
+      "server": {
+        "name": "com.pulsemcp/remote-filesystem",
+        "description": "MCP server for remote filesystem operations on cloud storage (GCS).",
+        "version": "0.1.2",
+        "packages": [
+          {
+            "registryType": "npm",
+            "identifier": "remote-filesystem-mcp-server",
+            "version": "0.1.2",
+            "runtimeHint": "npx",
+            "transport": { "type": "stdio" },
+            "runtimeArguments": [{ "value": "-y", "type": "positional" }],
+            "environmentVariables": [
+              { "name": "GCS_BUCKET", "description": "Bucket name.", "isRequired": true },
+              {
+                "name": "GCS_PRIVATE_KEY",
+                "description": "Service account key.",
+                "isSecret": true
+              },
+              { "name": "GCS_MAKE_PUBLIC", "description": "Public uploads.", "default": "false" }
+            ]
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": { "status": "active", "isLatest": true }
+      }
+    }
+  ],
+  "metadata": { "nextCursor": "x", "count": 3 }
+}
