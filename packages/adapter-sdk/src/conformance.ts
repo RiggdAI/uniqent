@@ -75,11 +75,23 @@ export async function runConformance(
   }
   checks.push({ name: 'no secret values written to disk', pass: !leaked, detail: leaked });
 
-  const hasDroppable =
-    bundle.channels().length > 0 || bundle.tasks().length > 0 || bundle.tools().length > 0;
+  // No silent loss: a component present in the bundle must be either represented
+  // in the plan (registrations) or declared in lossiness.
+  const lossy = plan.lossiness.map((l) => l.component.toLowerCase());
+  const declared = (kw: string) => lossy.some((c) => c.includes(kw));
+  const silent: string[] = [];
+  if (bundle.tools().length > 0 && !declared('tool')) silent.push('tools');
+  if (
+    bundle.channels().length > 0 &&
+    plan.channelRegistrations.length === 0 &&
+    !declared('channel')
+  ) {
+    silent.push('channels');
+  }
   checks.push({
-    name: 'lossiness declared for unsupported components',
-    pass: !hasDroppable || plan.lossiness.length > 0,
+    name: 'no silent loss of components',
+    pass: silent.length === 0,
+    detail: silent.join(', '),
   });
 
   return { ok: checks.every((c) => c.pass), checks };

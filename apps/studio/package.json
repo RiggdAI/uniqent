@@ -21,6 +21,7 @@
     "@xyflow/react": "^12.3.5",
     "@uniqent/adapter-claude-code": "workspace:*",
     "@uniqent/adapter-hermes": "workspace:*",
+    "@uniqent/adapter-openclaw": "workspace:*",
     "@uniqent/adapter-sdk": "workspace:*",
     "@uniqent/builder": "workspace:*",
     "@uniqent/core": "workspace:*",
