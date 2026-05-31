@@ -54,6 +54,13 @@ export async function handleApi(
     }
     return ok(session.state());
   }
+  if (method === 'GET' && path === '/api/profile') {
+    return ok({ profile: session.getProfile() });
+  }
+  if (method === 'POST' && path === '/api/profile') {
+    session.setProfile((b.profile ?? {}) as Record<string, unknown>);
+    return ok(session.state());
+  }
   if (method === 'POST' && path === '/api/reset') {
     session.reset();
     return ok(session.state());

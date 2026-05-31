@@ -82,7 +82,10 @@ export class Brain {
     this.policiesMd = md;
   }
   setProfile(profile: unknown): void {
-    this.profile = MemoryProfile.parse(profile);
+    this.profile = profile === undefined ? undefined : MemoryProfile.parse(profile);
+  }
+  getProfile(): TMemoryProfile | undefined {
+    return this.profile;
   }
 
   addMemory(item: unknown): void {

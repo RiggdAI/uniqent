@@ -164,6 +164,33 @@ describe('StudioSession', () => {
     }
   });
 
+  it('sets a profile (drops blanks), reflects hasProfile, and clears when empty', () => {
+    const s = new StudioSession();
+    s.setProfile({ Role: ' Staff engineer ', About: '', '': 'ignored', Team: 'Platform' });
+    expect(s.getProfile()).toEqual({ Role: 'Staff engineer', Team: 'Platform' });
+    expect(s.state().manifest.components.memory.hasProfile).toBe(true);
+    // A profile with no usable fields clears it.
+    s.setProfile({ About: '   ' });
+    expect(s.getProfile()).toEqual({});
+    expect(s.state().manifest.components.memory.hasProfile).toBe(false);
+  });
+
+  it('a brain with a profile exports a USER profile that survives a round-trip', async () => {
+    const s = new StudioSession();
+    s.setMeta({ name: 'demo' });
+    s.setPersona('# Persona\n');
+    s.addMcpFromCatalog('github');
+    s.addCustomSkill('code-review', '---\nname: code-review\n---\nReview.\n');
+    s.setProfile({ Role: 'Founding engineer', 'Working style': 'ships small PRs' });
+    const res = await s.export({ sign: false });
+    const bundle = await unpack(fromBase64(res.bytesBase64));
+    expect(validateBundle(bundle).ok).toBe(true);
+    expect(bundle.memoryProfile()).toEqual({
+      Role: 'Founding engineer',
+      'Working style': 'ships small PRs',
+    });
+  });
+
   it('imports a skill from a URL', async () => {
     const s = new StudioSession();
     const orig = globalThis.fetch;

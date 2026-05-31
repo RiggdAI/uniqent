@@ -8,6 +8,7 @@ import {
   Check,
   Workflow,
   Globe,
+  UserRound,
 } from 'lucide-react';
 import type { ComponentType } from 'react';
 import type { StudioState, CatalogView } from './types';
@@ -158,6 +159,12 @@ export function Palette({ state, catalog, apply, selection, onSelect }: PaletteP
           label="Add facts"
           active={selection === 'memory'}
           onClick={() => onSelect('memory')}
+        />
+        <SelectRow
+          icon={UserRound}
+          label="Profile (USER.md)"
+          active={selection === 'profile'}
+          onClick={() => onSelect('profile')}
         />
       </Section>
 
