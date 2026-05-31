@@ -125,7 +125,12 @@ default).
   only `${ENV}` refs). `uniqent install --target hermes` works. **Cross-framework proven:** the
   same `.uniqent` installs into both Claude Code and Hermes (a test asserts both, with Claude Code
   _transforming_ memory and Hermes _truncating_ it).
+- **OpenClaw** — `@uniqent/adapter-openclaw`: persona→`SOUL.md`, memory+profile→`MEMORY.md`,
+  skills→`skills/`, MCP+channels+tasks→`openclaw.json` (creds inlined). All **three v1 adapters**
+  install the same signed `.uniqent` end to end (verified via the CLI). Studio's in-app **Install**
+  button and the `uniqent install --target <claude-code|hermes|openclaw>` CLI both drive them; the
+  local server is hardened (127.0.0.1-only + localhost Origin/Host guard).
 
-**Next: OpenClaw adapter + a Studio "Install" button, then registry/one-click (M6).** When a
-milestone's acceptance criteria in `docs/BUILD_PLAN.md` pass, update this status line and add any
-newly-discovered exact commands or gotchas above.
+**Left for v1: example bundles + the open registry / one-click install (M6).** Codex/Cursor/Gemini
+are post-v1. When a milestone's acceptance criteria in `docs/BUILD_PLAN.md` pass, update this status
+line and add any newly-discovered exact commands or gotchas above.

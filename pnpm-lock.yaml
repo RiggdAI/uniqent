@@ -44,6 +44,9 @@ importers:
       '@uniqent/adapter-hermes':
         specifier: workspace:*
         version: link:../../packages/adapter-hermes
+      '@uniqent/adapter-openclaw':
+        specifier: workspace:*
+        version: link:../../packages/adapter-openclaw
       '@uniqent/adapter-sdk':
         specifier: workspace:*
         version: link:../../packages/adapter-sdk
@@ -153,6 +156,25 @@ importers:
         specifier: ^3.0.0
         version: 3.2.4(@types/node@22.19.19)(jiti@1.21.7)(tsx@4.22.3)
 
+  packages/adapter-openclaw:
+    dependencies:
+      '@uniqent/adapter-sdk':
+        specifier: workspace:*
+        version: link:../adapter-sdk
+      '@uniqent/builder':
+        specifier: workspace:*
+        version: link:../builder
+      '@uniqent/core':
+        specifier: workspace:*
+        version: link:../core
+      '@uniqent/spec':
+        specifier: workspace:*
+        version: link:../spec
+    devDependencies:
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.4(@types/node@22.19.19)(jiti@1.21.7)(tsx@4.22.3)
+
   packages/adapter-sdk:
     dependencies:
       '@uniqent/core':
@@ -184,6 +206,9 @@ importers:
       '@uniqent/adapter-hermes':
         specifier: workspace:*
         version: link:../adapter-hermes
+      '@uniqent/adapter-openclaw':
+        specifier: workspace:*
+        version: link:../adapter-openclaw
       '@uniqent/adapter-sdk':
         specifier: workspace:*
         version: link:../adapter-sdk

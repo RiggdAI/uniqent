@@ -11,10 +11,12 @@ import type {
 } from '@uniqent/adapter-sdk';
 import { claudeCodeAdapter } from '@uniqent/adapter-claude-code';
 import { hermesAdapter } from '@uniqent/adapter-hermes';
+import { openClawAdapter } from '@uniqent/adapter-openclaw';
 
 const ADAPTERS: Record<string, Adapter> = {
   'claude-code': claudeCodeAdapter,
   hermes: hermesAdapter,
+  openclaw: openClawAdapter,
 };
 
 const DEFAULT_META: BrainMeta = {
