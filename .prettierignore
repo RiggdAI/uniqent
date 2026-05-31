@@ -1,0 +1,11 @@
+node_modules
+dist
+coverage
+**/*.schema.json
+pnpm-lock.yaml
+
+# generated from packages/spec
+docs/SPEC.md
+
+# preserved verbatim engineering spec
+docs/BUILD_PLAN.md
