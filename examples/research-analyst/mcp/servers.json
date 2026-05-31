@@ -1,0 +1,17 @@
+{
+  "servers": [
+    {
+      "id": "fetch",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-fetch"],
+      "auth": {
+        "type": "none"
+      },
+      "tools": {
+        "include": "all"
+      },
+      "description": "Web fetch MCP server"
+    }
+  ]
+}

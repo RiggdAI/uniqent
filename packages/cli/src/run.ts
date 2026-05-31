@@ -1,5 +1,6 @@
-import { readFile } from 'node:fs/promises';
-import { unpack, verify } from '@uniqent/core';
+import { readFile, writeFile, stat } from 'node:fs/promises';
+import { unpack, verify, pack as packBundle, readDir, validateBundle } from '@uniqent/core';
+import type { Bundle } from '@uniqent/core';
 import type { Adapter, ResolvedCredentials } from '@uniqent/adapter-sdk';
 import { claudeCodeAdapter } from '@uniqent/adapter-claude-code';
 import { hermesAdapter } from '@uniqent/adapter-hermes';
@@ -46,6 +47,8 @@ function parseArgs(args: string[]): ParsedArgs {
         if (next !== undefined && !next.startsWith('--')) flags[key] = args[++i] as string;
         else flags[key] = true;
       }
+    } else if (a === '-o') {
+      flags.out = args[++i] ?? '';
     } else {
       positionals.push(a);
     }
@@ -53,8 +56,22 @@ function parseArgs(args: string[]): ParsedArgs {
   return { positionals, flags, creds };
 }
 
-async function loadBundle(file: string) {
-  return unpack(new Uint8Array(await readFile(file)));
+/** Load a bundle from a local file path or an http(s) URL. */
+async function loadBundle(target: string): Promise<Bundle> {
+  if (/^https?:\/\//.test(target)) {
+    const res = await fetch(target);
+    if (!res.ok) throw new Error(`fetch failed: ${res.status} ${res.statusText}`);
+    return unpack(new Uint8Array(await res.arrayBuffer()));
+  }
+  return unpack(new Uint8Array(await readFile(target)));
+}
+
+/** Load a bundle for validate/pack: a directory (canonical layout) or a packed file. */
+async function loadDirOrFile(target: string): Promise<Bundle> {
+  const isDir = await stat(target)
+    .then((s) => s.isDirectory())
+    .catch(() => false);
+  return isDir ? readDir(target) : unpack(new Uint8Array(await readFile(target)));
 }
 
 async function inspect(args: string[], io: CliIo): Promise<number> {
@@ -153,13 +170,48 @@ async function install(args: string[], io: CliIo): Promise<number> {
   return 0;
 }
 
+async function validate(args: string[], io: CliIo): Promise<number> {
+  const { positionals } = parseArgs(args);
+  const target = positionals[0];
+  if (!target) {
+    io.error('validate: missing <dir|file.uniqent>');
+    return 1;
+  }
+  const result = validateBundle(await loadDirOrFile(target));
+  if (result.ok) {
+    io.log('valid ✓');
+    return 0;
+  }
+  io.error(`invalid: ${result.errors.length} error(s)`);
+  for (const e of result.errors) io.error(`  ${e.code}: ${e.message}`);
+  return 1;
+}
+
+async function pack(args: string[], io: CliIo): Promise<number> {
+  const { positionals, flags } = parseArgs(args);
+  const dir = positionals[0];
+  if (!dir) {
+    io.error('pack: missing <dir>');
+    return 1;
+  }
+  const bundle = await readDir(dir);
+  const bytes = await packBundle(bundle); // validates + secret-scans (throws on a secret)
+  const out = typeof flags.out === 'string' ? flags.out : `${bundle.manifest().name}.uniqent`;
+  await writeFile(out, bytes);
+  io.log(`packed ${out} (${bytes.length} bytes)`);
+  return 0;
+}
+
 export async function run(argv: string[], io: CliIo): Promise<number> {
   const [cmd, ...rest] = argv;
   if (cmd === 'inspect') return inspect(rest, io);
   if (cmd === 'install') return install(rest, io);
-  io.error('usage: uniqent <inspect|install> <file.uniqent> [options]');
+  if (cmd === 'validate') return validate(rest, io);
+  if (cmd === 'pack') return pack(rest, io);
+  io.error('usage: uniqent <inspect|install|validate|pack> <file|dir|url> [options]');
   io.error(
-    '  install options: --target <id> --root <dir> --cred <ref>=<value> --allow-unsigned --yes',
+    '  install <file|url> --target <id> --root <dir> --cred <ref>=<value> [--allow-unsigned] [--yes]',
   );
+  io.error('  pack <dir> [-o <file>]    validate <dir|file>');
   return cmd ? 1 : 0;
 }

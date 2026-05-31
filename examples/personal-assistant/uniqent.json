@@ -1,0 +1,50 @@
+{
+  "specVersion": "0.1",
+  "name": "personal-assistant",
+  "displayName": "Personal Assistant",
+  "version": "0.1.0",
+  "description": "A personal assistant reachable on Telegram with a daily briefing automation.",
+  "author": {
+    "name": "Uniqent",
+    "url": "https://uniqent.dev"
+  },
+  "license": "CC0-1.0",
+  "tags": ["assistant", "telegram"],
+  "components": {
+    "identity": true,
+    "memory": {
+      "facts": 1,
+      "episodic": 0,
+      "hasProfile": true
+    },
+    "skills": [],
+    "mcp": ["filesystem"],
+    "tools": [],
+    "tasks": ["daily-briefing"],
+    "channels": ["telegram"]
+  },
+  "credentials": [
+    {
+      "ref": "telegram_bot_token",
+      "label": "Telegram Bot Token",
+      "type": "bearer",
+      "consumedBy": ["channel:telegram"],
+      "required": true,
+      "help": "Create a bot with @BotFather and copy its token."
+    }
+  ],
+  "permissions": {
+    "filesystem": {
+      "read": [],
+      "write": []
+    },
+    "network": {
+      "endpoints": []
+    },
+    "autonomy": "suggest",
+    "spawnsProcesses": true
+  },
+  "compatibility": {
+    "targets": ["hermes", "openclaw", "claude-code"]
+  }
+}

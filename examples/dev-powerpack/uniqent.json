@@ -1,0 +1,50 @@
+{
+  "specVersion": "0.1",
+  "name": "dev-powerpack",
+  "displayName": "Dev Powerpack",
+  "version": "0.1.0",
+  "description": "A coding agent: GitHub + filesystem + web, with code-review and release-notes skills.",
+  "author": {
+    "name": "Uniqent",
+    "url": "https://uniqent.dev"
+  },
+  "license": "CC0-1.0",
+  "tags": ["developer", "github", "coding"],
+  "components": {
+    "identity": true,
+    "memory": {
+      "facts": 2,
+      "episodic": 0,
+      "hasProfile": false
+    },
+    "skills": ["code-review", "release-notes"],
+    "mcp": ["fetch", "filesystem", "github"],
+    "tools": [],
+    "tasks": ["daily-standup"],
+    "channels": []
+  },
+  "credentials": [
+    {
+      "ref": "github_pat",
+      "label": "GitHub Personal Access Token",
+      "type": "apiKey",
+      "consumedBy": ["mcp:github"],
+      "required": true,
+      "help": "Create at https://github.com/settings/tokens with the scopes you need."
+    }
+  ],
+  "permissions": {
+    "filesystem": {
+      "read": [],
+      "write": []
+    },
+    "network": {
+      "endpoints": ["api.githubcopilot.com"]
+    },
+    "autonomy": "suggest",
+    "spawnsProcesses": true
+  },
+  "compatibility": {
+    "targets": ["claude-code", "openclaw", "hermes"]
+  }
+}

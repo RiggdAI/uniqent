@@ -1,0 +1,41 @@
+{
+  "specVersion": "0.1",
+  "name": "research-analyst",
+  "displayName": "Research Analyst",
+  "version": "0.1.0",
+  "description": "A web-research agent that fetches sources and writes faithful, cited summaries.",
+  "author": {
+    "name": "Uniqent",
+    "url": "https://uniqent.dev"
+  },
+  "license": "CC0-1.0",
+  "tags": ["research", "web"],
+  "components": {
+    "identity": true,
+    "memory": {
+      "facts": 1,
+      "episodic": 0,
+      "hasProfile": false
+    },
+    "skills": ["summarize"],
+    "mcp": ["fetch"],
+    "tools": [],
+    "tasks": [],
+    "channels": []
+  },
+  "credentials": [],
+  "permissions": {
+    "filesystem": {
+      "read": [],
+      "write": []
+    },
+    "network": {
+      "endpoints": []
+    },
+    "autonomy": "suggest",
+    "spawnsProcesses": true
+  },
+  "compatibility": {
+    "targets": ["claude-code", "hermes", "openclaw"]
+  }
+}
