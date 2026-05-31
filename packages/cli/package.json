@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@uniqent/adapter-claude-code": "workspace:*",
+    "@uniqent/adapter-hermes": "workspace:*",
     "@uniqent/adapter-sdk": "workspace:*",
     "@uniqent/core": "workspace:*"
   },

@@ -87,6 +87,38 @@ describe('uniqent cli', () => {
     }
   });
 
+  it('install --target hermes writes Hermes files', async () => {
+    const dir = tmp();
+    const root = tmp();
+    try {
+      const file = await makeBundleFile(dir, true);
+      const { io } = capture();
+      const code = await run(
+        [
+          'install',
+          file,
+          '--target',
+          'hermes',
+          '--root',
+          root,
+          '--cred',
+          'github_pat=ghp_demo000111222333444',
+          '--yes',
+        ],
+        io,
+      );
+      expect(code).toBe(0);
+      expect(existsSync(join(root, 'SOUL.md'))).toBe(true);
+      expect(existsSync(join(root, 'hermes.json'))).toBe(true);
+      expect(readFileSync(join(root, '.env'), 'utf8')).toContain(
+        'GITHUB_PAT=ghp_demo000111222333444',
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('install fails when a required credential is missing', async () => {
     const dir = tmp();
     const root = tmp();

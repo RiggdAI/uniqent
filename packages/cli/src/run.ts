@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { unpack, verify } from '@uniqent/core';
 import type { Adapter, ResolvedCredentials } from '@uniqent/adapter-sdk';
 import { claudeCodeAdapter } from '@uniqent/adapter-claude-code';
+import { hermesAdapter } from '@uniqent/adapter-hermes';
 
 export interface CliIo {
   log: (msg: string) => void;
@@ -12,6 +13,7 @@ export interface CliIo {
 
 const ADAPTERS: Record<string, Adapter> = {
   'claude-code': claudeCodeAdapter,
+  hermes: hermesAdapter,
 };
 
 const BOOLEAN_FLAGS = new Set(['yes', 'allow-unsigned']);

@@ -1,0 +1,33 @@
+{
+  "name": "@uniqent/adapter-hermes",
+  "version": "0.1.0",
+  "description": "Uniqent adapter that installs a .uniqent brain into Hermes (bounded memory).",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@uniqent/adapter-sdk": "workspace:*",
+    "@uniqent/builder": "workspace:*",
+    "@uniqent/core": "workspace:*",
+    "@uniqent/spec": "workspace:*"
+  },
+  "devDependencies": {
+    "@uniqent/adapter-claude-code": "workspace:*",
+    "vitest": "^3.0.0"
+  }
+}

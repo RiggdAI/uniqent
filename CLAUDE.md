@@ -103,8 +103,8 @@ default).
 
 ## Current status
 
-**M3 (Studio) + M4 (Claude Code install) complete.** Packages: `spec`, `core`, `builder`,
-`adapter-sdk`, `adapter-claude-code`, `cli`; app: `studio`.
+**M3 (Studio) + M4 (install, two adapters) complete — cross-framework proven.** Packages: `spec`,
+`core`, `builder`, `adapter-sdk`, `adapter-claude-code`, `adapter-hermes`, `cli`; app: `studio`.
 
 - **Studio** (`apps/studio`) — local-first React+Vite app over a Node API (`StudioSession` over the
   builder) with an **n8n-style react-flow canvas**: agent core node wired to component nodes
@@ -119,7 +119,13 @@ default).
   lossiness) + `@uniqent/cli` (`uniqent inspect|install <file> --target claude-code --root <dir>
 --cred ref=val [--allow-unsigned] [--yes]`). Verified: a signed `.uniqent` installs into a
   sandbox `.claude/` end to end.
+- **Hermes** — `@uniqent/adapter-hermes`: persona→`SOUL.md`, **bounded memory** (`MEMORY.md`
+  ~2200 / `USER.md` ~1375 chars, prioritized by `importance`, truncation reported in lossiness),
+  skills→`skills/`, MCP+channels+tasks→`hermes.json` with credentials kept in `.env` (config holds
+  only `${ENV}` refs). `uniqent install --target hermes` works. **Cross-framework proven:** the
+  same `.uniqent` installs into both Claude Code and Hermes (a test asserts both, with Claude Code
+  _transforming_ memory and Hermes _truncating_ it).
 
-**Next: OpenClaw adapter + a Studio "Install" button (M4b), then registry/one-click (M6).** When a
+**Next: OpenClaw adapter + a Studio "Install" button, then registry/one-click (M6).** When a
 milestone's acceptance criteria in `docs/BUILD_PLAN.md` pass, update this status line and add any
 newly-discovered exact commands or gotchas above.
