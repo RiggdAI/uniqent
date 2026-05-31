@@ -5,6 +5,7 @@ import type { Adapter, ResolvedCredentials } from '@uniqent/adapter-sdk';
 import { claudeCodeAdapter } from '@uniqent/adapter-claude-code';
 import { hermesAdapter } from '@uniqent/adapter-hermes';
 import { openClawAdapter } from '@uniqent/adapter-openclaw';
+import { fetchIndex, findEntry, looksLikeSlug, registryUrl } from './registry.js';
 
 export interface CliIo {
   log: (msg: string) => void;
@@ -56,12 +57,35 @@ function parseArgs(args: string[]): ParsedArgs {
   return { positionals, flags, creds };
 }
 
-/** Load a bundle from a local file path or an http(s) URL. */
-async function loadBundle(target: string): Promise<Bundle> {
-  if (/^https?:\/\//.test(target)) {
-    const res = await fetch(target);
-    if (!res.ok) throw new Error(`fetch failed: ${res.status} ${res.statusText}`);
-    return unpack(new Uint8Array(await res.arrayBuffer()));
+async function bundleFromUrl(url: string): Promise<Bundle> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`fetch failed: ${res.status} ${res.statusText}`);
+  return unpack(new Uint8Array(await res.arrayBuffer()));
+}
+
+/**
+ * Resolve an install target into a bundle. A target is one of:
+ *  - an http(s) URL to a .uniqent          → fetched directly
+ *  - a bare registry slug (e.g. dev-powerpack) → resolved via the registry index, no service
+ *  - a local file path                      → read from disk
+ */
+async function resolveBundle(
+  target: string,
+  flags: Record<string, string | true>,
+): Promise<Bundle> {
+  if (/^https?:\/\//.test(target)) return bundleFromUrl(target);
+  if (looksLikeSlug(target)) {
+    const reg = registryUrl(flags.registry);
+    if (!reg) {
+      throw new Error(
+        `"${target}" looks like a registry slug but no registry is set (pass --registry <url> or set UNIQENT_REGISTRY), or give a file path or URL`,
+      );
+    }
+    const wanted = typeof flags.version === 'string' ? flags.version : undefined;
+    const entry = findEntry(await fetchIndex(reg), target, wanted);
+    if (!entry)
+      throw new Error(`"${target}"${wanted ? `@${wanted}` : ''} not found in registry ${reg}`);
+    return bundleFromUrl(entry.url);
   }
   return unpack(new Uint8Array(await readFile(target)));
 }
@@ -75,13 +99,19 @@ async function loadDirOrFile(target: string): Promise<Bundle> {
 }
 
 async function inspect(args: string[], io: CliIo): Promise<number> {
-  const { positionals } = parseArgs(args);
+  const { positionals, flags } = parseArgs(args);
   const file = positionals[0];
   if (!file) {
-    io.error('inspect: missing <file.uniqent>');
+    io.error('inspect: missing <file.uniqent|url|slug>');
     return 1;
   }
-  const bundle = await loadBundle(file);
+  let bundle: Bundle;
+  try {
+    bundle = await resolveBundle(file, flags);
+  } catch (e) {
+    io.error(`inspect: ${(e as Error).message}`);
+    return 1;
+  }
   const m = bundle.manifest();
   const v = await verify(bundle);
   io.log(`${m.displayName}  (${m.name}@${m.version})`);
@@ -106,7 +136,7 @@ async function install(args: string[], io: CliIo): Promise<number> {
   const { positionals, flags, creds } = parseArgs(args);
   const file = positionals[0];
   if (!file) {
-    io.error('install: missing <file.uniqent>');
+    io.error('install: missing <file.uniqent|url|slug>');
     return 1;
   }
   const target = typeof flags.target === 'string' ? flags.target : 'claude-code';
@@ -118,7 +148,13 @@ async function install(args: string[], io: CliIo): Promise<number> {
     return 1;
   }
   const root = typeof flags.root === 'string' ? flags.root : process.cwd();
-  const bundle = await loadBundle(file);
+  let bundle: Bundle;
+  try {
+    bundle = await resolveBundle(file, flags);
+  } catch (e) {
+    io.error(`install: ${(e as Error).message}`);
+    return 1;
+  }
 
   const v = await verify(bundle);
   if (!v.signed || !v.valid) {
@@ -202,16 +238,43 @@ async function pack(args: string[], io: CliIo): Promise<number> {
   return 0;
 }
 
+async function search(args: string[], io: CliIo): Promise<number> {
+  const { positionals, flags } = parseArgs(args);
+  const reg = registryUrl(flags.registry);
+  if (!reg) {
+    io.error('search: no registry set (pass --registry <url> or set UNIQENT_REGISTRY)');
+    return 1;
+  }
+  const q = (positionals[0] ?? '').toLowerCase();
+  const index = await fetchIndex(reg);
+  const hits = index.bundles.filter((e) =>
+    !q
+      ? true
+      : `${e.name} ${e.description ?? ''} ${(e.tags ?? []).join(' ')}`.toLowerCase().includes(q),
+  );
+  if (hits.length === 0) {
+    io.log(q ? `no bundles match "${q}"` : 'registry is empty');
+    return 0;
+  }
+  for (const e of hits) {
+    const tags = e.tags && e.tags.length > 0 ? `  [${e.tags.join(', ')}]` : '';
+    io.log(`${e.name}@${e.version ?? '?'}  ${e.description ?? ''}${tags}`);
+  }
+  io.log(`\nInstall one with:  uniqent install <name> --registry ${reg} --target <id>`);
+  return 0;
+}
+
 export async function run(argv: string[], io: CliIo): Promise<number> {
   const [cmd, ...rest] = argv;
   if (cmd === 'inspect') return inspect(rest, io);
   if (cmd === 'install') return install(rest, io);
   if (cmd === 'validate') return validate(rest, io);
   if (cmd === 'pack') return pack(rest, io);
-  io.error('usage: uniqent <inspect|install|validate|pack> <file|dir|url> [options]');
+  if (cmd === 'search') return search(rest, io);
+  io.error('usage: uniqent <inspect|install|validate|pack|search> <file|dir|url|slug> [options]');
   io.error(
-    '  install <file|url> --target <id> --root <dir> --cred <ref>=<value> [--allow-unsigned] [--yes]',
+    '  install <file|url|slug> --target <id> --root <dir> --cred <ref>=<value> [--registry <url>] [--allow-unsigned] [--yes]',
   );
-  io.error('  pack <dir> [-o <file>]    validate <dir|file>');
+  io.error('  pack <dir> [-o <file>]    validate <dir|file>    search <query> --registry <url>');
   return cmd ? 1 : 0;
 }

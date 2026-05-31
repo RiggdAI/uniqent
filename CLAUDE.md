@@ -92,8 +92,9 @@ pnpm --filter @uniqent/spec gen
 - **`packages/adapter-{claude-code,openclaw,hermes}`** — one Adapter each. Hermes has bounded
   memory (`MEMORY.md` ~2200 chars, `USER.md` ~1375 chars) and MUST prioritize by `importance`
   and report truncation.
-- **`packages/registry`** — open registry MVP (publish/search/install-by-slug); optional, never a
-  hard dependency.
+- **registry** — file-based, no package/service: a registry is just a hosted `index.json`
+  (`registry/index.json` is the sample + format). The CLI's `src/registry.ts` resolves it for
+  `search` and install-by-slug. Optional convenience, never a hard dependency.
 
 The translation flow is the moat: a canonical `Bundle` is dry-analyzed by `adapter.plan()` into
 an `InstallPlan` (writes + mcp/channel registrations + a lossiness report + required creds), then
@@ -131,11 +132,17 @@ default).
   button and the `uniqent install --target <claude-code|hermes|openclaw>` CLI both drive them; the
   local server is hardened (127.0.0.1-only + localhost Origin/Host guard).
 
-CLI surface: `uniqent inspect | install <file|url> | validate <dir|file> | pack <dir> [-o]`.
-`install` accepts a **raw http(s) URL** (no registry needed). Three example brains live in
+CLI surface:
+`uniqent inspect | install <file|url|slug> | validate <dir|file> | pack <dir> [-o] | search <q>`.
+`install` accepts a **raw http(s) URL** (no registry needed) **or a registry slug** resolved
+against a JSON index (`--registry <url>` / `UNIQENT_REGISTRY`). The registry is just a hosted
+`index.json` (`registry/index.json` is the sample + format) — **no service required**: `search`
+filters it and `install <slug>` resolves slug→url→install. Three example brains live in
 `examples/` (canonical source dirs, generated via the builder, guarded by tests).
 
-**Left for v1: the open registry service (publish/search/install-by-slug) + the
-`uniqent://install?bundle=<url>` web handoff (M6b).** Codex/Cursor/Gemini are post-v1. When a
-milestone's acceptance criteria in `docs/BUILD_PLAN.md` pass, update this status line and add any
-newly-discovered exact commands or gotchas above.
+**Left for v1: a hosted registry service (accounts/upload/web search UI) + the
+`uniqent://install?bundle=<url>` OS protocol handler / web "Install" button (M6b).** Both need
+infra/OS-registration decisions; the file-based registry + raw-URL install already satisfy the
+"installable with zero hosted dependency" principle. Codex/Cursor/Gemini adapters are post-v1.
+When a milestone's acceptance criteria in `docs/BUILD_PLAN.md` pass, update this status line and
+add any newly-discovered exact commands or gotchas above.
