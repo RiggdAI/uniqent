@@ -149,6 +149,45 @@ export class StudioSession {
     this.brain.addSkillFromCatalog(name);
   }
 
+  /** Add a skill not in the catalog (pasted or uploaded SKILL.md). */
+  addCustomSkill(name: string, skillMd: string): void {
+    const md = skillMd.trim() ? skillMd : `---\nname: ${name}\ndescription: ${name}\n---\n`;
+    this.brain.addSkill(name, md);
+  }
+
+  /** Ensure a credential requirement exists for an MCP server's auth.credentialRef. */
+  private ensureMcpCredential(auth: { type?: string; credentialRef?: string }): void {
+    const ref = auth.credentialRef;
+    if (!ref) return;
+    const type =
+      auth.type === 'bearer'
+        ? 'bearer'
+        : auth.type === 'header'
+          ? 'header'
+          : auth.type === 'oauth2'
+            ? 'oauth2'
+            : 'apiKey';
+    this.brain.addCredential({ ref, label: ref, type, consumedBy: [], required: true });
+  }
+
+  /** Add a custom MCP server (validated by the schema). Throws on invalid input. */
+  addCustomMcp(input: Record<string, unknown>): void {
+    const server = { tools: { include: 'all' }, ...input };
+    this.brain.addMcpServer(server);
+    this.ensureMcpCredential((input.auth ?? {}) as { type?: string; credentialRef?: string });
+  }
+
+  /** Bulk-import MCP servers (e.g. an existing mcp/servers.json). Throws on invalid input. */
+  importMcpServers(servers: Array<Record<string, unknown>>): number {
+    let n = 0;
+    for (const raw of servers) {
+      this.brain.addMcpServer({ tools: { include: 'all' }, ...raw });
+      this.ensureMcpCredential((raw.auth ?? {}) as { type?: string; credentialRef?: string });
+      n++;
+    }
+    return n;
+  }
+
   removeMcp(id: string): void {
     this.brain.removeMcpServer(id);
   }

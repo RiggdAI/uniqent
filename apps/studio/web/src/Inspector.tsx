@@ -423,11 +423,219 @@ function TaskEditor({ apply }: { apply: (p: Promise<StudioState>) => void }) {
   );
 }
 
+const selectClass =
+  'flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+
+function CustomSkillEditor({ apply }: { apply: (p: Promise<StudioState>) => void }) {
+  const [name, setName] = useState('');
+  const [md, setMd] = useState('');
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>): Promise<void> {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f) return;
+    setMd(await f.text());
+    if (!name) {
+      const base = f.name.replace(/\.md$/i, '');
+      setName(base.toLowerCase() === 'skill' ? 'imported-skill' : base);
+    }
+  }
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">
+        Add a skill from a SKILL.md — paste or upload.
+      </p>
+      <div className="space-y-1.5">
+        <Label>Name (slug)</Label>
+        <Input
+          data-testid="custom-skill-name"
+          placeholder="e.g. release-notes"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label>SKILL.md</Label>
+        <Textarea
+          data-testid="custom-skill-md"
+          className="min-h-[160px] font-mono text-[13px]"
+          placeholder={'---\nname: release-notes\ndescription: …\n---\n\n# Release notes\n…'}
+          value={md}
+          onChange={(e) => setMd(e.target.value)}
+        />
+      </div>
+      <div className="flex items-center gap-2">
+        <Button
+          data-testid="custom-skill-add"
+          disabled={name.trim().length === 0}
+          onClick={() => {
+            apply(api.addCustomSkill(name.trim(), md));
+            setName('');
+            setMd('');
+          }}
+        >
+          Add skill
+        </Button>
+        <Button asChild variant="outline" size="sm">
+          <label className="cursor-pointer">
+            Upload SKILL.md
+            <input type="file" accept=".md,text/markdown" className="hidden" onChange={onFile} />
+          </label>
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function CustomMcpEditor({ apply }: { apply: (p: Promise<StudioState>) => void }) {
+  const [id, setId] = useState('');
+  const [transport, setTransport] = useState('streamable-http');
+  const [url, setUrl] = useState('');
+  const [command, setCommand] = useState('');
+  const [args, setArgs] = useState('');
+  const [authType, setAuthType] = useState('none');
+  const [credentialRef, setCredentialRef] = useState('');
+  const [headerName, setHeaderName] = useState('');
+  const stdio = transport === 'stdio';
+
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>): Promise<void> {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f) return;
+    try {
+      const json = JSON.parse(await f.text()) as { servers?: unknown[] } | unknown[];
+      const servers = Array.isArray(json) ? json : (json.servers ?? []);
+      apply(api.importMcpServers(servers));
+    } catch {
+      /* ignore bad file */
+    }
+  }
+
+  function add(): void {
+    const server: Record<string, unknown> = { id: id.trim(), transport, tools: { include: 'all' } };
+    if (stdio) {
+      server.command = command.trim();
+      if (args.trim()) server.args = args.trim().split(/\s+/);
+    } else {
+      server.url = url.trim();
+    }
+    const auth: Record<string, unknown> = { type: authType };
+    if (authType !== 'none' && credentialRef.trim()) auth.credentialRef = credentialRef.trim();
+    if (authType === 'header' && headerName.trim()) auth.headerName = headerName.trim();
+    server.auth = auth;
+    apply(api.addCustomMcp(server));
+    setId('');
+    setUrl('');
+    setCommand('');
+    setArgs('');
+    setCredentialRef('');
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">Add an MCP server, or import a servers.json.</p>
+      <div className="space-y-1.5">
+        <Label>Server id</Label>
+        <Input
+          data-testid="custom-mcp-id"
+          placeholder="e.g. linear"
+          value={id}
+          onChange={(e) => setId(e.target.value)}
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label>Transport</Label>
+        <select
+          data-testid="custom-mcp-transport"
+          className={selectClass}
+          value={transport}
+          onChange={(e) => setTransport(e.target.value)}
+        >
+          <option value="streamable-http">streamable-http</option>
+          <option value="sse">sse</option>
+          <option value="stdio">stdio</option>
+        </select>
+      </div>
+      {stdio ? (
+        <>
+          <div className="space-y-1.5">
+            <Label>Command</Label>
+            <Input placeholder="npx" value={command} onChange={(e) => setCommand(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Args (space-separated)</Label>
+            <Input
+              placeholder="-y @scope/server"
+              value={args}
+              onChange={(e) => setArgs(e.target.value)}
+            />
+          </div>
+        </>
+      ) : (
+        <div className="space-y-1.5">
+          <Label>URL</Label>
+          <Input
+            data-testid="custom-mcp-url"
+            placeholder="https://api.example.com/mcp"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+          />
+        </div>
+      )}
+      <div className="space-y-1.5">
+        <Label>Auth</Label>
+        <select
+          className={selectClass}
+          value={authType}
+          onChange={(e) => setAuthType(e.target.value)}
+        >
+          <option value="none">none</option>
+          <option value="bearer">bearer</option>
+          <option value="header">header</option>
+          <option value="oauth2">oauth2</option>
+        </select>
+      </div>
+      {authType !== 'none' && (
+        <div className="space-y-1.5">
+          <Label>Credential ref</Label>
+          <Input
+            placeholder="e.g. linear_api_key"
+            value={credentialRef}
+            onChange={(e) => setCredentialRef(e.target.value)}
+          />
+        </div>
+      )}
+      {authType === 'header' && (
+        <div className="space-y-1.5">
+          <Label>Header name</Label>
+          <Input
+            placeholder="X-Api-Key"
+            value={headerName}
+            onChange={(e) => setHeaderName(e.target.value)}
+          />
+        </div>
+      )}
+      <div className="flex items-center gap-2">
+        <Button data-testid="custom-mcp-add" disabled={id.trim().length === 0} onClick={add}>
+          Add server
+        </Button>
+        <Button asChild variant="outline" size="sm">
+          <label className="cursor-pointer">
+            Import servers.json
+            <input type="file" accept=".json" className="hidden" onChange={onFile} />
+          </label>
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function titleFor(selection: string): string {
   if (selection === 'agent') return 'Config';
   if (selection === 'persona') return 'Persona';
   if (selection === 'memory') return 'Memory';
   if (selection === 'new-task') return 'New flow';
+  if (selection === 'new-skill') return 'Custom skill';
+  if (selection === 'new-mcp') return 'Custom MCP';
   if (selection.startsWith('mcp:')) return selection.slice(4);
   if (selection.startsWith('skill:')) return selection.slice(6);
   if (selection.startsWith('channel:')) return selection.slice(8);
@@ -473,6 +681,8 @@ export function Inspector(props: InspectorProps) {
           <TaskDetails id={selection.slice(5)} apply={apply} onClose={onClose} />
         )}
         {selection === 'new-task' && <TaskEditor apply={apply} />}
+        {selection === 'new-skill' && <CustomSkillEditor apply={apply} />}
+        {selection === 'new-mcp' && <CustomMcpEditor apply={apply} />}
         {selection.startsWith('cred:') && (
           <CredentialDetails refId={selection.slice(5)} state={state} />
         )}

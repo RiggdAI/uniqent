@@ -104,6 +104,12 @@ export function Palette({ state, catalog, apply, selection, onSelect }: PaletteP
             testid={`add-mcp-${m.id}`}
           />
         ))}
+        <SelectRow
+          icon={Boxes}
+          label="Custom / import…"
+          active={selection === 'new-mcp'}
+          onClick={() => onSelect('new-mcp')}
+        />
       </Section>
 
       <Section title="Skills">
@@ -116,6 +122,12 @@ export function Palette({ state, catalog, apply, selection, onSelect }: PaletteP
             testid={`add-skill-${s.name}`}
           />
         ))}
+        <SelectRow
+          icon={Sparkles}
+          label="Custom / import…"
+          active={selection === 'new-skill'}
+          onClick={() => onSelect('new-skill')}
+        />
       </Section>
 
       <Section title="Memory">
