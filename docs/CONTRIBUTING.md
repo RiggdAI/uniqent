@@ -23,7 +23,7 @@ pnpm lint
 pnpm format
 ```
 
-- TypeScript, Node 20+, ESM only.
+- TypeScript, Node 22.13+ (the pinned pnpm requires it), ESM only.
 - Tests with vitest; every package ships unit tests. Adapters ship round-trip conformance tests
   via the harness in `packages/adapter-sdk`.
 - Conventional commits (e.g. `feat(spec): add channel schema`). Keep PRs small and focused.

@@ -19,8 +19,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Validate the engines ">=20" claim on both maintained LTS lines.
-        node-version: [20, 22]
+        # The toolchain (pnpm 11) needs Node >= 22.13; test the supported lines.
+        node-version: [22, 24]
     name: build (node ${{ matrix.node-version }})
     env:
       COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'

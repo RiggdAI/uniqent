@@ -24,7 +24,7 @@ Uniqent is a **complete, open-source platform for portable AI agents** — an n8
 
 ## 1. Tech stack & repo conventions
 
-- **Language:** TypeScript (Node 20+). ESM modules.
+- **Language:** TypeScript (Node 22.13+; the pinned pnpm requires it). ESM modules.
 - **Monorepo:** pnpm workspaces.
 - **Schema/validation:** `zod` for runtime validation + generate JSON Schema from it (`zod-to-json-schema`).
 - **Archive:** `tar` + gzip for `.uniqent` files (a `.uniqent` is a gzipped tar with a defined layout).
