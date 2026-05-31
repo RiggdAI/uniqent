@@ -146,6 +146,17 @@ describe('StudioSession', () => {
     }
   });
 
+  it('refuses to install an invalid brain', async () => {
+    const s = new StudioSession();
+    s.setMeta({ name: 'Not A Slug' }); // invalid manifest name → validation fails
+    const root = mkdtempSync(join(tmpdir(), 'uniqent-inv-'));
+    try {
+      await expect(s.install('claude-code', root, {})).rejects.toThrow(/invalid/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('signed export verifies', async () => {
     const s = new StudioSession();
     s.setMeta({ name: 'demo' });

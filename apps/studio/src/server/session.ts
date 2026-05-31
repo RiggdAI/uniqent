@@ -125,6 +125,12 @@ export class StudioSession {
     const adapter = ADAPTERS[target];
     if (!adapter) throw new Error(`unknown target: ${target}`);
     const bundle = this.brain.toBundle();
+    const validation = validateBundle(bundle);
+    if (!validation.ok) {
+      throw new Error(
+        `brain is invalid; fix it before installing: ${validation.errors.map((e) => e.message).join('; ')}`,
+      );
+    }
     const plan = await adapter.plan(bundle, { root });
     return adapter.apply(bundle, plan, resolved, { root });
   }

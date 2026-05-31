@@ -690,12 +690,29 @@ function InstallPanel({ catalog }: { catalog: CatalogView }) {
 
   const missing = plan ? plan.requiresCredentials.filter((r) => !creds[r]?.trim()) : [];
 
+  // A plan is for a specific target+root; changing either invalidates it so the
+  // credential gate can't pass against a stale plan.
+  function changeTarget(v: string): void {
+    setTarget(v);
+    setPlan(null);
+    setResult(null);
+  }
+  function changeRoot(v: string): void {
+    setRoot(v);
+    setPlan(null);
+    setResult(null);
+  }
+
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">Install this brain into a local framework.</p>
       <div className="space-y-1.5">
         <Label>Target</Label>
-        <select className={selectClass} value={target} onChange={(e) => setTarget(e.target.value)}>
+        <select
+          className={selectClass}
+          value={target}
+          onChange={(e) => changeTarget(e.target.value)}
+        >
           {catalog.targets.map((t) => (
             <option key={t} value={t}>
               {t}
@@ -709,7 +726,7 @@ function InstallPanel({ catalog }: { catalog: CatalogView }) {
           data-testid="install-root"
           placeholder="/Users/you/my-project"
           value={root}
-          onChange={(e) => setRoot(e.target.value)}
+          onChange={(e) => changeRoot(e.target.value)}
         />
       </div>
       <Button
