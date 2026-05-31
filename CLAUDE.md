@@ -103,10 +103,13 @@ default).
 
 ## Current status
 
-**M2 complete.** `packages/spec`, `packages/core`, and `packages/builder` are implemented. The
-builder's `Brain` model assembles a validated bundle from intent-level edits (incl. seed MCP +
-skill catalogs), with auto-derived `components`/`permissions`/`consumedBy` and digest-stable
-round-trips, all tested. **Next: M3 (Uniqent Studio — the local-first visual builder, the
-priority), verified with a live browser test.** No `studio`, adapters, or CLI exist yet. When a
-milestone's acceptance criteria in `docs/BUILD_PLAN.md` pass, update this status line and add any
-newly-discovered exact commands or gotchas above.
+**M3 complete (canvas Studio).** `packages/spec`, `packages/core`, `packages/builder`, and
+`apps/studio` are implemented. Studio is a local-first web app: a Node API (`StudioSession` over
+the builder) serving a React + Vite SPA with an **n8n-style react-flow canvas** — an agent core
+node wired to component nodes (persona/MCP/skill/memory) and credential→consumer "needs" edges, a
+component palette, and a side-panel inspector. Run it with `pnpm --filter @uniqent/studio build`
+then `pnpm --filter @uniqent/studio start` (serves on `:4173`, override `UNIQENT_STUDIO_PORT`).
+Verified end-to-end in a real browser: build a brain from scratch → export a signed `.uniqent`
+that `core.validateBundle` + `verify` accept. **Next: memory import, then adapters (M4).** No
+adapters or CLI exist yet. When a milestone's acceptance criteria in `docs/BUILD_PLAN.md` pass,
+update this status line and add any newly-discovered exact commands or gotchas above.
