@@ -1,5 +1,7 @@
 # Uniqent
 
+[![CI](https://github.com/RiggdAI/uniqent/actions/workflows/ci.yml/badge.svg)](https://github.com/RiggdAI/uniqent/actions/workflows/ci.yml)
+
 **Any brain, any agent.** Package an AI agent's brain once — persona, MCP stack, skills, memory,
 config — and install it into whatever framework you run, in one click.
 
