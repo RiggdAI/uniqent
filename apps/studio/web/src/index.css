@@ -1,0 +1,101 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    --primary: 262 83% 58%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 262 83% 58%;
+    --radius: 0.6rem;
+  }
+
+  .dark {
+    --background: 240 10% 5%;
+    --foreground: 0 0% 95%;
+    --card: 240 9% 8%;
+    --card-foreground: 0 0% 95%;
+    --popover: 240 9% 8%;
+    --popover-foreground: 0 0% 95%;
+    --primary: 263 90% 68%;
+    --primary-foreground: 240 10% 5%;
+    --secondary: 240 5% 14%;
+    --secondary-foreground: 0 0% 95%;
+    --muted: 240 5% 14%;
+    --muted-foreground: 240 5% 60%;
+    --accent: 240 5% 16%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 72% 55%;
+    --destructive-foreground: 0 0% 98%;
+    --success: 142 69% 50%;
+    --success-foreground: 240 10% 5%;
+    --border: 240 5% 17%;
+    --input: 240 5% 18%;
+    --ring: 263 90% 68%;
+    --radius: 0.6rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings:
+      'rlig' 1,
+      'calt' 1;
+  }
+}
+
+/* Theme React Flow chrome to match the design tokens.
+   Plain CSS (not @layer) so Tailwind never purges these runtime-only classes. */
+.react-flow__controls {
+  border: 1px solid hsl(var(--border));
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: none;
+}
+.react-flow__controls-button {
+  background: hsl(var(--card));
+  border-bottom: 1px solid hsl(var(--border));
+  color: hsl(var(--foreground));
+}
+.react-flow__controls-button:hover {
+  background: hsl(var(--secondary));
+}
+.react-flow__controls-button svg {
+  fill: hsl(var(--foreground));
+}
+.react-flow__attribution {
+  background: transparent;
+  border-radius: 4px;
+}
+.react-flow__attribution a {
+  color: hsl(var(--muted-foreground));
+}
+.react-flow__edge-text {
+  fill: hsl(var(--muted-foreground));
+  font-size: 10px;
+}
+.react-flow__edge-textbg {
+  fill: hsl(var(--background));
+}

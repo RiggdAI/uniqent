@@ -1,40 +1,71 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
 import { Manifest, McpServer, CredentialRequirement, MemoryItem } from '../src/index';
 
-const here = dirname(fileURLToPath(import.meta.url));
-const examplePath = resolve(here, '../../../examples/dev-powerpack/uniqent.json');
+/** A representative, schema-valid manifest used as the positive fixture. */
+const VALID_MANIFEST = {
+  specVersion: '0.1',
+  name: 'dev-powerpack',
+  displayName: 'Dev Powerpack',
+  version: '0.1.0',
+  description: 'A coding-focused agent with GitHub MCP access.',
+  author: { name: 'Uniqent Examples', handle: 'uniqent', url: 'https://uniqent.dev' },
+  license: 'CC0-1.0',
+  tags: ['developer', 'github'],
+  components: {
+    identity: true,
+    memory: { facts: 3, episodic: 0, hasProfile: true },
+    skills: ['code-review'],
+    mcp: ['github'],
+    tools: ['web-search'],
+    tasks: [],
+    channels: [],
+  },
+  credentials: [
+    {
+      ref: 'github_pat',
+      label: 'GitHub Personal Access Token',
+      type: 'apiKey',
+      consumedBy: ['mcp:github'],
+      required: true,
+    },
+  ],
+  permissions: {
+    filesystem: { read: ['~/code/**'], write: ['~/code/**'] },
+    network: { endpoints: ['api.github.com'] },
+    autonomy: 'suggest',
+    spawnsProcesses: true,
+  },
+  compatibility: { targets: ['openclaw', 'hermes', 'claude-code'] },
+};
+
+const fixture = () => structuredClone(VALID_MANIFEST);
 
 describe('Manifest', () => {
-  it('validates the dev-powerpack example manifest', () => {
-    const raw = JSON.parse(readFileSync(examplePath, 'utf8'));
-    const result = Manifest.safeParse(raw);
-    expect(result.success).toBe(true);
+  it('validates a representative manifest', () => {
+    expect(Manifest.safeParse(fixture()).success).toBe(true);
   });
 
   it('rejects a non-slug name', () => {
-    const raw = JSON.parse(readFileSync(examplePath, 'utf8'));
+    const raw = fixture();
     raw.name = 'Not A Slug';
     expect(Manifest.safeParse(raw).success).toBe(false);
   });
 
   it('rejects a non-semver version', () => {
-    const raw = JSON.parse(readFileSync(examplePath, 'utf8'));
+    const raw = fixture();
     raw.version = 'v1';
     expect(Manifest.safeParse(raw).success).toBe(false);
   });
 
   it('rejects an unknown specVersion', () => {
-    const raw = JSON.parse(readFileSync(examplePath, 'utf8'));
+    const raw = fixture();
     raw.specVersion = '0.2';
     expect(Manifest.safeParse(raw).success).toBe(false);
   });
 
   it('rejects a missing required field', () => {
-    const raw = JSON.parse(readFileSync(examplePath, 'utf8'));
-    delete raw.permissions;
+    const raw = fixture();
+    delete (raw as Partial<typeof raw>).permissions;
     expect(Manifest.safeParse(raw).success).toBe(false);
   });
 });
