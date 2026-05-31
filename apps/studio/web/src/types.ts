@@ -69,6 +69,20 @@ export interface CatalogView {
     kind: string;
     credential?: string;
   }>;
+  targets: string[];
+}
+
+export interface InstallPlan {
+  writes: Array<{ path: string; summary: string }>;
+  mcpRegistrations: string[];
+  channelRegistrations: string[];
+  lossiness: Array<{ component: string; issue: string; action: string }>;
+  requiresCredentials: string[];
+}
+
+export interface InstallResult {
+  written: string[];
+  notes: string[];
 }
 
 export interface TaskInput {

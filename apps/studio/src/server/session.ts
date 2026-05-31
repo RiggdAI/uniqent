@@ -3,6 +3,19 @@ import type { BrainMeta } from '@uniqent/builder';
 import { validateBundle, generateKeypair, sign, pack, verify } from '@uniqent/core';
 import type { ValidationResult, Keypair } from '@uniqent/core';
 import type { Manifest } from '@uniqent/spec';
+import type {
+  Adapter,
+  InstallPlan,
+  InstallResult,
+  ResolvedCredentials,
+} from '@uniqent/adapter-sdk';
+import { claudeCodeAdapter } from '@uniqent/adapter-claude-code';
+import { hermesAdapter } from '@uniqent/adapter-hermes';
+
+const ADAPTERS: Record<string, Adapter> = {
+  'claude-code': claudeCodeAdapter,
+  hermes: hermesAdapter,
+};
 
 const DEFAULT_META: BrainMeta = {
   name: 'my-brain',
@@ -42,6 +55,7 @@ export interface CatalogView {
     kind: string;
     credential?: string;
   }>;
+  targets: string[];
 }
 
 export interface StudioState {
@@ -91,7 +105,28 @@ export class StudioSession {
         kind: e.channel.kind,
         credential: e.credential?.ref,
       })),
+      targets: Object.keys(ADAPTERS),
     };
+  }
+
+  /** Dry-run plan for installing the current brain into a framework at `root`. */
+  async installPlan(target: string, root: string): Promise<InstallPlan> {
+    const adapter = ADAPTERS[target];
+    if (!adapter) throw new Error(`unknown target: ${target}`);
+    return adapter.plan(this.brain.toBundle(), { root });
+  }
+
+  /** Install the current brain into a framework at `root`, resolving credentials locally. */
+  async install(
+    target: string,
+    root: string,
+    resolved: ResolvedCredentials,
+  ): Promise<InstallResult> {
+    const adapter = ADAPTERS[target];
+    if (!adapter) throw new Error(`unknown target: ${target}`);
+    const bundle = this.brain.toBundle();
+    const plan = await adapter.plan(bundle, { root });
+    return adapter.apply(bundle, plan, resolved, { root });
   }
 
   setMeta(meta: Partial<BrainMeta>): void {

@@ -1,4 +1,11 @@
-import type { StudioState, CatalogView, ExportResult, TaskInput } from './types';
+import type {
+  StudioState,
+  CatalogView,
+  ExportResult,
+  TaskInput,
+  InstallPlan,
+  InstallResult,
+} from './types';
 
 async function unwrap<T>(res: Response): Promise<T> {
   const json = (await res.json()) as T & { error?: string };
@@ -47,4 +54,8 @@ export const api = {
   removeTask: (id: string) => post<StudioState>('/api/task/remove', { id }),
   reset: () => post<StudioState>('/api/reset', {}),
   export: (sign: boolean) => post<ExportResult>('/api/export', { sign }),
+  installPlan: (target: string, root: string) =>
+    post<InstallPlan>('/api/install/plan', { target, root }),
+  install: (target: string, root: string, creds: Record<string, string>) =>
+    post<InstallResult>('/api/install', { target, root, creds }),
 };

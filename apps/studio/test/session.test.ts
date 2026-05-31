@@ -1,4 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import { mkdtempSync, rmSync, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { StudioSession } from '../src/server/session';
 import { unpack, validateBundle, verify } from '@uniqent/core';
 
@@ -122,6 +125,25 @@ describe('StudioSession', () => {
     const res = await s.export({ sign: false });
     const bundle = await unpack(fromBase64(res.bytesBase64));
     expect(validateBundle(bundle).ok).toBe(true);
+  });
+
+  it('installs the current brain into a framework via an adapter', async () => {
+    const s = new StudioSession();
+    s.setMeta({ name: 'demo' });
+    s.setPersona('# Persona\nAtlas.\n');
+    s.addMcpFromCatalog('github');
+    s.addCustomSkill('code-review', '---\nname: code-review\n---\nReview.\n');
+    const root = mkdtempSync(join(tmpdir(), 'uniqent-studio-inst-'));
+    try {
+      const plan = await s.installPlan('claude-code', root);
+      expect(plan.requiresCredentials).toContain('github_pat');
+      const res = await s.install('claude-code', root, { github_pat: 'ghp_demo000111222333444' });
+      expect(res.written.length).toBeGreaterThan(0);
+      expect(existsSync(join(root, 'AGENTS.md'))).toBe(true);
+      expect(existsSync(join(root, '.mcp.json'))).toBe(true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it('signed export verifies', async () => {

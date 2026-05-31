@@ -150,5 +150,27 @@ export async function handleApi(
     return ok(await session.export({ sign: b.sign === true }));
   }
 
+  if (method === 'POST' && path === '/api/install/plan') {
+    if (typeof b.target !== 'string' || typeof b.root !== 'string' || !b.root.trim()) {
+      return fail(400, 'target and root are required');
+    }
+    try {
+      return ok(await session.installPlan(b.target, b.root.trim()));
+    } catch (e) {
+      return fail(400, (e as Error).message);
+    }
+  }
+  if (method === 'POST' && path === '/api/install') {
+    if (typeof b.target !== 'string' || typeof b.root !== 'string' || !b.root.trim()) {
+      return fail(400, 'target and root are required');
+    }
+    try {
+      const creds = (b.creds ?? {}) as Record<string, string>;
+      return ok(await session.install(b.target, b.root.trim(), creds));
+    } catch (e) {
+      return fail(400, (e as Error).message);
+    }
+  }
+
   return fail(404, `no route for ${method} ${path}`);
 }

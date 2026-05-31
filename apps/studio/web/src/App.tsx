@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ReactFlow, Background, Controls, BackgroundVariant, type Node } from '@xyflow/react';
-import { Download, CheckCircle2, XCircle } from 'lucide-react';
+import { ReactFlow, Background, BackgroundVariant, type Node } from '@xyflow/react';
+import { Download, Rocket, CheckCircle2, XCircle } from 'lucide-react';
 import type { StudioState, CatalogView } from './types';
 import { api } from './api';
 import { buildGraph } from './canvas/graph';
@@ -71,10 +71,45 @@ export function App() {
   const credsRequired = state.manifest.credentials.filter((c) => c.required).length;
 
   return (
-    <div className="flex h-screen flex-col bg-background">
-      <header className="flex h-14 shrink-0 items-center justify-between border-b px-5">
-        <div className="flex items-center gap-2 text-lg font-bold tracking-tight">
-          <span className="grid size-7 place-items-center rounded-md bg-primary text-primary-foreground">
+    <div className="relative h-screen w-screen overflow-hidden bg-background">
+      {/* Full-bleed canvas */}
+      <div className="absolute inset-0">
+        <ReactFlow
+          key={graph.nodes.map((n) => n.id).join('|')}
+          nodes={graph.nodes}
+          edges={graph.edges}
+          nodeTypes={nodeTypes}
+          onNodeClick={(_e, node: Node) => setSelection(node.id)}
+          onPaneClick={() => setSelection(null)}
+          nodesDraggable={false}
+          nodesConnectable={false}
+          colorMode="dark"
+          fitView
+          fitViewOptions={{ padding: 0.4 }}
+          minZoom={0.3}
+          proOptions={{ hideAttribution: false }}
+        >
+          <Background
+            variant={BackgroundVariant.Dots}
+            gap={20}
+            size={1}
+            className="!bg-background"
+          />
+        </ReactFlow>
+      </div>
+
+      {graph.nodes.length <= 1 && (
+        <div className="pointer-events-none absolute inset-0 grid place-items-center">
+          <p className="text-sm text-muted-foreground">
+            Add components from the palette to build your brain
+          </p>
+        </div>
+      )}
+
+      {/* Floating header (bare, no box) */}
+      <header className="absolute inset-x-4 top-3 z-20 flex h-12 items-center justify-between">
+        <div className="flex items-center gap-2 text-base font-bold tracking-tight">
+          <span className="grid size-6 place-items-center rounded-md bg-primary text-xs text-primary-foreground">
             U
           </span>
           Uniqent{' '}
@@ -82,15 +117,26 @@ export function App() {
             Studio
           </span>
         </div>
-        <div className="flex items-center gap-4">
-          <span className="text-sm text-muted-foreground">{state.manifest.displayName}</span>
-          <Button data-testid="export-btn" disabled={busy} onClick={doExport}>
-            <Download className="size-4" /> Export .uniqent
+        <div className="flex items-center gap-3">
+          <span className="hidden text-sm text-muted-foreground sm:inline">
+            {state.manifest.displayName}
+          </span>
+          <Button
+            data-testid="install-btn"
+            variant="outline"
+            size="sm"
+            onClick={() => setSelection('install')}
+          >
+            <Rocket className="size-4" /> Install
+          </Button>
+          <Button data-testid="export-btn" size="sm" disabled={busy} onClick={doExport}>
+            <Download className="size-4" /> Export
           </Button>
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1">
+      {/* Floating palette */}
+      <div className="absolute bottom-14 left-3 top-[4.25rem] z-10 w-56 overflow-hidden rounded-xl border bg-card/80 shadow-lg backdrop-blur">
         <Palette
           state={state}
           catalog={catalog}
@@ -98,41 +144,11 @@ export function App() {
           selection={selection}
           onSelect={setSelection}
         />
+      </div>
 
-        <div className="relative min-w-0 flex-1">
-          <ReactFlow
-            key={graph.nodes.map((n) => n.id).join('|')}
-            nodes={graph.nodes}
-            edges={graph.edges}
-            nodeTypes={nodeTypes}
-            onNodeClick={(_e, node: Node) => setSelection(node.id)}
-            onPaneClick={() => setSelection(null)}
-            nodesDraggable={false}
-            nodesConnectable={false}
-            colorMode="dark"
-            fitView
-            fitViewOptions={{ padding: 0.25 }}
-            minZoom={0.3}
-            proOptions={{ hideAttribution: false }}
-          >
-            <Background
-              variant={BackgroundVariant.Dots}
-              gap={20}
-              size={1}
-              className="!bg-background"
-            />
-            <Controls showInteractive={false} />
-          </ReactFlow>
-          {graph.nodes.length <= 1 && (
-            <div className="pointer-events-none absolute inset-0 grid place-items-center">
-              <p className="text-sm text-muted-foreground">
-                Add components from the palette to build your brain →
-              </p>
-            </div>
-          )}
-        </div>
-
-        {selection && (
+      {/* Floating inspector */}
+      {selection && (
+        <div className="absolute bottom-14 right-3 top-[4.25rem] z-10 w-80 overflow-hidden rounded-xl border bg-card/80 shadow-lg backdrop-blur">
           <Inspector
             selection={selection}
             state={state}
@@ -140,12 +156,13 @@ export function App() {
             apply={apply}
             onClose={() => setSelection(null)}
           />
-        )}
-      </div>
+        </div>
+      )}
 
+      {/* Floating status bar (bare, no box) */}
       <footer
         data-testid="status-bar"
-        className="flex h-10 shrink-0 items-center gap-3 border-t px-5 text-sm"
+        className="absolute inset-x-4 bottom-3 z-20 flex h-9 items-center gap-3 text-sm"
       >
         <span
           className={cn('flex items-center gap-1.5', v.ok ? 'text-success' : 'text-destructive')}
@@ -159,8 +176,8 @@ export function App() {
         </span>
         <span className="text-muted-foreground">·</span>
         <span className="text-muted-foreground">{credsRequired} credential(s) required</span>
-        {exportMsg && <span className="ml-auto text-muted-foreground">{exportMsg}</span>}
-        {error && <span className="ml-auto text-destructive">{error}</span>}
+        {exportMsg && <span className="ml-auto truncate text-muted-foreground">{exportMsg}</span>}
+        {error && <span className="ml-auto truncate text-destructive">{error}</span>}
       </footer>
     </div>
   );

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { X, Trash2, KeyRound } from 'lucide-react';
-import type { StudioState, CatalogView } from './types';
+import type { StudioState, CatalogView, InstallPlan, InstallResult } from './types';
 import { api } from './api';
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
@@ -653,7 +653,127 @@ function CustomMcpEditor({ apply }: { apply: (p: Promise<StudioState>) => void }
   );
 }
 
+function InstallPanel({ catalog }: { catalog: CatalogView }) {
+  const [target, setTarget] = useState(catalog.targets[0] ?? 'claude-code');
+  const [root, setRoot] = useState('');
+  const [plan, setPlan] = useState<InstallPlan | null>(null);
+  const [creds, setCreds] = useState<Record<string, string>>({});
+  const [result, setResult] = useState<InstallResult | null>(null);
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function preview(): Promise<void> {
+    setBusy(true);
+    setErr('');
+    setResult(null);
+    try {
+      setPlan(await api.installPlan(target, root.trim()));
+    } catch (e) {
+      setErr(String(e));
+      setPlan(null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function doInstall(): Promise<void> {
+    setBusy(true);
+    setErr('');
+    try {
+      setResult(await api.install(target, root.trim(), creds));
+    } catch (e) {
+      setErr(String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const missing = plan ? plan.requiresCredentials.filter((r) => !creds[r]?.trim()) : [];
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">Install this brain into a local framework.</p>
+      <div className="space-y-1.5">
+        <Label>Target</Label>
+        <select className={selectClass} value={target} onChange={(e) => setTarget(e.target.value)}>
+          {catalog.targets.map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="space-y-1.5">
+        <Label>Project root (absolute path)</Label>
+        <Input
+          data-testid="install-root"
+          placeholder="/Users/you/my-project"
+          value={root}
+          onChange={(e) => setRoot(e.target.value)}
+        />
+      </div>
+      <Button
+        data-testid="install-preview"
+        variant="outline"
+        disabled={busy || !root.trim()}
+        onClick={preview}
+      >
+        Preview plan
+      </Button>
+
+      {plan && (
+        <div className="space-y-3 border-t pt-3">
+          <div className="text-xs text-muted-foreground">
+            {plan.writes.length} file(s) will be written.
+          </div>
+          {plan.lossiness.length > 0 && (
+            <ul className="space-y-1 text-xs text-muted-foreground">
+              {plan.lossiness.map((l, i) => (
+                <li key={i}>
+                  <span className="text-amber-400">{l.action}</span>: {l.component}
+                </li>
+              ))}
+            </ul>
+          )}
+          {plan.requiresCredentials.map((ref) => (
+            <div className="space-y-1.5" key={ref}>
+              <Label>credential: {ref}</Label>
+              <Input
+                data-testid={`install-cred-${ref}`}
+                type="password"
+                placeholder="resolved locally, never stored in the bundle"
+                value={creds[ref] ?? ''}
+                onChange={(e) => setCreds((c) => ({ ...c, [ref]: e.target.value }))}
+              />
+            </div>
+          ))}
+          <Button
+            data-testid="install-apply"
+            disabled={busy || missing.length > 0}
+            onClick={doInstall}
+          >
+            Install into {target}
+          </Button>
+        </div>
+      )}
+
+      {result && (
+        <div className="space-y-1 rounded-md border border-success/30 bg-success/10 p-3 text-sm text-success">
+          <div className="font-medium">Installed {result.written.length} file(s).</div>
+          {result.notes.map((n, i) => (
+            <div key={i} className="text-xs text-muted-foreground">
+              {n}
+            </div>
+          ))}
+        </div>
+      )}
+      {err && <p className="text-sm text-destructive">{err}</p>}
+    </div>
+  );
+}
+
 function titleFor(selection: string): string {
+  if (selection === 'install') return 'Install';
   if (selection === 'agent') return 'Config';
   if (selection === 'persona') return 'Persona';
   if (selection === 'memory') return 'Memory';
@@ -671,7 +791,7 @@ function titleFor(selection: string): string {
 export function Inspector(props: InspectorProps) {
   const { selection, state, catalog, apply, onClose } = props;
   return (
-    <aside className="flex w-80 shrink-0 flex-col border-l bg-card/40">
+    <aside className="flex h-full flex-col">
       <div className="flex h-12 shrink-0 items-center justify-between border-b px-4">
         <span className="text-sm font-semibold">{titleFor(selection)}</span>
         <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close inspector">
@@ -707,6 +827,7 @@ export function Inspector(props: InspectorProps) {
         {selection === 'new-task' && <TaskEditor apply={apply} />}
         {selection === 'new-skill' && <CustomSkillEditor apply={apply} />}
         {selection === 'new-mcp' && <CustomMcpEditor apply={apply} />}
+        {selection === 'install' && <InstallPanel catalog={catalog} />}
         {selection.startsWith('cred:') && (
           <CredentialDetails refId={selection.slice(5)} state={state} />
         )}
