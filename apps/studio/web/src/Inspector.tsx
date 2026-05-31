@@ -441,7 +441,9 @@ function CustomSkillEditor({ apply }: { apply: (p: Promise<StudioState>) => void
   }
   return (
     <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">Add a skill from a SKILL.md — paste or upload.</p>
+      <p className="text-sm text-muted-foreground">
+        Add a skill from a SKILL.md — paste or upload.
+      </p>
       <div className="space-y-1.5">
         <Label>Name (slug)</Label>
         <Input
@@ -533,7 +535,12 @@ function CustomMcpEditor({ apply }: { apply: (p: Promise<StudioState>) => void }
       <p className="text-sm text-muted-foreground">Add an MCP server, or import a servers.json.</p>
       <div className="space-y-1.5">
         <Label>Server id</Label>
-        <Input data-testid="custom-mcp-id" placeholder="e.g. linear" value={id} onChange={(e) => setId(e.target.value)} />
+        <Input
+          data-testid="custom-mcp-id"
+          placeholder="e.g. linear"
+          value={id}
+          onChange={(e) => setId(e.target.value)}
+        />
       </div>
       <div className="space-y-1.5">
         <Label>Transport</Label>
@@ -556,7 +563,11 @@ function CustomMcpEditor({ apply }: { apply: (p: Promise<StudioState>) => void }
           </div>
           <div className="space-y-1.5">
             <Label>Args (space-separated)</Label>
-            <Input placeholder="-y @scope/server" value={args} onChange={(e) => setArgs(e.target.value)} />
+            <Input
+              placeholder="-y @scope/server"
+              value={args}
+              onChange={(e) => setArgs(e.target.value)}
+            />
           </div>
         </>
       ) : (
@@ -572,7 +583,11 @@ function CustomMcpEditor({ apply }: { apply: (p: Promise<StudioState>) => void }
       )}
       <div className="space-y-1.5">
         <Label>Auth</Label>
-        <select className={selectClass} value={authType} onChange={(e) => setAuthType(e.target.value)}>
+        <select
+          className={selectClass}
+          value={authType}
+          onChange={(e) => setAuthType(e.target.value)}
+        >
           <option value="none">none</option>
           <option value="bearer">bearer</option>
           <option value="header">header</option>
@@ -582,13 +597,21 @@ function CustomMcpEditor({ apply }: { apply: (p: Promise<StudioState>) => void }
       {authType !== 'none' && (
         <div className="space-y-1.5">
           <Label>Credential ref</Label>
-          <Input placeholder="e.g. linear_api_key" value={credentialRef} onChange={(e) => setCredentialRef(e.target.value)} />
+          <Input
+            placeholder="e.g. linear_api_key"
+            value={credentialRef}
+            onChange={(e) => setCredentialRef(e.target.value)}
+          />
         </div>
       )}
       {authType === 'header' && (
         <div className="space-y-1.5">
           <Label>Header name</Label>
-          <Input placeholder="X-Api-Key" value={headerName} onChange={(e) => setHeaderName(e.target.value)} />
+          <Input
+            placeholder="X-Api-Key"
+            value={headerName}
+            onChange={(e) => setHeaderName(e.target.value)}
+          />
         </div>
       )}
       <div className="flex items-center gap-2">
