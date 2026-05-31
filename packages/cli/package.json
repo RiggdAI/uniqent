@@ -22,10 +22,10 @@
     "@uniqent/adapter-hermes": "workspace:*",
     "@uniqent/adapter-openclaw": "workspace:*",
     "@uniqent/adapter-sdk": "workspace:*",
+    "@uniqent/builder": "workspace:*",
     "@uniqent/core": "workspace:*"
   },
   "devDependencies": {
-    "@uniqent/builder": "workspace:*",
     "vitest": "^3.0.0"
   }
 }

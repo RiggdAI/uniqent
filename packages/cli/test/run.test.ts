@@ -289,6 +289,87 @@ describe('uniqent cli', () => {
     }
   });
 
+  it('hub mcp searches the registry + smithery and lists results', async () => {
+    const orig = globalThis.fetch;
+    try {
+      globalThis.fetch = (async (input: unknown) => {
+        const url = String(input);
+        if (url.includes('registry.modelcontextprotocol.io')) {
+          return new Response(
+            JSON.stringify({
+              servers: [
+                {
+                  server: {
+                    name: 'io.example/web',
+                    description: 'web tools',
+                    remotes: [{ type: 'streamable-http', url: 'https://example.com/mcp' }],
+                  },
+                  _meta: { 'io.modelcontextprotocol.registry/official': { isLatest: true } },
+                },
+              ],
+            }),
+          );
+        }
+        // Smithery
+        return new Response(
+          JSON.stringify({
+            servers: [
+              {
+                qualifiedName: 'acme/db',
+                displayName: 'DB',
+                description: 'database',
+                useCount: 99,
+              },
+            ],
+          }),
+        );
+      }) as typeof fetch;
+      const { io, logs } = capture();
+      const code = await run(['hub', 'mcp', 'web'], io);
+      expect(code).toBe(0);
+      const out = logs.join('\n');
+      expect(out).toContain('io-example-web');
+      expect(out).toContain('[mcp-registry]');
+      expect(out).toContain('acme-db');
+      expect(out).toContain('[smithery]');
+    } finally {
+      globalThis.fetch = orig;
+    }
+  });
+
+  it('hub skills lists GitHub repos and isolates a down hub', async () => {
+    const orig = globalThis.fetch;
+    try {
+      globalThis.fetch = (async () =>
+        new Response(
+          JSON.stringify({
+            items: [
+              {
+                full_name: 'acme/triage-skill',
+                description: 'triage',
+                stargazers_count: 7,
+              },
+            ],
+          }),
+        )) as typeof fetch;
+      const { io, logs } = capture();
+      const code = await run(['hub', 'skills', 'triage'], io);
+      expect(code).toBe(0);
+      const out = logs.join('\n');
+      expect(out).toContain('triage-skill');
+      expect(out).toContain('[github]');
+      expect(out).toContain('SKILL.md: https://raw.githubusercontent.com/acme/triage-skill');
+    } finally {
+      globalThis.fetch = orig;
+    }
+  });
+
+  it('hub with no kind prints usage and fails', async () => {
+    const { io, errs } = capture();
+    expect(await run(['hub'], io)).toBe(1);
+    expect(errs.join('\n')).toContain('hub <mcp|skills>');
+  });
+
   it('install refuses an unsigned bundle unless --allow-unsigned', async () => {
     const dir = tmp();
     const root = tmp();

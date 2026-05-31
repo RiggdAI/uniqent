@@ -212,13 +212,13 @@ importers:
       '@uniqent/adapter-sdk':
         specifier: workspace:*
         version: link:../adapter-sdk
+      '@uniqent/builder':
+        specifier: workspace:*
+        version: link:../builder
       '@uniqent/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
-      '@uniqent/builder':
-        specifier: workspace:*
-        version: link:../builder
       vitest:
         specifier: ^3.0.0
         version: 3.2.4(@types/node@22.19.19)(jiti@1.21.7)(tsx@4.22.3)

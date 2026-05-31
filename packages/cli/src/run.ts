@@ -5,6 +5,12 @@ import type { Adapter, ResolvedCredentials } from '@uniqent/adapter-sdk';
 import { claudeCodeAdapter } from '@uniqent/adapter-claude-code';
 import { hermesAdapter } from '@uniqent/adapter-hermes';
 import { openClawAdapter } from '@uniqent/adapter-openclaw';
+import {
+  searchMcpHubs,
+  searchSkillHubs,
+  defaultMcpSources,
+  defaultSkillSources,
+} from '@uniqent/builder';
 import { fetchIndex, findEntry, looksLikeSlug, registryUrl } from './registry.js';
 
 export interface CliIo {
@@ -20,7 +26,7 @@ const ADAPTERS: Record<string, Adapter> = {
   openclaw: openClawAdapter,
 };
 
-const BOOLEAN_FLAGS = new Set(['yes', 'allow-unsigned']);
+const BOOLEAN_FLAGS = new Set(['yes', 'allow-unsigned', 'json']);
 
 interface ParsedArgs {
   positionals: string[];
@@ -264,6 +270,68 @@ async function search(args: string[], io: CliIo): Promise<number> {
   return 0;
 }
 
+function jsonIndexUrls(flags: Record<string, string | true>): string[] {
+  return typeof flags.index === 'string'
+    ? flags.index
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : [];
+}
+
+async function hub(args: string[], io: CliIo): Promise<number> {
+  const { positionals, flags } = parseArgs(args);
+  const kind = positionals[0];
+  const query = positionals.slice(1).join(' ');
+  const indexes = jsonIndexUrls(flags);
+
+  if (kind === 'mcp') {
+    const { results, errors } = await searchMcpHubs(
+      query,
+      defaultMcpSources({ jsonIndexUrls: indexes }),
+    );
+    if (flags.json) {
+      io.log(JSON.stringify(results, null, 2));
+    } else if (results.length === 0) {
+      io.log(query ? `no MCP servers match "${query}"` : 'no results');
+    } else {
+      for (const r of results) {
+        const pop = typeof r.popularity === 'number' ? `  (${r.popularity} uses)` : '';
+        const creds =
+          r.credentials.length > 0 ? `  needs ${r.credentials.map((c) => c.ref).join(', ')}` : '';
+        io.log(
+          `${r.entry.id}  [${r.source}]  ${r.entry.name} — ${r.entry.description}${pop}${creds}`,
+        );
+      }
+    }
+    for (const e of errors) io.error(`  (hub ${e.source} unavailable: ${e.message})`);
+    return 0;
+  }
+
+  if (kind === 'skills') {
+    const { results, errors } = await searchSkillHubs(
+      query,
+      defaultSkillSources({ jsonIndexUrls: indexes }),
+    );
+    if (flags.json) {
+      io.log(JSON.stringify(results, null, 2));
+    } else if (results.length === 0) {
+      io.log(query ? `no skills match "${query}"` : 'no results');
+    } else {
+      for (const r of results) {
+        const stars = typeof r.stars === 'number' ? `  ★${r.stars}` : '';
+        io.log(`${r.name}  [${r.source}]${stars}  ${r.description}`);
+        if (r.skillUrl) io.log(`    SKILL.md: ${r.skillUrl}`);
+      }
+    }
+    for (const e of errors) io.error(`  (hub ${e.source} unavailable: ${e.message})`);
+    return 0;
+  }
+
+  io.error('usage: uniqent hub <mcp|skills> <query> [--index <url,url>] [--json]');
+  return 1;
+}
+
 export async function run(argv: string[], io: CliIo): Promise<number> {
   const [cmd, ...rest] = argv;
   if (cmd === 'inspect') return inspect(rest, io);
@@ -271,10 +339,14 @@ export async function run(argv: string[], io: CliIo): Promise<number> {
   if (cmd === 'validate') return validate(rest, io);
   if (cmd === 'pack') return pack(rest, io);
   if (cmd === 'search') return search(rest, io);
-  io.error('usage: uniqent <inspect|install|validate|pack|search> <file|dir|url|slug> [options]');
+  if (cmd === 'hub') return hub(rest, io);
+  io.error(
+    'usage: uniqent <inspect|install|validate|pack|search|hub> <file|dir|url|slug|query> [options]',
+  );
   io.error(
     '  install <file|url|slug> --target <id> --root <dir> --cred <ref>=<value> [--registry <url>] [--allow-unsigned] [--yes]',
   );
   io.error('  pack <dir> [-o <file>]    validate <dir|file>    search <query> --registry <url>');
+  io.error('  hub <mcp|skills> <query> [--index <url,url>] [--json]');
   return cmd ? 1 : 0;
 }
