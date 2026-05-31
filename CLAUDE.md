@@ -103,9 +103,10 @@ default).
 
 ## Current status
 
-**M1 complete.** `packages/spec` and `packages/core` are implemented — bundle model, canonical
-digest, fail-closed secret-scan, validation, Ed25519 sign/verify, archive + directory I/O, and
-credential-ref helpers, all tested. **Next: M2 (builder engine), then M3 (Uniqent Studio — the
-priority).** No `builder`, `studio`, adapters, or CLI exist yet. When a milestone's acceptance
-criteria in `docs/BUILD_PLAN.md` pass, update this status line and add any newly-discovered exact
-commands or gotchas above.
+**M2 complete.** `packages/spec`, `packages/core`, and `packages/builder` are implemented. The
+builder's `Brain` model assembles a validated bundle from intent-level edits (incl. seed MCP +
+skill catalogs), with auto-derived `components`/`permissions`/`consumedBy` and digest-stable
+round-trips, all tested. **Next: M3 (Uniqent Studio — the local-first visual builder, the
+priority), verified with a live browser test.** No `studio`, adapters, or CLI exist yet. When a
+milestone's acceptance criteria in `docs/BUILD_PLAN.md` pass, update this status line and add any
+newly-discovered exact commands or gotchas above.
