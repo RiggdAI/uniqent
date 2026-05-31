@@ -54,6 +54,41 @@ describe('StudioSession', () => {
     );
   });
 
+  it('adds a custom skill and a custom MCP server (with auto credential)', () => {
+    const s = new StudioSession();
+    s.setPersona('# Persona\n');
+    s.addCustomSkill('triage', '---\nname: triage\n---\nTriage issues.\n');
+    s.addCustomMcp({
+      id: 'acme',
+      transport: 'streamable-http',
+      url: 'https://acme.example.com/mcp',
+      auth: { type: 'bearer', credentialRef: 'acme_token' },
+    });
+    const m = s.state().manifest;
+    expect(m.components.skills).toContain('triage');
+    expect(m.components.mcp).toContain('acme');
+    expect(m.credentials.find((c) => c.ref === 'acme_token')?.consumedBy).toContain('mcp:acme');
+    expect(s.state().validation.ok).toBe(true);
+  });
+
+  it('imports mcp servers in bulk', () => {
+    const s = new StudioSession();
+    expect(
+      s.importMcpServers([
+        { id: 'fs', transport: 'stdio', command: 'npx', auth: { type: 'none' } },
+        { id: 'web', transport: 'stdio', command: 'fetch', auth: { type: 'none' } },
+      ]),
+    ).toBe(2);
+    expect(s.state().manifest.components.mcp).toEqual(expect.arrayContaining(['fs', 'web']));
+  });
+
+  it('rejects an invalid custom MCP server', () => {
+    const s = new StudioSession();
+    expect(() =>
+      s.addCustomMcp({ id: 'bad', transport: 'streamable-http', auth: { type: 'none' } }),
+    ).toThrow();
+  });
+
   it('removes mcp servers and skills', () => {
     const s = new StudioSession();
     s.addMcpFromCatalog('github');

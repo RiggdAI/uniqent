@@ -79,6 +79,31 @@ export async function handleApi(
     }
   }
 
+  if (method === 'POST' && path === '/api/skill/custom') {
+    if (typeof b.name !== 'string' || !b.name.trim()) return fail(400, 'skill name is required');
+    session.addCustomSkill(b.name.trim(), typeof b.skillMd === 'string' ? b.skillMd : '');
+    return ok(session.state());
+  }
+
+  if (method === 'POST' && path === '/api/mcp/custom') {
+    try {
+      session.addCustomMcp(b);
+      return ok(session.state());
+    } catch (e) {
+      return fail(400, (e as Error).message);
+    }
+  }
+
+  if (method === 'POST' && path === '/api/mcp/import') {
+    if (!Array.isArray(b.servers)) return fail(400, 'servers[] is required');
+    try {
+      session.importMcpServers(b.servers as Array<Record<string, unknown>>);
+      return ok(session.state());
+    } catch (e) {
+      return fail(400, (e as Error).message);
+    }
+  }
+
   if (method === 'POST' && path === '/api/mcp/remove') {
     if (typeof b.id === 'string') session.removeMcp(b.id);
     return ok(session.state());

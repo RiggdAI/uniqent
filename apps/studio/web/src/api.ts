@@ -33,6 +33,10 @@ export const api = {
   addMcp: (id: string) => post<StudioState>(`/api/mcp/catalog/${encodeURIComponent(id)}`, {}),
   addSkill: (name: string) =>
     post<StudioState>(`/api/skill/catalog/${encodeURIComponent(name)}`, {}),
+  addCustomSkill: (name: string, skillMd: string) =>
+    post<StudioState>('/api/skill/custom', { name, skillMd }),
+  addCustomMcp: (server: Record<string, unknown>) => post<StudioState>('/api/mcp/custom', server),
+  importMcpServers: (servers: unknown[]) => post<StudioState>('/api/mcp/import', { servers }),
   removeMcp: (id: string) => post<StudioState>('/api/mcp/remove', { id }),
   removeSkill: (name: string) => post<StudioState>('/api/skill/remove', { name }),
   addChannel: (id: string) =>
