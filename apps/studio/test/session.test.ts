@@ -74,6 +74,52 @@ describe('StudioSession', () => {
     expect(s.state().validation.ok).toBe(true);
   });
 
+  it('searches MCP hubs and adds a discovered server with its credential', async () => {
+    const s = new StudioSession();
+    s.setMeta({ name: 'demo' });
+    s.setPersona('# Persona\n');
+    const orig = globalThis.fetch;
+    globalThis.fetch = (async (input: unknown) => {
+      const url = String(input);
+      if (url.includes('registry.modelcontextprotocol.io')) {
+        return new Response(
+          JSON.stringify({
+            servers: [
+              {
+                server: {
+                  name: 'io.example/secrets',
+                  description: 'needs a key',
+                  packages: [
+                    {
+                      registryType: 'npm',
+                      identifier: 'secrets-mcp',
+                      runtimeHint: 'npx',
+                      transport: { type: 'stdio' },
+                      environmentVariables: [{ name: 'API_KEY', isSecret: true }],
+                    },
+                  ],
+                },
+                _meta: { 'io.modelcontextprotocol.registry/official': { isLatest: true } },
+              },
+            ],
+          }),
+        );
+      }
+      return new Response(JSON.stringify({ servers: [] })); // smithery: empty
+    }) as typeof fetch;
+    try {
+      const { results } = await s.searchHubMcp('secrets');
+      const hit = results.find((r) => r.entry.id === 'io-example-secrets');
+      expect(hit).toBeTruthy();
+      s.addMcpHubResult(hit!);
+      const m = s.state().manifest;
+      expect(m.components.mcp).toContain('io-example-secrets');
+      expect(m.credentials.find((c) => c.ref === 'io-example-secrets_api_key')).toBeTruthy();
+    } finally {
+      globalThis.fetch = orig;
+    }
+  });
+
   it('imports a skill from a URL', async () => {
     const s = new StudioSession();
     const orig = globalThis.fetch;

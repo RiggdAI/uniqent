@@ -1,5 +1,15 @@
-import { Brain, MCP_CATALOG, SKILL_CATALOG, CHANNEL_CATALOG } from '@uniqent/builder';
-import type { BrainMeta } from '@uniqent/builder';
+import {
+  Brain,
+  MCP_CATALOG,
+  SKILL_CATALOG,
+  CHANNEL_CATALOG,
+  searchMcpHubs,
+  searchSkillHubs,
+  defaultMcpSources,
+  defaultSkillSources,
+  installMcpHubResult,
+} from '@uniqent/builder';
+import type { BrainMeta, McpHubResult, SkillHubResult, HubSearch } from '@uniqent/builder';
 import { validateBundle, generateKeypair, sign, pack, verify } from '@uniqent/core';
 import type { ValidationResult, Keypair } from '@uniqent/core';
 import type { Manifest } from '@uniqent/spec';
@@ -248,6 +258,21 @@ export class StudioSession {
       n++;
     }
     return n;
+  }
+
+  /** Search MCP hubs (MCP Registry + Smithery) for servers to add. */
+  searchHubMcp(query: string): Promise<HubSearch<McpHubResult>> {
+    return searchMcpHubs(query, defaultMcpSources());
+  }
+
+  /** Search skill hubs (GitHub repos) for skills to import. */
+  searchHubSkills(query: string): Promise<HubSearch<SkillHubResult>> {
+    return searchSkillHubs(query, defaultSkillSources());
+  }
+
+  /** Add a discovered MCP server (its server + every declared credential). Throws if invalid. */
+  addMcpHubResult(result: McpHubResult): void {
+    installMcpHubResult(this.brain, result);
   }
 
   removeMcp(id: string): void {

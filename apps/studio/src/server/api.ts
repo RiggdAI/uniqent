@@ -172,5 +172,38 @@ export async function handleApi(
     }
   }
 
+  if (method === 'POST' && path === '/api/hub/mcp/search') {
+    try {
+      return ok(await session.searchHubMcp(typeof b.query === 'string' ? b.query : ''));
+    } catch (e) {
+      return fail(502, (e as Error).message);
+    }
+  }
+  if (method === 'POST' && path === '/api/hub/skills/search') {
+    try {
+      return ok(await session.searchHubSkills(typeof b.query === 'string' ? b.query : ''));
+    } catch (e) {
+      return fail(502, (e as Error).message);
+    }
+  }
+  if (method === 'POST' && path === '/api/hub/mcp/add') {
+    if (!b.result || typeof b.result !== 'object') return fail(400, 'result is required');
+    try {
+      session.addMcpHubResult(b.result as Parameters<StudioSession['addMcpHubResult']>[0]);
+      return ok(session.state());
+    } catch (e) {
+      return fail(400, (e as Error).message);
+    }
+  }
+  if (method === 'POST' && path === '/api/hub/skill/add') {
+    if (typeof b.url !== 'string' || !b.url.trim()) return fail(400, 'url is required');
+    try {
+      await session.importSkillFromUrl(b.url.trim());
+      return ok(session.state());
+    } catch (e) {
+      return fail(400, (e as Error).message);
+    }
+  }
+
   return fail(404, `no route for ${method} ${path}`);
 }
