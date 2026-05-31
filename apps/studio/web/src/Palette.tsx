@@ -84,7 +84,7 @@ export function Palette({ state, catalog, apply, selection, onSelect }: PaletteP
   const skillAdded = new Set(state.manifest.components.skills);
   const channelAdded = new Set(state.manifest.components.channels);
   return (
-    <nav className="flex w-60 shrink-0 flex-col gap-5 overflow-auto border-r bg-card/40 p-3">
+    <nav className="flex h-full flex-col gap-5 overflow-auto p-3">
       <Section title="Identity">
         <SelectRow
           icon={Brain}
