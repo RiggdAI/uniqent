@@ -45,7 +45,7 @@ value (entropy + known prefixes like `sk-`, `ghp_`, `xoxb-`) anywhere in a bundl
 
 ## Repo conventions
 
-- TypeScript, Node 20+, **ESM only**. pnpm workspaces monorepo (`packages/*`).
+- TypeScript, Node 22.13+ (pnpm 11 needs it), **ESM only**. pnpm workspaces monorepo (`packages/*`).
 - Validation with **zod**; JSON Schema generated via `zod-to-json-schema`.
 - Tests with **vitest**. Adapters additionally ship round-trip conformance tests.
 - Conventional commits. Keep PRs small and milestone-scoped. Keep the CLI thin — logic lives

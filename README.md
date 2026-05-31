@@ -167,7 +167,7 @@ bundle-format reference.
 
 ## Quickstart
 
-Requires Node 20+ and pnpm.
+Requires Node 22.13+ and pnpm (the repo pins pnpm via `packageManager`; `corepack enable` provisions it).
 
 ```bash
 pnpm install
