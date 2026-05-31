@@ -66,4 +66,6 @@ export const api = {
     post<HubSearch<SkillHubResult>>('/api/hub/skills/search', { query }),
   addHubMcp: (result: McpHubResult) => post<StudioState>('/api/hub/mcp/add', { result }),
   addHubSkill: (url: string) => post<StudioState>('/api/hub/skill/add', { url }),
+  hubIndexes: () => get<{ indexes: string[] }>('/api/hub/indexes'),
+  setHubIndexes: (urls: string[]) => post<{ indexes: string[] }>('/api/hub/indexes', { urls }),
 };

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { X, Trash2, KeyRound } from 'lucide-react';
 import type {
   StudioState,
@@ -796,6 +796,80 @@ function InstallPanel({ catalog }: { catalog: CatalogView }) {
   );
 }
 
+/** Manage "a hub is just a hosted index.json" URLs; shared by both hub panels (session state). */
+function HubIndexManager() {
+  const [indexes, setIndexes] = useState<string[]>([]);
+  const [url, setUrl] = useState('');
+
+  useEffect(() => {
+    api
+      .hubIndexes()
+      .then((r) => setIndexes(r.indexes))
+      .catch(() => {});
+  }, []);
+
+  function save(next: string[]): void {
+    api
+      .setHubIndexes(next)
+      .then((r) => setIndexes(r.indexes))
+      .catch(() => {});
+  }
+
+  return (
+    <details className="rounded-lg border bg-secondary/30 px-3 py-2 text-sm">
+      <summary className="cursor-pointer select-none text-muted-foreground">
+        Custom hubs{indexes.length > 0 ? ` (${indexes.length})` : ''}
+      </summary>
+      <div className="mt-2 space-y-2">
+        <p className="text-xs text-muted-foreground">
+          Point at any hosted <code>index.json</code> ({'{ mcp, skills }'}) — a team list, no
+          service needed. Included in every hub search below.
+        </p>
+        {indexes.map((u) => (
+          <div key={u} className="flex items-center gap-2">
+            <span className="min-w-0 flex-1 truncate text-xs">{u}</span>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-6 px-1.5"
+              data-testid={`hub-index-remove-${u}`}
+              onClick={() => save(indexes.filter((x) => x !== u))}
+            >
+              <Trash2 className="size-3.5" />
+            </Button>
+          </div>
+        ))}
+        <div className="flex gap-2">
+          <Input
+            data-testid="hub-index-url"
+            placeholder="https://example.com/hub/index.json"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && url.trim()) {
+                save([...new Set([...indexes, url.trim()])]);
+                setUrl('');
+              }
+            }}
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            data-testid="hub-index-add"
+            disabled={!url.trim()}
+            onClick={() => {
+              save([...new Set([...indexes, url.trim()])]);
+              setUrl('');
+            }}
+          >
+            Add hub
+          </Button>
+        </div>
+      </div>
+    </details>
+  );
+}
+
 function HubMcpPanel({
   state,
   apply,
@@ -827,6 +901,7 @@ function HubMcpPanel({
       <p className="text-sm text-muted-foreground">
         Search the MCP Registry and Smithery. Adding a server brings its credential requirements.
       </p>
+      <HubIndexManager />
       <div className="flex gap-2">
         <Input
           data-testid="hub-mcp-query"
@@ -913,6 +988,7 @@ function HubSkillPanel({ apply }: { apply: (p: Promise<StudioState>) => void }) 
       <p className="text-sm text-muted-foreground">
         Search GitHub for skill repos (a SKILL.md). Adding imports the SKILL.md from the repo root.
       </p>
+      <HubIndexManager />
       <div className="flex gap-2">
         <Input
           data-testid="hub-skill-query"

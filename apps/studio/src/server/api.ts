@@ -172,6 +172,13 @@ export async function handleApi(
     }
   }
 
+  if (method === 'GET' && path === '/api/hub/indexes') {
+    return ok({ indexes: session.listHubIndexUrls() });
+  }
+  if (method === 'POST' && path === '/api/hub/indexes') {
+    const urls = Array.isArray(b.urls) ? (b.urls as string[]) : [];
+    return ok({ indexes: session.setHubIndexUrls(urls) });
+  }
   if (method === 'POST' && path === '/api/hub/mcp/search') {
     try {
       return ok(await session.searchHubMcp(typeof b.query === 'string' ? b.query : ''));

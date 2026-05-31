@@ -92,24 +92,56 @@ things the primitive versions lack:
 - **Trust is first-class.** Ed25519 signing over a content digest, a permission sheet shown before
   any write, a memory preview you can redact, and a sandboxed dry-run — all in v1.
 
-### The flow, in one line
+### How it works
 
-> Anyone packages a full agent — brain, MCP stacks, skills, memory, config — into one open bundle;
-> any recipient one-click installs it into their agent (OpenClaw, Hermes, Claude Code…), where an
-> adapter translates it to that agent's native setup and prompts only for their own credentials.
+**Build → Pack → Share → Install** — one open bundle, any framework. Build a brain in Studio (or
+capture an existing agent), pack it into a signed `.uniqent` that carries no secrets, share it as a
+file or URL, and install it anywhere — the adapter translates it to the target's native layout and
+asks only for the recipient's own credentials.
 
 ```
-    BUILD                 PACK + SIGN            SHARE              INSTALL
- ┌──────────┐  validate  ┌──────────────┐  via  ┌──────────┐      ┌────────────────────┐
- │  Studio  │ ─────────▶ │   .uniqent   │ ────▶ │ URL / reg│ ───▶ │ verify → translate  │
- │ (local,  │  secret-   │ persona, MCP │ sign  │ (raw file│      │  → permissions sheet│
- │  visual) │  scan      │ skills, mem, │       │  works   │      │  → resolve creds    │
- │          │            │ tools, tasks │       │  too)    │      │  → sandbox dry-run  │
- │ or export│            │ (NO secrets) │       │          │      │  → apply (native)   │
- └──────────┘            └──────────────┘       └──────────┘      └────────────────────┘
-       ▲                                                                    │
-       └──────────────── export: capture an existing agent ────────────────┘
+                BUILD
+        ┌──────────────────────┐
+        │ Studio (local,       │ ◀── or export an
+        │ visual)              │     existing agent
+        └───────────┬──────────┘
+                    │  validate + secret-scan
+                    ▼
+             PACK + SIGN
+        ┌──────────────────────┐
+        │ .uniqent             │
+        │ persona · MCP ·      │
+        │ skills · memory ·    │
+        │ tools · tasks        │
+        │ (NO secrets)         │
+        └───────────┬──────────┘
+                    │  sign (Ed25519)
+                    ▼
+                SHARE
+        ┌──────────────────────┐
+        │ raw file · URL ·     │
+        │ registry             │
+        │ (no service needed)  │
+        └───────────┬──────────┘
+                    │
+                    ▼
+               INSTALL
+        ┌──────────────────────┐
+        │ verify signature     │
+        │ → translate (native) │
+        │ → permission sheet   │
+        │ → resolve YOUR creds │
+        │ → sandbox dry-run    │
+        │ → apply              │
+        └───────────┬──────────┘
+                    │
+                    ▼
+   Claude Code · Hermes · OpenClaw
 ```
+
+> In one line: anyone packages a full agent — brain, MCP stacks, skills, memory, config — into one
+> open bundle; any recipient one-click installs it into their framework, where an adapter translates
+> it to that framework's native setup and prompts only for their own credentials.
 
 ---
 
@@ -152,7 +184,7 @@ node packages/cli/dist/bin.js install dev-powerpack.uniqent --target hermes --ro
 
 # Install straight from a raw URL (no registry), or by slug from any hosted index.json:
 node packages/cli/dist/bin.js install https://example.com/dev-powerpack.uniqent --target openclaw --root .
-export UNIQENT_REGISTRY=https://raw.githubusercontent.com/maxlibin/uniqent/main/registry/index.json
+export UNIQENT_REGISTRY=https://raw.githubusercontent.com/RiggdAI/uniqent/main/registry/index.json
 node packages/cli/dist/bin.js search coding
 node packages/cli/dist/bin.js install dev-powerpack --target claude-code --root .
 
