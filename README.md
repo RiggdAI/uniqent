@@ -113,34 +113,50 @@ things the primitive versions lack:
 
 ## Status
 
-Pre-1.0, under active construction. Foundations (the spec package, schema, licenses, CI) are in
-place; adapters and the CLI are being built milestone by milestone. See
-[`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md) for the full engineering plan and
-[`docs/SPEC.md`](docs/SPEC.md) for the generated bundle-format reference.
+Pre-1.0, under active development — but the core loop works today:
 
-## Quickstart (dev)
+- **Spec · core · builder** — the `.uniqent` schema, bundle read/write + validation + secret-scan +
+  Ed25519 signing, and a framework-agnostic engine to assemble a brain. ✅
+- **Uniqent Studio** — a local-first React canvas to build a brain (persona, MCP, skills, memory,
+  channels, flows; catalog + custom + import) and export a signed `.uniqent`. ✅
+- **Install** — `@uniqent/adapter-claude-code` + the `uniqent` CLI install an exported brain into
+  Claude Code (skills → `.claude/skills`, persona/memory → `AGENTS.md`, MCP → `.mcp.json`) with
+  credentials resolved locally. ✅
+- **Next** — more adapters (Hermes, OpenClaw), a Studio "Install" button, examples + an open registry.
+
+See [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md) for the plan and [`docs/SPEC.md`](docs/SPEC.md) for the
+bundle-format reference.
+
+## Quickstart
+
+Requires Node 20+ and pnpm.
 
 ```bash
 pnpm install
 pnpm build
 pnpm test
-```
 
-Requires Node 20+ and pnpm.
+# Launch the visual builder (local-first); open the URL it prints:
+pnpm --filter @uniqent/studio start
+
+# Inspect or install an exported brain into Claude Code:
+node packages/cli/dist/bin.js inspect my-brain.uniqent
+node packages/cli/dist/bin.js install my-brain.uniqent --target claude-code --root . --cred github_pat=…
+```
 
 ## Layout
 
 ```
-packages/spec/             # the .uniqent schema (source of truth: zod → JSON Schema → SPEC.md)
-packages/core/             # bundle read/write, validation, signing, secret-scan  (upcoming)
-packages/builder/          # framework-agnostic "assemble a brain" engine + catalogs (upcoming)
-apps/studio/               # Uniqent Studio — the local-first visual builder       (upcoming)
-packages/cli/              # the `uniqent` CLI (secondary surface)                 (upcoming)
-packages/adapter-sdk/      # Adapter interface + conformance harness               (upcoming)
-packages/adapter-*/        # one adapter per framework                             (upcoming)
-packages/registry/         # optional open registry MVP                           (upcoming)
-examples/                  # sample bundles (e.g. dev-powerpack)
-docs/                      # SPEC, BUILD_PLAN, GOVERNANCE, CONTRIBUTING, SECURITY
+packages/spec/                 # the .uniqent schema (zod → JSON Schema → SPEC.md)        ✅
+packages/core/                 # bundle read/write, validation, signing, secret-scan      ✅
+packages/builder/              # framework-agnostic "assemble a brain" engine + catalogs   ✅
+apps/studio/                   # Uniqent Studio — the local-first visual builder           ✅
+packages/cli/                  # the `uniqent` CLI (inspect, install)                      ✅
+packages/adapter-sdk/          # Adapter interface + conformance harness                   ✅
+packages/adapter-claude-code/  # installs a brain into Claude Code                         ✅
+packages/adapter-*/            # more framework adapters (Hermes, OpenClaw)         (upcoming)
+packages/registry/             # optional open registry MVP                         (upcoming)
+docs/                          # SPEC, BUILD_PLAN, GOVERNANCE, CONTRIBUTING, SECURITY
 ```
 
 ## License
