@@ -1051,7 +1051,102 @@ function HubSkillPanel({ apply }: { apply: (p: Promise<StudioState>) => void }) 
   );
 }
 
+const PROFILE_SUGGESTIONS = [
+  'Role',
+  'About',
+  'Working style',
+  'Key context',
+  'Stakeholders',
+  'Tools & setup',
+];
+
+/** Structured "who the user/agent is" editor → memory/profile → USER.md. */
+function ProfilePanel({ apply }: { apply: (p: Promise<StudioState>) => void }) {
+  const [rows, setRows] = useState<Array<{ key: string; value: string }>>([]);
+
+  useEffect(() => {
+    api
+      .getProfile()
+      .then((r) => {
+        const entries = Object.entries(r.profile ?? {});
+        setRows(entries.map(([key, value]) => ({ key, value: String(value) })));
+      })
+      .catch(() => {});
+  }, []);
+
+  const usedKeys = new Set(rows.map((r) => r.key.trim().toLowerCase()));
+  const setRow = (i: number, patch: Partial<{ key: string; value: string }>) =>
+    setRows((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  const addRow = (key = '') => setRows((rs) => [...rs, { key, value: '' }]);
+  const removeRow = (i: number) => setRows((rs) => rs.filter((_, j) => j !== i));
+
+  function save(): void {
+    const profile: Record<string, string> = {};
+    for (const { key, value } of rows) {
+      const k = key.trim();
+      if (k && value.trim()) profile[k] = value.trim();
+    }
+    apply(api.setProfile(profile));
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">
+        Who the user/agent is — role, preferences, context. Travels as the profile and becomes{' '}
+        <code className="rounded bg-secondary px-1">USER.md</code> on install. The core of handing a
+        brain to the next person.
+      </p>
+
+      {rows.map((row, i) => (
+        <div key={i} className="space-y-1.5 rounded-lg border p-2">
+          <div className="flex items-center gap-2">
+            <Input
+              className="h-8 w-44 font-medium"
+              placeholder="Field name"
+              value={row.key}
+              onChange={(e) => setRow(i, { key: e.target.value })}
+              data-testid={`profile-key-${i}`}
+            />
+            <Button
+              size="sm"
+              variant="ghost"
+              className="ml-auto h-7 px-1.5"
+              onClick={() => removeRow(i)}
+              aria-label="Remove field"
+            >
+              <Trash2 className="size-3.5" />
+            </Button>
+          </div>
+          <Textarea
+            className="min-h-[52px] text-[13px]"
+            placeholder="…"
+            value={row.value}
+            onChange={(e) => setRow(i, { value: e.target.value })}
+            data-testid={`profile-value-${i}`}
+          />
+        </div>
+      ))}
+
+      <div className="flex flex-wrap gap-1.5">
+        {PROFILE_SUGGESTIONS.filter((s) => !usedKeys.has(s.toLowerCase())).map((s) => (
+          <Button key={s} size="sm" variant="outline" className="h-7" onClick={() => addRow(s)}>
+            + {s}
+          </Button>
+        ))}
+        <Button size="sm" variant="outline" className="h-7" onClick={() => addRow()}>
+          + Custom field
+        </Button>
+      </div>
+
+      <Button data-testid="profile-save" onClick={save}>
+        Save profile
+      </Button>
+    </div>
+  );
+}
+
 function titleFor(selection: string): string {
+  if (selection === 'profile') return 'Profile (USER.md)';
   if (selection === 'hub-mcp') return 'Browse MCP hubs';
   if (selection === 'hub-skills') return 'Browse skill hubs';
   if (selection === 'install') return 'Install';
@@ -1083,6 +1178,7 @@ export function Inspector(props: InspectorProps) {
         {selection === 'agent' && <ConfigEditor state={state} catalog={catalog} apply={apply} />}
         {selection === 'persona' && <PersonaEditor state={state} catalog={catalog} apply={apply} />}
         {selection === 'memory' && <MemoryEditor state={state} catalog={catalog} apply={apply} />}
+        {selection === 'profile' && <ProfilePanel apply={apply} />}
         {selection.startsWith('mcp:') && (
           <McpDetails id={selection.slice(4)} catalog={catalog} apply={apply} onClose={onClose} />
         )}

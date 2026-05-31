@@ -206,6 +206,25 @@ export class StudioSession {
     return added;
   }
 
+  /**
+   * Set the structured "who the user/agent is" profile (→ memory/profile.json → USER.md).
+   * Empty/blank fields are dropped; a profile with no fields clears it (hasProfile → false).
+   */
+  setProfile(profile: Record<string, unknown>): void {
+    const cleaned: Record<string, string> = {};
+    for (const [k, v] of Object.entries(profile ?? {})) {
+      const key = k.trim();
+      const val = typeof v === 'string' ? v.trim() : v;
+      if (key && val !== undefined && val !== null && val !== '') cleaned[key] = String(val);
+    }
+    this.brain.setProfile(Object.keys(cleaned).length > 0 ? cleaned : undefined);
+  }
+
+  /** The current profile as a flat record (empty object when none set). */
+  getProfile(): Record<string, unknown> {
+    return this.brain.getProfile() ?? {};
+  }
+
   addMcpFromCatalog(id: string): void {
     this.brain.addMcpFromCatalog(id);
   }

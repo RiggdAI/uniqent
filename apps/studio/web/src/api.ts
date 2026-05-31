@@ -38,6 +38,8 @@ export const api = {
   setPersona: (persona: string) => post<StudioState>('/api/persona', { persona }),
   addMemory: (text: string, importance?: number) =>
     post<StudioState>('/api/memory', { text, importance }),
+  getProfile: () => get<{ profile: Record<string, string> }>('/api/profile'),
+  setProfile: (profile: Record<string, string>) => post<StudioState>('/api/profile', { profile }),
   importMemory: (payload: { text?: string; items?: unknown[] }) =>
     post<StudioState>('/api/memory/import', payload),
   addMcp: (id: string) => post<StudioState>(`/api/mcp/catalog/${encodeURIComponent(id)}`, {}),

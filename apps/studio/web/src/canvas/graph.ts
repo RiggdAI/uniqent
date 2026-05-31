@@ -27,7 +27,9 @@ export function buildGraph(state: StudioState): { nodes: Node[]; edges: Edge[] }
       id: 'memory',
       kind: 'memory',
       label: 'Memory',
-      sublabel: `${m.components.memory.facts} fact(s)`,
+      sublabel:
+        `${m.components.memory.facts} fact(s)` +
+        (m.components.memory.hasProfile ? ' · profile' : ''),
     });
   for (const id of m.components.channels)
     components.push({ id: `channel:${id}`, kind: 'channel', label: id, sublabel: 'channel' });
