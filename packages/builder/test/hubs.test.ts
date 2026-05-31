@@ -5,10 +5,14 @@ import { dirname, resolve } from 'node:path';
 import {
   mapRegistryResponse,
   mcpRegistrySource,
+  mapSmitheryResponse,
+  mapGithubResponse,
   jsonIndexSource,
   searchMcpHubs,
   searchSkillHubs,
   installMcpHubResult,
+  defaultMcpSources,
+  defaultSkillSources,
   type CatalogSource,
 } from '../src/index.js';
 import { Brain } from '../src/index.js';
@@ -65,6 +69,58 @@ describe('MCP Registry mapper', () => {
     expect(
       manifest.credentials.find((c) => c.ref === 'com-pulsemcp-remote-filesystem_gcs_private_key'),
     ).toBeTruthy();
+  });
+});
+
+describe('Smithery mapper', () => {
+  const json = {
+    servers: [
+      {
+        qualifiedName: '@smithery-ai/github',
+        displayName: 'GitHub',
+        description: 'Access the GitHub API.',
+        useCount: 3873,
+        homepage: 'https://github.com/',
+      },
+    ],
+  };
+  it('maps to a hosted remote server gated by one shared smithery_api_key', () => {
+    const [r] = mapSmitheryResponse(json);
+    expect(r?.entry.server.transport).toBe('streamable-http');
+    expect(r?.entry.server.url).toBe('https://server.smithery.ai/@smithery-ai/github/mcp');
+    expect(r?.entry.server.auth).toEqual({ type: 'bearer', credentialRef: 'smithery_api_key' });
+    expect(r?.credentials[0]?.ref).toBe('smithery_api_key');
+    expect(r?.popularity).toBe(3873);
+  });
+});
+
+describe('GitHub skills mapper', () => {
+  it('maps repos to skill pointers with a guessed raw SKILL.md url', () => {
+    const out = mapGithubResponse({
+      items: [
+        {
+          full_name: 'acme/triage-skill',
+          html_url: 'https://github.com/acme/triage-skill',
+          description: 'Triage skill',
+          stargazers_count: 42,
+        },
+      ],
+    });
+    expect(out[0]?.name).toBe('triage-skill');
+    expect(out[0]?.repo).toBe('acme/triage-skill');
+    expect(out[0]?.skillUrl).toBe(
+      'https://raw.githubusercontent.com/acme/triage-skill/HEAD/SKILL.md',
+    );
+    expect(out[0]?.stars).toBe(42);
+  });
+});
+
+describe('default sources', () => {
+  it('assembles MCP + skill source sets including any JSON indexes', () => {
+    const mcp = defaultMcpSources({ jsonIndexUrls: ['https://hub/index.json'] });
+    expect(mcp.map((s) => s.id)).toEqual(['mcp-registry', 'smithery', 'json-index']);
+    const skills = defaultSkillSources();
+    expect(skills.map((s) => s.id)).toEqual(['github']);
   });
 });
 
