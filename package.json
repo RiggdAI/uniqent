@@ -15,7 +15,8 @@
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "release": "pnpm build && pnpm -r --filter \"./packages/*\" publish --no-git-checks"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
