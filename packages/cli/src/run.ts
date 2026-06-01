@@ -1,5 +1,12 @@
 import { readFile, writeFile, stat } from 'node:fs/promises';
-import { unpack, verify, pack as packBundle, readDir, validateBundle } from '@uniqent/core';
+import {
+  unpack,
+  verify,
+  pack as packBundle,
+  readDir,
+  validateBundle,
+  scanForSecrets,
+} from '@uniqent/core';
 import type { Bundle } from '@uniqent/core';
 import type { Adapter, ResolvedCredentials } from '@uniqent/adapter-sdk';
 import { claudeCodeAdapter } from '@uniqent/adapter-claude-code';
@@ -332,6 +339,87 @@ async function hub(args: string[], io: CliIo): Promise<number> {
   return 1;
 }
 
+async function pathExists(p: string): Promise<boolean> {
+  return stat(p)
+    .then(() => true)
+    .catch(() => false);
+}
+
+/** Best-effort framework detection from marker files, so `--from` is optional. */
+async function detectTarget(root: string): Promise<string[]> {
+  const hits: string[] = [];
+  if ((await pathExists(`${root}/.claude`)) || (await pathExists(`${root}/.mcp.json`)))
+    hits.push('claude-code');
+  if (await pathExists(`${root}/hermes.json`)) hits.push('hermes');
+  if (await pathExists(`${root}/openclaw.json`)) hits.push('openclaw');
+  return hits;
+}
+
+async function exportCmd(args: string[], io: CliIo): Promise<number> {
+  const { flags } = parseArgs(args);
+  const root = typeof flags.root === 'string' ? flags.root : process.cwd();
+
+  let target = typeof flags.from === 'string' ? flags.from : undefined;
+  if (!target) {
+    const hits = await detectTarget(root);
+    if (hits.length === 1) {
+      target = hits[0]!;
+      io.log(`detected ${target} at ${root}`);
+    } else if (hits.length === 0) {
+      io.error(
+        `export: no known framework found at ${root}; pass --from <claude-code|hermes|openclaw>`,
+      );
+      return 1;
+    } else {
+      io.error(`export: multiple frameworks found (${hits.join(', ')}); pass --from <id>`);
+      return 1;
+    }
+  }
+  const adapter = ADAPTERS[target];
+  if (!adapter) {
+    io.error(
+      `export: unknown framework "${target}" (available: ${Object.keys(ADAPTERS).join(', ')})`,
+    );
+    return 1;
+  }
+
+  let bundle: Bundle;
+  try {
+    bundle = await adapter.export({ root });
+  } catch (e) {
+    io.error(`export: ${(e as Error).message}`);
+    return 1;
+  }
+
+  const m = bundle.manifest();
+  io.log(`\nCaptured from ${adapter.displayName} at ${root}:`);
+  io.log(
+    `  identity=${m.components.identity} skills=${m.components.skills.length} mcp=${m.components.mcp.length} memory=${m.components.memory.facts} channels=${m.components.channels.length} tasks=${m.components.tasks.length}`,
+  );
+  if (m.credentials.length > 0)
+    io.log(`  credentials to re-supply on install: ${m.credentials.map((c) => c.ref).join(', ')}`);
+
+  const result = validateBundle(bundle);
+  if (!result.ok) {
+    io.error(
+      `export: captured bundle is invalid: ${result.errors.map((e) => e.message).join('; ')}`,
+    );
+    return 1;
+  }
+  const findings = scanForSecrets(bundle);
+  if (findings.length > 0) {
+    io.error(
+      `export: capture pulled in ${findings.length} likely secret(s) (e.g. ${findings[0]?.kind}); refusing to write. This is a capture bug — secrets must be scrubbed to credential refs.`,
+    );
+    return 1;
+  }
+
+  const out = typeof flags.out === 'string' ? flags.out : `${m.name}.uniqent`;
+  await writeFile(out, await packBundle(bundle));
+  io.log(`\nwrote ${out} (unsigned). Inspect with: uniqent inspect ${out}`);
+  return 0;
+}
+
 export async function run(argv: string[], io: CliIo): Promise<number> {
   const [cmd, ...rest] = argv;
   if (cmd === 'inspect') return inspect(rest, io);
@@ -340,13 +428,15 @@ export async function run(argv: string[], io: CliIo): Promise<number> {
   if (cmd === 'pack') return pack(rest, io);
   if (cmd === 'search') return search(rest, io);
   if (cmd === 'hub') return hub(rest, io);
+  if (cmd === 'export') return exportCmd(rest, io);
   io.error(
-    'usage: uniqent <inspect|install|validate|pack|search|hub> <file|dir|url|slug|query> [options]',
+    'usage: uniqent <inspect|install|validate|pack|search|hub|export> <file|dir|url|slug|query> [options]',
   );
   io.error(
     '  install <file|url|slug> --target <id> --root <dir> --cred <ref>=<value> [--registry <url>] [--allow-unsigned] [--yes]',
   );
   io.error('  pack <dir> [-o <file>]    validate <dir|file>    search <query> --registry <url>');
   io.error('  hub <mcp|skills> <query> [--index <url,url>] [--json]');
+  io.error('  export [--from <claude-code|hermes|openclaw>] --root <dir> [-o <file>]');
   return cmd ? 1 : 0;
 }

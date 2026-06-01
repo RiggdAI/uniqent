@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtempSync, rmSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, existsSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Brain } from '@uniqent/builder';
-import { validateBundle } from '@uniqent/core';
+import { validateBundle, scanForSecrets } from '@uniqent/core';
 import { runConformance } from '@uniqent/adapter-sdk';
 import { claudeCodeAdapter } from '../src/index';
 
@@ -128,6 +128,44 @@ describe('claudeCodeAdapter.export', () => {
       expect(captured.persona()).toContain('Atlas');
       expect(captured.mcpServers().map((s) => s.id)).toContain('github');
       expect(validateBundle(captured).ok).toBe(true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('recovers the credential requirement on capture WITHOUT leaking its value', async () => {
+    const root = tmp();
+    try {
+      writeFileSync(join(root, 'AGENTS.md'), '# Persona\nCaptured Atlas.');
+      mkdirSync(join(root, '.claude', 'skills', 'code-review'), { recursive: true });
+      writeFileSync(
+        join(root, '.claude', 'skills', 'code-review', 'SKILL.md'),
+        '---\nname: code-review\n---\nReview.\n',
+      );
+      writeFileSync(
+        join(root, '.mcp.json'),
+        JSON.stringify({
+          mcpServers: {
+            github: {
+              type: 'http',
+              url: 'https://api.githubcopilot.com/mcp/',
+              headers: { Authorization: 'Bearer ghp_SECRET123456789abcdefghij' },
+            },
+            fs: { command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem'] },
+          },
+        }),
+      );
+
+      const bundle = await claudeCodeAdapter.export({ root });
+      const cred = bundle.manifest().credentials.find((c) => c.ref === 'github_token');
+      expect(cred?.type).toBe('bearer'); // requirement recovered → captured brain stays functional
+      expect(cred?.consumedBy).toContain('mcp:github');
+      expect(validateBundle(bundle).ok).toBe(true);
+      expect(scanForSecrets(bundle)).toHaveLength(0); // value scrubbed → scan clean
+      for (const path of bundle.list()) {
+        const bytes = bundle.get(path);
+        if (bytes) expect(new TextDecoder().decode(bytes)).not.toContain('ghp_SECRET');
+      }
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

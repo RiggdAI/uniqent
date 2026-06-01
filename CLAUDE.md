@@ -146,7 +146,10 @@ Surfaces: CLI `uniqent hub mcp|skills <query>` and Studio palette **"Browse hubs
 against frozen fixtures of the real responses; verified live and in a browser.
 
 CLI surface:
-`uniqent inspect | install <file|url|slug> | validate <dir|file> | pack <dir> [-o] | search <q> | hub <mcp|skills> <q>`.
+`uniqent inspect | install <file|url|slug> | validate <dir|file> | pack <dir> [-o] | search <q> | hub <mcp|skills> <q> | export [--from <id>] --root <dir>`.
+`export` captures an existing framework setup back into a `.uniqent` (auto-detects the framework;
+recovers MCP credential _requirements_ from auth headers without their values). UX-review +
+roadmap of CLI gaps (no `sign`/`keygen`, no `install --dry-run`, no `init`): `docs/UX-REVIEW.md`.
 `install` accepts a **raw http(s) URL** (no registry needed) **or a registry slug** resolved
 against a JSON index (`--registry <url>` / `UNIQENT_REGISTRY`). The registry is just a hosted
 `index.json` (`registry/index.json` is the sample + format) — **no service required**: `search`
