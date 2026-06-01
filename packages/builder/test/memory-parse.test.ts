@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { parseMemoryText, parseMemoryMarkdown, memoryGraph } from '../src/index.js';
+import {
+  parseMemoryText,
+  parseMemoryMarkdown,
+  memoryGraph,
+  stripMemoryMarkup,
+} from '../src/index.js';
 
 describe('parseMemoryText', () => {
   it('extracts wikilink entities and #tags, deduped', () => {
@@ -14,20 +19,32 @@ describe('parseMemoryText', () => {
 });
 
 describe('parseMemoryMarkdown', () => {
-  it('splits lines/bullets into items, skips headings, infers kind, keeps links', () => {
+  it('splits lines/bullets, skips headings, classifies by EXPLICIT prefix only, keeps links', () => {
     const items = parseMemoryMarkdown(
       [
         '# Context',
         '- Decision: we will use [[Postgres]] #db',
-        '* The user prefers [[TypeScript]] and pnpm',
-        'Shipped the v1 [[Installer]] #milestone',
+        '* [!preference] the user likes [[TypeScript]]',
+        'The API hit a rate limit yesterday', // no prefix → fact (NOT a milestone)
         '   ',
       ].join('\n'),
     );
-    expect(items.map((i) => i.kind)).toEqual(['decision', 'preference', 'milestone']);
-    expect(items[0]?.text).toBe('we will use [[Postgres]] #db'); // prefix stripped
+    expect(items.map((i) => i.kind)).toEqual(['decision', 'preference', 'fact']);
+    expect(items[0]?.text).toBe('we will use [[Postgres]] #db'); // "Decision:" stripped
+    expect(items[1]?.text).toBe('the user likes [[TypeScript]]'); // "[!preference]" stripped
     expect(items[0]?.entities).toEqual(['Postgres']);
-    expect(items[1]?.entities).toEqual(['TypeScript']);
+  });
+});
+
+describe('stripMemoryMarkup', () => {
+  it('renders [[entities]]/[[a|alias]] to names and removes #tags, for installed output', () => {
+    expect(stripMemoryMarkup('standardized on [[Postgres]] over [[MongoDB]] #db #infra')).toBe(
+      'standardized on Postgres over MongoDB',
+    );
+    expect(stripMemoryMarkup('see [[Auth-Service|the auth service]] for #security')).toBe(
+      'see the auth service for',
+    );
+    expect(stripMemoryMarkup('no markup here')).toBe('no markup here');
   });
 });
 

@@ -1,4 +1,5 @@
 import type { MemoryItem, MemoryProfile } from '@uniqent/spec';
+import { stripMemoryMarkup } from '@uniqent/builder';
 
 /** Hermes memory bounds (chars). */
 export const MEMORY_MAX = 2200;
@@ -20,7 +21,7 @@ export function buildMemoryMd(
   let body = '';
   let included = 0;
   for (const f of sorted) {
-    const line = `- ${f.text}\n`;
+    const line = `- ${stripMemoryMarkup(f.text)}\n`;
     if (header.length + body.length + line.length > max) break;
     body += line;
     included++;

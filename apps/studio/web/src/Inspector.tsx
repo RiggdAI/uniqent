@@ -70,6 +70,16 @@ function MemoryEditor({ state, apply }: Omit<InspectorProps, 'selection' | 'onCl
   const [text, setText] = useState('');
   const [importance, setImportance] = useState('0.5');
   const [bulk, setBulk] = useState('');
+  const [preview, setPreview] = useState<{
+    items: Array<{ kind: string; text: string }>;
+    skipped: number;
+  } | null>(null);
+
+  async function doPreview(): Promise<void> {
+    const { items } = await api.previewMemory(bulk);
+    const nonEmpty = bulk.split('\n').filter((l) => l.trim()).length;
+    setPreview({ items, skipped: Math.max(nonEmpty - items.length, 0) });
+  }
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>): Promise<void> {
     const file = e.target.files?.[0];
@@ -153,7 +163,40 @@ function MemoryEditor({ state, apply }: Omit<InspectorProps, 'selection' | 'onCl
           value={bulk}
           onChange={(e) => setBulk(e.target.value)}
         />
+        {preview && (
+          <div className="space-y-1 rounded-lg border bg-secondary/30 p-2 text-xs">
+            <div className="text-muted-foreground">
+              {preview.items.length} parsed
+              {preview.skipped > 0 && (
+                <span className="text-amber-500">
+                  {' '}
+                  · {preview.skipped} line(s) skipped (headings)
+                </span>
+              )}
+            </div>
+            {preview.items.slice(0, 8).map((it, i) => (
+              <div key={i} className="flex items-start gap-2">
+                <Badge variant="secondary" className="shrink-0 text-[10px]">
+                  {it.kind}
+                </Badge>
+                <span className="truncate">{it.text}</span>
+              </div>
+            ))}
+            {preview.items.length > 8 && (
+              <div className="text-muted-foreground">+{preview.items.length - 8} more…</div>
+            )}
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-2">
+          <Button
+            data-testid="memory-preview"
+            variant="outline"
+            size="sm"
+            disabled={bulk.trim().length === 0}
+            onClick={doPreview}
+          >
+            Preview
+          </Button>
           <Button
             data-testid="memory-smart-import"
             size="sm"
@@ -161,6 +204,7 @@ function MemoryEditor({ state, apply }: Omit<InspectorProps, 'selection' | 'onCl
             onClick={() => {
               apply(api.importMemory({ markdown: bulk }));
               setBulk('');
+              setPreview(null);
             }}
           >
             Smart import
@@ -173,6 +217,7 @@ function MemoryEditor({ state, apply }: Omit<InspectorProps, 'selection' | 'onCl
             onClick={() => {
               apply(api.importMemory({ text: bulk }));
               setBulk('');
+              setPreview(null);
             }}
           >
             Import lines
