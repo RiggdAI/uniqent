@@ -49,10 +49,13 @@ project → the captured brain re-installs). One real bug found and fixed while 
 
 ## Top 3 to do next
 
-1. **`uniqent sign` + `keygen`** — makes the trust model actually usable by authors (#1).
-2. **`install --dry-run`** — matches the promised safety flow and builds confidence (#2).
+1. ~~**`uniqent sign` + `keygen`**~~ — **DONE.** `uniqent keygen` writes a hex keypair; `uniqent sign
+<file> --key <k>` signs in place; `pack`/`export` take `--key` (stable identity) or `--sign`
+   (ephemeral, integrity-only). A validly-signed brain now installs without `--allow-unsigned`.
+2. ~~**`install --dry-run`**~~ — **DONE.** Prints the plan + lossiness + required credentials and
+   writes nothing.
 3. **`uniqent://` one-click web install** — closes the gap between the "Docker for brains" pitch and
-   the actual install friction (#6).
+   the actual install friction (#6). Still open.
 
 ## What's genuinely good (don't regress)
 

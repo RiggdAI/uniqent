@@ -2,6 +2,8 @@ import { readFile, writeFile, stat } from 'node:fs/promises';
 import {
   unpack,
   verify,
+  sign as signBundle,
+  generateKeypair,
   pack as packBundle,
   readDir,
   validateBundle,
@@ -33,7 +35,7 @@ const ADAPTERS: Record<string, Adapter> = {
   openclaw: openClawAdapter,
 };
 
-const BOOLEAN_FLAGS = new Set(['yes', 'allow-unsigned', 'json']);
+const BOOLEAN_FLAGS = new Set(['yes', 'allow-unsigned', 'json', 'sign', 'dry-run']);
 
 interface ParsedArgs {
   positionals: string[];
@@ -192,6 +194,13 @@ async function install(args: string[], io: CliIo): Promise<number> {
     for (const l of plan.lossiness) io.log(`  ${l.action}: ${l.component} — ${l.issue}`);
   }
 
+  if (flags['dry-run']) {
+    if (plan.requiresCredentials.length > 0)
+      io.log(`requires credentials: ${plan.requiresCredentials.join(', ')}`);
+    io.log('\ndry run — nothing written.');
+    return 0;
+  }
+
   const resolved: ResolvedCredentials = {};
   for (const ref of plan.requiresCredentials) {
     let value = creds[ref] ?? process.env[`UNIQENT_CRED_${ref.toUpperCase()}`];
@@ -243,11 +252,12 @@ async function pack(args: string[], io: CliIo): Promise<number> {
     io.error('pack: missing <dir>');
     return 1;
   }
-  const bundle = await readDir(dir);
+  const bundle = await maybeSign(await readDir(dir), flags, io);
   const bytes = await packBundle(bundle); // validates + secret-scans (throws on a secret)
   const out = typeof flags.out === 'string' ? flags.out : `${bundle.manifest().name}.uniqent`;
   await writeFile(out, bytes);
-  io.log(`packed ${out} (${bytes.length} bytes)`);
+  const v = await verify(bundle);
+  io.log(`packed ${out} (${bytes.length} bytes${v.signed ? ', signed ✓' : ''})`);
   return 0;
 }
 
@@ -339,6 +349,73 @@ async function hub(args: string[], io: CliIo): Promise<number> {
   return 1;
 }
 
+/** Read a hex private key from a keyfile written by `keygen`. */
+async function loadPrivateKey(path: string): Promise<string> {
+  const kp = JSON.parse(await readFile(path, 'utf8')) as { privateKey?: string };
+  if (!kp.privateKey) throw new Error(`${path} has no "privateKey"`);
+  return kp.privateKey;
+}
+
+/** Sign the bundle if --key (stable identity) or --sign (ephemeral, integrity-only) was passed. */
+async function maybeSign(
+  bundle: Bundle,
+  flags: Record<string, string | true>,
+  io: CliIo,
+): Promise<Bundle> {
+  if (!flags.sign && typeof flags.key !== 'string') return bundle;
+  if (typeof flags.key === 'string') return signBundle(bundle, await loadPrivateKey(flags.key));
+  const kp = await generateKeypair();
+  io.log(
+    `signing with an ephemeral key (integrity only; pubkey ${kp.publicKey.slice(0, 16)}…). Use --key <keyfile> for a stable publisher identity.`,
+  );
+  return signBundle(bundle, kp.privateKey);
+}
+
+async function keygen(args: string[], io: CliIo): Promise<number> {
+  const { flags } = parseArgs(args);
+  const out = typeof flags.out === 'string' ? flags.out : 'uniqent.key.json';
+  if (await pathExists(out)) {
+    io.error(`keygen: ${out} already exists; pass -o <file> or remove it (do not overwrite a key)`);
+    return 1;
+  }
+  const kp = await generateKeypair();
+  await writeFile(out, JSON.stringify(kp, null, 2) + '\n');
+  io.log(`wrote ${out}`);
+  io.log(`public key: ${kp.publicKey}`);
+  io.log(
+    `Keep ${out} secret and out of git (add it to .gitignore). Sign with: uniqent sign <file> --key ${out}`,
+  );
+  return 0;
+}
+
+async function signCmd(args: string[], io: CliIo): Promise<number> {
+  const { positionals, flags } = parseArgs(args);
+  const file = positionals[0];
+  if (!file) {
+    io.error('sign: missing <file.uniqent>');
+    return 1;
+  }
+  if (typeof flags.key !== 'string') {
+    io.error('sign: missing --key <keyfile> (create one with: uniqent keygen)');
+    return 1;
+  }
+  let signed: Bundle;
+  try {
+    const bundle = await unpack(new Uint8Array(await readFile(file)));
+    signed = await signBundle(bundle, await loadPrivateKey(flags.key));
+  } catch (e) {
+    io.error(`sign: ${(e as Error).message}`);
+    return 1;
+  }
+  const out = typeof flags.out === 'string' ? flags.out : file;
+  await writeFile(out, await packBundle(signed));
+  const v = await verify(signed);
+  io.log(
+    `signed ${out} — signature ${v.valid ? 'valid ✓' : 'INVALID'} (pubkey ${v.publicKey?.slice(0, 16)}…)`,
+  );
+  return 0;
+}
+
 async function pathExists(p: string): Promise<boolean> {
   return stat(p)
     .then(() => true)
@@ -415,8 +492,12 @@ async function exportCmd(args: string[], io: CliIo): Promise<number> {
   }
 
   const out = typeof flags.out === 'string' ? flags.out : `${m.name}.uniqent`;
-  await writeFile(out, await packBundle(bundle));
-  io.log(`\nwrote ${out} (unsigned). Inspect with: uniqent inspect ${out}`);
+  const signed = await maybeSign(bundle, flags, io);
+  await writeFile(out, await packBundle(signed));
+  const v = await verify(signed);
+  io.log(
+    `\nwrote ${out} (${v.signed ? 'signed ✓' : 'unsigned'}). Inspect with: uniqent inspect ${out}`,
+  );
   return 0;
 }
 
@@ -429,14 +510,19 @@ export async function run(argv: string[], io: CliIo): Promise<number> {
   if (cmd === 'search') return search(rest, io);
   if (cmd === 'hub') return hub(rest, io);
   if (cmd === 'export') return exportCmd(rest, io);
+  if (cmd === 'keygen') return keygen(rest, io);
+  if (cmd === 'sign') return signCmd(rest, io);
   io.error(
-    'usage: uniqent <inspect|install|validate|pack|search|hub|export> <file|dir|url|slug|query> [options]',
+    'usage: uniqent <inspect|install|validate|pack|search|hub|export|keygen|sign> <file|dir|url|slug|query> [options]',
   );
   io.error(
     '  install <file|url|slug> --target <id> --root <dir> --cred <ref>=<value> [--registry <url>] [--allow-unsigned] [--yes]',
   );
   io.error('  pack <dir> [-o <file>]    validate <dir|file>    search <query> --registry <url>');
   io.error('  hub <mcp|skills> <query> [--index <url,url>] [--json]');
-  io.error('  export [--from <claude-code|hermes|openclaw>] --root <dir> [-o <file>]');
+  io.error(
+    '  export [--from <claude-code|hermes|openclaw>] --root <dir> [-o <file>] [--sign|--key <k>]',
+  );
+  io.error('  keygen [-o <keyfile>]    sign <file> --key <keyfile> [-o]    install … --dry-run');
   return cmd ? 1 : 0;
 }

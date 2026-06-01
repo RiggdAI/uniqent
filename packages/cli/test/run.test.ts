@@ -364,6 +364,88 @@ describe('uniqent cli', () => {
     }
   });
 
+  it('keygen + pack --key yields a signed bundle that installs without --allow-unsigned', async () => {
+    const dir = tmp();
+    const root = tmp();
+    try {
+      const b = Brain.create({
+        name: 'signed-demo',
+        displayName: 'Signed',
+        version: '0.1.0',
+        description: 'd',
+        author: { name: 'me' },
+        license: 'CC0-1.0',
+        tags: [],
+      });
+      b.setPersona('# Persona\nAtlas.');
+      b.addMcpFromCatalog('github');
+      b.addSkill('code-review', '---\nname: code-review\n---\nReview.\n');
+      const src = join(dir, 'src');
+      await writeDir(b.toBundle(), src);
+      const key = join(dir, 'k.json');
+      const out = join(dir, 'signed.uniqent');
+      expect(await run(['keygen', '-o', key], capture().io)).toBe(0);
+      expect(await run(['pack', src, '-o', out, '--key', key], capture().io)).toBe(0);
+      // No --allow-unsigned: it installs because the signature is valid.
+      const code = await run(
+        [
+          'install',
+          out,
+          '--target',
+          'claude-code',
+          '--root',
+          root,
+          '--cred',
+          'github_pat=ghp_x',
+          '--yes',
+        ],
+        capture().io,
+      );
+      expect(code).toBe(0);
+      expect(existsSync(join(root, '.mcp.json'))).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('install --dry-run shows the plan and writes nothing', async () => {
+    const dir = tmp();
+    const root = tmp();
+    try {
+      const file = await makeBundleFile(dir, true);
+      const { io, logs } = capture();
+      const code = await run(
+        ['install', file, '--target', 'claude-code', '--root', root, '--dry-run'],
+        io,
+      );
+      expect(code).toBe(0);
+      expect(logs.join('\n')).toContain('dry run — nothing written');
+      expect(existsSync(join(root, '.mcp.json'))).toBe(false);
+      expect(existsSync(join(root, 'AGENTS.md'))).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('sign signs an unsigned bundle in place', async () => {
+    const dir = tmp();
+    try {
+      const unsigned = await makeBundleFile(dir, false);
+      const key = join(dir, 'k.json');
+      await run(['keygen', '-o', key], capture().io);
+      const { io, logs } = capture();
+      expect(await run(['sign', unsigned, '--key', key], io)).toBe(0);
+      expect(logs.join('\n')).toContain('signature valid');
+      const ins = capture();
+      await run(['inspect', unsigned], ins.io);
+      expect(ins.logs.join('\n')).toContain('signature: valid');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('export auto-detects the framework and captures an installed project', async () => {
     const dir = tmp();
     const root = tmp();
