@@ -1,10 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ForceGraph2D, { type ForceGraphMethods } from 'react-force-graph-2d';
+import type { ForceGraphMethods as ForceGraphMethods3D } from 'react-force-graph-3d';
 import { X, Brain, ZoomIn, ZoomOut, Maximize, Search } from 'lucide-react';
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
 import { api } from './api';
 import type { MemoryGraph, MemoryGraphNode } from './types';
+
+// 3D variant is heavy (three.js) — load it only when the user switches to 3D.
+const ForceGraph3D = lazy(() => import('react-force-graph-3d'));
 
 // Node colors by type / memory kind.
 const KIND_COLOR: Record<string, string> = {
@@ -33,8 +37,10 @@ export function MemoryBrain({ open, onClose }: { open: boolean; onClose: () => v
   const [hover, setHover] = useState<GraphNode | null>(null);
   const [query, setQuery] = useState('');
   const [focusId, setFocusId] = useState<string | null>(null);
+  const [mode, setMode] = useState<'2d' | '3d'>('2d');
   const containerRef = useRef<HTMLDivElement>(null);
   const fgRef = useRef<ForceGraphMethods<GraphNode> | undefined>(undefined);
+  const fg3dRef = useRef<ForceGraphMethods3D | undefined>(undefined);
 
   useEffect(() => {
     if (!open) return;
@@ -135,7 +141,9 @@ export function MemoryBrain({ open, onClose }: { open: boolean; onClose: () => v
   );
 
   const zoomBy = (factor: number) => fgRef.current?.zoom((fgRef.current.zoom() ?? 1) * factor, 250);
-  const fit = () => fgRef.current?.zoomToFit(400, 40);
+  const fit = () =>
+    mode === '3d' ? fg3dRef.current?.zoomToFit(500, 60) : fgRef.current?.zoomToFit(400, 40);
+  const toggleFocus = (id: string) => setFocusId((cur) => (cur === id ? null : id));
 
   if (!open) return null;
 
@@ -193,30 +201,63 @@ export function MemoryBrain({ open, onClose }: { open: boolean; onClose: () => v
           )}
           {!loading && !empty && graph && (
             <>
-              <ForceGraph2D<GraphNode>
-                ref={fgRef}
-                width={size.w}
-                height={size.h}
-                graphData={data}
-                backgroundColor="transparent"
-                nodeRelSize={1}
-                nodeVal={(n) => radiusFor(n) * radiusFor(n) * 0.18}
-                nodeColor={(n) => colorFor(n)}
-                nodeLabel={(n) => n.label}
-                linkColor={linkColor}
-                linkWidth={0.5}
-                cooldownTicks={120}
-                onEngineStop={fit}
-                onNodeHover={(n) => setHover((n as GraphNode) ?? null)}
-                onNodeClick={(n) => {
-                  const node = n as GraphNode;
-                  setFocusId((cur) => (cur === node.id ? null : node.id));
-                  fgRef.current?.centerAt(node.x, node.y, 400);
-                }}
-                onBackgroundClick={() => setFocusId(null)}
-                nodeCanvasObject={drawNode}
-                nodeCanvasObjectMode={() => 'replace'}
-              />
+              {mode === '2d' ? (
+                <ForceGraph2D<GraphNode>
+                  ref={fgRef}
+                  width={size.w}
+                  height={size.h}
+                  graphData={data}
+                  backgroundColor="transparent"
+                  nodeRelSize={1}
+                  nodeVal={(n) => radiusFor(n) * radiusFor(n) * 0.18}
+                  nodeColor={(n) => colorFor(n)}
+                  nodeLabel={(n) => n.label}
+                  linkColor={linkColor}
+                  linkWidth={0.5}
+                  cooldownTicks={120}
+                  onEngineStop={fit}
+                  onNodeHover={(n) => setHover((n as GraphNode) ?? null)}
+                  onNodeClick={(n) => {
+                    const node = n as GraphNode;
+                    toggleFocus(node.id);
+                    fgRef.current?.centerAt(node.x, node.y, 400);
+                  }}
+                  onBackgroundClick={() => setFocusId(null)}
+                  nodeCanvasObject={drawNode}
+                  nodeCanvasObjectMode={() => 'replace'}
+                />
+              ) : (
+                <Suspense
+                  fallback={
+                    <div className="absolute inset-0 grid place-items-center text-sm text-muted-foreground">
+                      Loading 3D…
+                    </div>
+                  }
+                >
+                  <ForceGraph3D
+                    ref={fg3dRef}
+                    width={size.w}
+                    height={size.h}
+                    graphData={data}
+                    backgroundColor="rgba(0,0,0,0)"
+                    nodeRelSize={3}
+                    nodeVal={(n) => {
+                      const r = radiusFor(n as GraphNode);
+                      return r * r * 0.18;
+                    }}
+                    nodeColor={(n) => colorFor(n as GraphNode)}
+                    nodeLabel={(n) => (n as GraphNode).label}
+                    nodeVisibility={(n) => isActive((n as GraphNode).id)}
+                    linkVisibility={(l) => isActive(endId(l.source)) && isActive(endId(l.target))}
+                    linkColor={() => '#64748b'}
+                    linkOpacity={0.3}
+                    cooldownTicks={120}
+                    onEngineStop={() => fg3dRef.current?.zoomToFit(500, 60)}
+                    onNodeClick={(n) => toggleFocus((n as GraphNode).id)}
+                    onBackgroundClick={() => setFocusId(null)}
+                  />
+                </Suspense>
+              )}
               {filtering && (
                 <div className="absolute left-3 top-3 flex items-center gap-2 rounded-md border bg-card/90 px-2 py-1 text-xs shadow backdrop-blur">
                   <span className="text-muted-foreground" data-testid="brain-filter-count">
@@ -233,25 +274,39 @@ export function MemoryBrain({ open, onClose }: { open: boolean; onClose: () => v
                   </button>
                 </div>
               )}
-              <div className="absolute bottom-3 right-3 flex flex-col gap-1.5">
+              <div className="absolute bottom-3 right-3 flex flex-col items-end gap-1.5">
                 <Button
+                  data-testid="brain-mode-toggle"
                   variant="outline"
-                  size="icon"
-                  className="size-8"
-                  onClick={() => zoomBy(1.4)}
-                  aria-label="Zoom in"
+                  size="sm"
+                  className="h-8 px-2 text-xs font-semibold"
+                  onClick={() => setMode((m) => (m === '2d' ? '3d' : '2d'))}
+                  title={mode === '2d' ? 'Switch to 3D (rotate)' : 'Switch to 2D'}
                 >
-                  <ZoomIn className="size-4" />
+                  {mode === '2d' ? '3D' : '2D'}
                 </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="size-8"
-                  onClick={() => zoomBy(0.7)}
-                  aria-label="Zoom out"
-                >
-                  <ZoomOut className="size-4" />
-                </Button>
+                {mode === '2d' && (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="size-8"
+                      onClick={() => zoomBy(1.4)}
+                      aria-label="Zoom in"
+                    >
+                      <ZoomIn className="size-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="size-8"
+                      onClick={() => zoomBy(0.7)}
+                      aria-label="Zoom out"
+                    >
+                      <ZoomOut className="size-4" />
+                    </Button>
+                  </>
+                )}
                 <Button
                   variant="outline"
                   size="icon"
@@ -274,7 +329,9 @@ export function MemoryBrain({ open, onClose }: { open: boolean; onClose: () => v
           <Legend color="#34d399" label="preference" />
           <Legend color="#a78bfa" label="milestone" />
           <span className="ml-auto">
-            scroll = zoom · drag = pan · click = focus · search to filter
+            {mode === '2d'
+              ? 'scroll = zoom · drag = pan · click = focus · 3D to rotate'
+              : 'drag = rotate · scroll = zoom · click = focus'}
           </span>
         </div>
       </div>
