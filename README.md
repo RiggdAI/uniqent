@@ -8,6 +8,12 @@ config — and install it into whatever framework you run, in one click.
 An open standard + open-source toolchain for portable AI agents: the spec is **CC0**, the
 toolchain is **Apache-2.0**.
 
+![Uniqent Studio — the visual brain builder](docs/img/studio-canvas.png)
+
+<p align="center"><em>Uniqent Studio: compose a brain on an n8n-style canvas — persona, MCP stack,
+skills, memory, channels — with credentials wired as "needs" edges, then export one signed
+<code>.uniqent</code>.</em></p>
+
 ---
 
 ## The concept
@@ -46,6 +52,12 @@ your secrets never leave your machine.
 | **Config**       | model/provider prefs, autonomy level, allowlists                        |
 
 You compose those, run `uniqent pack`, and get one signed file. That file is the brain.
+
+Memory isn't a flat list: write facts with Obsidian-style `[[entities]]` and `#tags` and Studio
+parses them into an interactive **"memory brain"** — a force-directed graph (zoom / pan / drag) of
+how facts, people, and topics connect. Ideal for handing a departing person's context to the next.
+
+![The memory brain — an interactive knowledge graph of the agent's memory](docs/img/memory-brain.png)
 
 ### One brain → install into any agent
 

@@ -1,19 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
-import {
-  forceSimulation,
-  forceManyBody,
-  forceLink,
-  forceCenter,
-  forceCollide,
-  type SimulationNodeDatum,
-} from 'd3-force';
-import { X, Brain } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import ForceGraph2D, { type ForceGraphMethods } from 'react-force-graph-2d';
+import { X, Brain, ZoomIn, ZoomOut, Maximize } from 'lucide-react';
 import { Button } from './components/ui/button';
 import { api } from './api';
 import type { MemoryGraph, MemoryGraphNode } from './types';
-
-const W = 920;
-const H = 600;
 
 // Node colors by type / memory kind.
 const KIND_COLOR: Record<string, string> = {
@@ -29,68 +19,19 @@ function colorFor(n: MemoryGraphNode): string {
   return KIND_COLOR[n.kind ?? 'fact'] ?? '#60a5fa';
 }
 function radiusFor(n: MemoryGraphNode): number {
-  return Math.min(6 + n.degree * 2.2, 20);
+  return Math.min(3 + n.degree * 1.4, 12);
 }
 
-interface SimNode extends SimulationNodeDatum, MemoryGraphNode {}
-
-/** Compute a static force-directed layout for the graph (synchronous, deterministic-ish). */
-function layout(graph: MemoryGraph): {
-  nodes: SimNode[];
-  links: Array<[SimNode, SimNode]>;
-  viewBox: string;
-} {
-  const nodes: SimNode[] = graph.nodes.map((n, i) => ({
-    ...n,
-    // Seed positions on a ring so the (unseeded) sim converges the same way each run.
-    x: W / 2 + Math.cos((i / Math.max(graph.nodes.length, 1)) * Math.PI * 2) * 200,
-    y: H / 2 + Math.sin((i / Math.max(graph.nodes.length, 1)) * Math.PI * 2) * 200,
-  }));
-  const byId = new Map(nodes.map((n) => [n.id, n]));
-  const links = graph.edges
-    .map((e) => [byId.get(e.source), byId.get(e.target)] as [SimNode, SimNode])
-    .filter((l): l is [SimNode, SimNode] => Boolean(l[0] && l[1]));
-
-  const sim = forceSimulation(nodes)
-    .force('charge', forceManyBody().strength(-220))
-    .force(
-      'link',
-      forceLink(links.map(([source, target]) => ({ source, target })))
-        .distance(64)
-        .strength(0.4),
-    )
-    .force('center', forceCenter(W / 2, H / 2))
-    .force(
-      'collide',
-      forceCollide<SimNode>().radius((n) => radiusFor(n) + 6),
-    )
-    .stop();
-  for (let i = 0; i < 320; i++) sim.tick();
-
-  // Auto-fit: bound the viewBox to the laid-out nodes (+ approximate label width to the right)
-  // so nothing is clipped however far the force spreads them.
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (const n of nodes) {
-    const r = radiusFor(n);
-    const labelW = Math.min(n.label.length, 28) * (n.type === 'memory' ? 5.2 : 6.4) + 14;
-    minX = Math.min(minX, (n.x ?? 0) - r);
-    minY = Math.min(minY, (n.y ?? 0) - r - 8);
-    maxX = Math.max(maxX, (n.x ?? 0) + r + labelW);
-    maxY = Math.max(maxY, (n.y ?? 0) + r + 8);
-  }
-  const pad = 28;
-  const viewBox = Number.isFinite(minX)
-    ? `${minX - pad} ${minY - pad} ${maxX - minX + pad * 2} ${maxY - minY + pad * 2}`
-    : `0 0 ${W} ${H}`;
-  return { nodes, links, viewBox };
-}
+type GraphNode = MemoryGraphNode & { x?: number; y?: number };
+type GraphData = { nodes: GraphNode[]; links: Array<{ source: string; target: string }> };
 
 export function MemoryBrain({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [graph, setGraph] = useState<MemoryGraph | null>(null);
   const [loading, setLoading] = useState(false);
+  const [size, setSize] = useState({ w: 800, h: 520 });
+  const [hover, setHover] = useState<GraphNode | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const fgRef = useRef<ForceGraphMethods<GraphNode> | undefined>(undefined);
 
   useEffect(() => {
     if (!open) return;
@@ -102,7 +43,53 @@ export function MemoryBrain({ open, onClose }: { open: boolean; onClose: () => v
       .finally(() => setLoading(false));
   }, [open]);
 
-  const laidOut = useMemo(() => (graph ? layout(graph) : null), [graph]);
+  // Track the graph container size for the canvas.
+  useEffect(() => {
+    if (!open) return;
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      setSize({ w: el.clientWidth, h: el.clientHeight });
+    });
+    ro.observe(el);
+    setSize({ w: el.clientWidth, h: el.clientHeight });
+    return () => ro.disconnect();
+  }, [open, graph]);
+
+  const data: GraphData = useMemo(
+    () => ({
+      nodes: (graph?.nodes ?? []).map((n) => ({ ...n })),
+      links: (graph?.edges ?? []).map((e) => ({ source: e.source, target: e.target })),
+    }),
+    [graph],
+  );
+
+  const drawNode = useCallback(
+    (node: GraphNode, ctx: CanvasRenderingContext2D, globalScale: number) => {
+      const r = radiusFor(node);
+      ctx.beginPath();
+      ctx.arc(node.x ?? 0, node.y ?? 0, r, 0, 2 * Math.PI);
+      ctx.fillStyle = colorFor(node);
+      ctx.globalAlpha = node.type === 'memory' ? 0.95 : 1;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      // Labels: always for well-connected hubs; otherwise only when zoomed in.
+      const showLabel = node.degree >= 3 || globalScale > 2.2 || node === hover;
+      if (showLabel) {
+        const label = node.label.length > 26 ? `${node.label.slice(0, 25)}…` : node.label;
+        const fontSize = Math.max(node.type === 'memory' ? 3.5 : 4.5, 11 / globalScale);
+        ctx.font = `${node.type === 'memory' ? '' : '600 '}${fontSize}px ui-sans-serif, system-ui`;
+        ctx.fillStyle = 'rgba(226,232,240,0.92)';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(label, (node.x ?? 0) + r + 1.5, node.y ?? 0);
+      }
+    },
+    [hover],
+  );
+
+  const zoomBy = (factor: number) => fgRef.current?.zoom((fgRef.current.zoom() ?? 1) * factor, 250);
+  const fit = () => fgRef.current?.zoomToFit(400, 40);
 
   if (!open) return null;
 
@@ -113,6 +100,7 @@ export function MemoryBrain({ open, onClose }: { open: boolean; onClose: () => v
         tag: graph.nodes.filter((n) => n.type === 'tag').length,
       }
     : { mem: 0, ent: 0, tag: 0 };
+  const empty = !loading && graph !== null && graph.nodes.length === 0;
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-background/70 p-6 backdrop-blur-sm">
@@ -129,13 +117,17 @@ export function MemoryBrain({ open, onClose }: { open: boolean; onClose: () => v
           </Button>
         </div>
 
-        <div className="relative flex-1 overflow-hidden">
+        <div
+          ref={containerRef}
+          className="relative flex-1 overflow-hidden"
+          data-testid="memory-brain"
+        >
           {loading && (
             <div className="absolute inset-0 grid place-items-center text-sm text-muted-foreground">
               Building graph…
             </div>
           )}
-          {!loading && graph && graph.nodes.length === 0 && (
+          {empty && (
             <div className="absolute inset-0 grid place-items-center p-8 text-center text-sm text-muted-foreground">
               No memory yet. Add facts that reference{' '}
               <code className="mx-1 rounded bg-secondary px-1">[[entities]]</code> and{' '}
@@ -143,43 +135,59 @@ export function MemoryBrain({ open, onClose }: { open: boolean; onClose: () => v
               a connected brain.
             </div>
           )}
-          {!loading && laidOut && graph && graph.nodes.length > 0 && (
-            <svg
-              viewBox={laidOut.viewBox}
-              preserveAspectRatio="xMidYMid meet"
-              className="h-full w-full"
-              data-testid="memory-brain-svg"
-            >
-              {laidOut.links.map(([a, b], i) => (
-                <line
-                  key={i}
-                  x1={a.x}
-                  y1={a.y}
-                  x2={b.x}
-                  y2={b.y}
-                  stroke="currentColor"
-                  className="text-border"
-                  strokeWidth={1}
-                  strokeOpacity={0.5}
-                />
-              ))}
-              {laidOut.nodes.map((n) => (
-                <g key={n.id} transform={`translate(${n.x},${n.y})`}>
-                  <circle r={radiusFor(n)} fill={colorFor(n)} fillOpacity={0.9} />
-                  {(n.type !== 'memory' || n.degree > 0 || laidOut.nodes.length <= 30) && (
-                    <text
-                      x={radiusFor(n) + 3}
-                      y={3}
-                      className="fill-foreground"
-                      fontSize={n.type === 'memory' ? 9 : 11}
-                      fontWeight={n.type === 'memory' ? 400 : 600}
-                    >
-                      {n.label.length > 28 ? `${n.label.slice(0, 27)}…` : n.label}
-                    </text>
-                  )}
-                </g>
-              ))}
-            </svg>
+          {!loading && !empty && graph && (
+            <>
+              <ForceGraph2D<GraphNode>
+                ref={fgRef}
+                width={size.w}
+                height={size.h}
+                graphData={data}
+                backgroundColor="transparent"
+                nodeRelSize={1}
+                nodeVal={(n) => radiusFor(n) * radiusFor(n) * 0.18}
+                nodeColor={(n) => colorFor(n)}
+                nodeLabel={(n) => n.label}
+                linkColor={() => 'rgba(148,163,184,0.28)'}
+                linkWidth={0.5}
+                cooldownTicks={120}
+                onEngineStop={fit}
+                onNodeHover={(n) => setHover((n as GraphNode) ?? null)}
+                onNodeClick={(n) =>
+                  fgRef.current?.centerAt((n as GraphNode).x, (n as GraphNode).y, 400)
+                }
+                nodeCanvasObject={drawNode}
+                nodeCanvasObjectMode={() => 'replace'}
+              />
+              <div className="absolute bottom-3 right-3 flex flex-col gap-1.5">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="size-8"
+                  onClick={() => zoomBy(1.4)}
+                  aria-label="Zoom in"
+                >
+                  <ZoomIn className="size-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="size-8"
+                  onClick={() => zoomBy(0.7)}
+                  aria-label="Zoom out"
+                >
+                  <ZoomOut className="size-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="size-8"
+                  onClick={fit}
+                  aria-label="Fit to view"
+                >
+                  <Maximize className="size-4" />
+                </Button>
+              </div>
+            </>
           )}
         </div>
 
@@ -190,7 +198,7 @@ export function MemoryBrain({ open, onClose }: { open: boolean; onClose: () => v
           <Legend color="#f59e0b" label="decision" />
           <Legend color="#34d399" label="preference" />
           <Legend color="#a78bfa" label="milestone" />
-          <span className="ml-auto">node size = connections</span>
+          <span className="ml-auto">scroll = zoom · drag = pan/move · hover = label</span>
         </div>
       </div>
     </div>

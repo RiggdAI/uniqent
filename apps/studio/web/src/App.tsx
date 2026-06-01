@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { ReactFlow, Background, BackgroundVariant, type Node } from '@xyflow/react';
 import { Download, Rocket, CheckCircle2, XCircle, Brain } from 'lucide-react';
 import type { StudioState, CatalogView } from './types';
@@ -7,9 +7,11 @@ import { buildGraph } from './canvas/graph';
 import { nodeTypes } from './canvas/nodes';
 import { Palette } from './Palette';
 import { Inspector } from './Inspector';
-import { MemoryBrain } from './MemoryBrain';
 import { Button } from './components/ui/button';
 import { cn } from './lib/utils';
+
+// Lazy-loaded so the force-graph/d3 weight only ships when the brain is opened.
+const MemoryBrain = lazy(() => import('./MemoryBrain').then((m) => ({ default: m.MemoryBrain })));
 
 export function App() {
   const [state, setState] = useState<StudioState | null>(null);
@@ -190,7 +192,11 @@ export function App() {
         {error && <span className="ml-auto truncate text-destructive">{error}</span>}
       </footer>
 
-      <MemoryBrain open={brainOpen} onClose={() => setBrainOpen(false)} />
+      {brainOpen && (
+        <Suspense fallback={null}>
+          <MemoryBrain open onClose={() => setBrainOpen(false)} />
+        </Suspense>
+      )}
     </div>
   );
 }
