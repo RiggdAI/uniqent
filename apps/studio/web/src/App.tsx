@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ReactFlow, Background, BackgroundVariant, type Node } from '@xyflow/react';
-import { Download, Rocket, CheckCircle2, XCircle } from 'lucide-react';
+import { Download, Rocket, CheckCircle2, XCircle, Brain } from 'lucide-react';
 import type { StudioState, CatalogView } from './types';
 import { api } from './api';
 import { buildGraph } from './canvas/graph';
 import { nodeTypes } from './canvas/nodes';
 import { Palette } from './Palette';
 import { Inspector } from './Inspector';
+import { MemoryBrain } from './MemoryBrain';
 import { Button } from './components/ui/button';
 import { cn } from './lib/utils';
 
@@ -17,6 +18,7 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [exportMsg, setExportMsg] = useState('');
   const [error, setError] = useState('');
+  const [brainOpen, setBrainOpen] = useState(false);
 
   useEffect(() => {
     Promise.all([api.catalog(), api.state()])
@@ -122,6 +124,14 @@ export function App() {
             {state.manifest.displayName}
           </span>
           <Button
+            data-testid="brain-btn"
+            variant="outline"
+            size="sm"
+            onClick={() => setBrainOpen(true)}
+          >
+            <Brain className="size-4" /> Brain
+          </Button>
+          <Button
             data-testid="install-btn"
             variant="outline"
             size="sm"
@@ -179,6 +189,8 @@ export function App() {
         {exportMsg && <span className="ml-auto truncate text-muted-foreground">{exportMsg}</span>}
         {error && <span className="ml-auto truncate text-destructive">{error}</span>}
       </footer>
+
+      <MemoryBrain open={brainOpen} onClose={() => setBrainOpen(false)} />
     </div>
   );
 }

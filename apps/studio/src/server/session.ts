@@ -8,8 +8,17 @@ import {
   defaultMcpSources,
   defaultSkillSources,
   installMcpHubResult,
+  memoryGraph,
+  parseMemoryMarkdown,
 } from '@uniqent/builder';
-import type { BrainMeta, McpHubResult, SkillHubResult, HubSearch } from '@uniqent/builder';
+import type {
+  BrainMeta,
+  McpHubResult,
+  SkillHubResult,
+  HubSearch,
+  MemoryGraph,
+  ImportedMemoryItem,
+} from '@uniqent/builder';
 import { validateBundle, generateKeypair, sign, pack, verify } from '@uniqent/core';
 import type { ValidationResult, Keypair } from '@uniqent/core';
 import type { Manifest } from '@uniqent/spec';
@@ -185,6 +194,23 @@ export class StudioSession {
     return lines.length;
   }
 
+  /**
+   * Structured import: parse a markdown/text document into memory items with inferred kind
+   * (Decision/Preference/Milestone/…), keeping `[[entities]]` and `#tags` inline. Returns the count.
+   */
+  importMarkdown(text: string): number {
+    const items = parseMemoryMarkdown(text);
+    for (const it of items) {
+      this.brain.addMemory({
+        id: `fact-${++this.factCounter}`,
+        kind: it.kind,
+        text: it.text,
+        createdAt: new Date().toISOString(),
+      });
+    }
+    return items.length;
+  }
+
   /** Import structured memory items (e.g. from a .jsonl export), filling missing fields. */
   importItems(items: Array<Record<string, unknown>>): number {
     const KINDS = ['fact', 'decision', 'preference', 'milestone', 'episodic'];
@@ -223,6 +249,22 @@ export class StudioSession {
   /** The current profile as a flat record (empty object when none set). */
   getProfile(): Record<string, unknown> {
     return this.brain.getProfile() ?? {};
+  }
+
+  /** The memory knowledge graph (facts + episodic, with their [[entities]] and #tags). */
+  memoryGraph(): MemoryGraph {
+    return memoryGraph(
+      this.brain.listMemory().map((m) => ({ id: m.id, text: m.text, kind: m.kind })),
+    );
+  }
+
+  /** Parse a markdown/text document into structured memory items, WITHOUT importing them. */
+  previewMemoryImport(text: string): { items: ImportedMemoryItem[]; graph: MemoryGraph } {
+    const items = parseMemoryMarkdown(text);
+    const graph = memoryGraph(
+      items.map((it, i) => ({ id: `p${i}`, text: it.text, kind: it.kind })),
+    );
+    return { items, graph };
   }
 
   addMcpFromCatalog(id: string): void {

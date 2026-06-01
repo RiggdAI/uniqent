@@ -89,6 +89,8 @@ function MemoryEditor({ state, apply }: Omit<InspectorProps, 'selection' | 'onCl
           }
         });
       apply(api.importMemory({ items }));
+    } else if (file.name.endsWith('.md')) {
+      apply(api.importMemory({ markdown: content })); // parse kinds + [[links]]/#tags
     } else {
       apply(api.importMemory({ text: content }));
     }
@@ -136,15 +138,33 @@ function MemoryEditor({ state, apply }: Omit<InspectorProps, 'selection' | 'onCl
 
       <div className="space-y-2 border-t pt-3">
         <Label>Bulk import</Label>
-        <p className="text-xs text-muted-foreground">One fact per line.</p>
+        <p className="text-xs text-muted-foreground">
+          <b>Smart import</b> parses kinds (Decision/Preference/…) and wires up{' '}
+          <code className="rounded bg-secondary px-1">[[entities]]</code> +{' '}
+          <code className="rounded bg-secondary px-1">#tags</code> into the brain. Or one fact per
+          line.
+        </p>
         <Textarea
           data-testid="memory-bulk"
           className="min-h-[100px] text-[13px]"
-          placeholder={'Ships small, focused PRs.\nReviews own code before requesting review.'}
+          placeholder={
+            '- Decision: standardized on [[Postgres]] #database\n- Prefers [[TypeScript]] + [[pnpm]] #conventions'
+          }
           value={bulk}
           onChange={(e) => setBulk(e.target.value)}
         />
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            data-testid="memory-smart-import"
+            size="sm"
+            disabled={bulk.trim().length === 0}
+            onClick={() => {
+              apply(api.importMemory({ markdown: bulk }));
+              setBulk('');
+            }}
+          >
+            Smart import
+          </Button>
           <Button
             data-testid="memory-import-lines"
             variant="outline"

@@ -31,3 +31,9 @@ node packages/cli/dist/bin.js install https://example.com/dev-powerpack.uniqent 
 
 These are generated from `@uniqent/builder`, so they always validate; regenerate by editing the
 builder and re-authoring. Or build your own in **Uniqent Studio** (`pnpm --filter @uniqent/studio start`).
+
+## Memory sample
+
+[`memory-sample.md`](memory-sample.md) is a markdown memory file using `[[entities]]` and `#tags`.
+Paste or upload it into Studio's **Memory → Smart import** to see it parse into kinds
+(Decision/Preference/Milestone/…) and wire up into the **Memory brain** graph (the 🧠 button).

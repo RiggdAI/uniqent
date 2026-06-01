@@ -49,10 +49,18 @@ export async function handleApi(
   if (method === 'POST' && path === '/api/memory/import') {
     if (Array.isArray(b.items)) {
       session.importItems(b.items as Array<Record<string, unknown>>);
+    } else if (typeof b.markdown === 'string') {
+      session.importMarkdown(b.markdown);
     } else if (typeof b.text === 'string') {
       session.importLines(b.text);
     }
     return ok(session.state());
+  }
+  if (method === 'GET' && path === '/api/memory/graph') {
+    return ok(session.memoryGraph());
+  }
+  if (method === 'POST' && path === '/api/memory/preview') {
+    return ok(session.previewMemoryImport(typeof b.text === 'string' ? b.text : ''));
   }
   if (method === 'GET' && path === '/api/profile') {
     return ok({ profile: session.getProfile() });
