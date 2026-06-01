@@ -127,3 +127,25 @@ export interface HubSearch<T> {
   results: T[];
   errors: Array<{ source: string; message: string }>;
 }
+
+export interface MemoryGraphNode {
+  id: string;
+  label: string;
+  type: 'memory' | 'entity' | 'tag';
+  kind?: string;
+  degree: number;
+}
+export interface MemoryGraphEdge {
+  source: string;
+  target: string;
+}
+export interface MemoryGraph {
+  nodes: MemoryGraphNode[];
+  edges: MemoryGraphEdge[];
+}
+export interface ImportedMemoryItem {
+  text: string;
+  kind: string;
+  entities: string[];
+  tags: string[];
+}

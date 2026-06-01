@@ -8,6 +8,8 @@ import type {
   HubSearch,
   McpHubResult,
   SkillHubResult,
+  MemoryGraph,
+  ImportedMemoryItem,
 } from './types';
 
 async function unwrap<T>(res: Response): Promise<T> {
@@ -40,8 +42,11 @@ export const api = {
     post<StudioState>('/api/memory', { text, importance }),
   getProfile: () => get<{ profile: Record<string, string> }>('/api/profile'),
   setProfile: (profile: Record<string, string>) => post<StudioState>('/api/profile', { profile }),
-  importMemory: (payload: { text?: string; items?: unknown[] }) =>
+  importMemory: (payload: { text?: string; items?: unknown[]; markdown?: string }) =>
     post<StudioState>('/api/memory/import', payload),
+  memoryGraph: () => get<MemoryGraph>('/api/memory/graph'),
+  previewMemory: (text: string) =>
+    post<{ items: ImportedMemoryItem[]; graph: MemoryGraph }>('/api/memory/preview', { text }),
   addMcp: (id: string) => post<StudioState>(`/api/mcp/catalog/${encodeURIComponent(id)}`, {}),
   addSkill: (name: string) =>
     post<StudioState>(`/api/skill/catalog/${encodeURIComponent(name)}`, {}),

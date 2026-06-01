@@ -5,3 +5,4 @@ export * from './brain.js';
 export * from './derive.js';
 export * from './catalog/index.js';
 export * from './hubs/index.js';
+export * from './memory/parse.js';

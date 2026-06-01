@@ -111,7 +111,10 @@ default).
   builder) with an **n8n-style react-flow canvas**: agent core node wired to component nodes
   (persona/MCP/skill/memory/channel/flow) + credential→consumer "needs" edges, a palette
   (catalog + custom/import for skills & MCP, channels, flows), and a side-panel inspector. Memory
-  has single + bulk import (paste / `.txt`/`.md`/`.jsonl`). Run:
+  has single + bulk import (paste / `.txt`/`.md`/`.jsonl`), a **profile editor** (→ USER.md), and a
+  **"Smart import"** that parses markdown into kinded items keeping Obsidian-style `[[entities]]` +
+  `#tags`, plus a **"Memory brain"** force-directed graph (🧠 button) of memory↔entities↔tags
+  (`packages/builder/src/memory/parse.ts` builds the graph; `d3-force` lays it out). Run:
   `pnpm --filter @uniqent/studio build && pnpm --filter @uniqent/studio start` (`:4173`,
   `UNIQENT_STUDIO_PORT` to override). Verified in a real browser.
 - **Install** — `@uniqent/adapter-sdk` (Adapter interface + conformance harness) +

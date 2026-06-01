@@ -191,6 +191,34 @@ describe('StudioSession', () => {
     });
   });
 
+  it('smart-imports markdown into kinded memory and builds the brain graph', () => {
+    const s = new StudioSession();
+    const n = s.importMarkdown(
+      [
+        '# Context',
+        '- Decision: standardized on [[Postgres]] #database',
+        '- The user prefers [[TypeScript]] #conventions',
+        '[[Postgres]] is tuned for OLTP #database',
+      ].join('\n'),
+    );
+    expect(n).toBe(3);
+    const m = s.state().manifest.components.memory;
+    expect(m.facts).toBe(3);
+    const g = s.memoryGraph();
+    // 3 memory + Postgres/TypeScript entities + database/conventions tags.
+    expect(g.nodes.filter((x) => x.type === 'memory')).toHaveLength(3);
+    const pg = g.nodes.find((x) => x.id === 'ent:postgres');
+    expect(pg?.degree).toBe(2); // shared across two facts
+  });
+
+  it('previews a markdown import without adding it', () => {
+    const s = new StudioSession();
+    const { items, graph } = s.previewMemoryImport('- Decision: use [[Redis]] #cache');
+    expect(items[0]?.kind).toBe('decision');
+    expect(graph.nodes.some((n) => n.id === 'ent:redis')).toBe(true);
+    expect(s.state().manifest.components.memory.facts).toBe(0); // not added
+  });
+
   it('imports a skill from a URL', async () => {
     const s = new StudioSession();
     const orig = globalThis.fetch;

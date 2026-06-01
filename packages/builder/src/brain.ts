@@ -93,6 +93,10 @@ export class Brain {
     if (parsed.kind === 'episodic') this.episodic.push(parsed);
     else this.facts.push(parsed);
   }
+  /** All memory items (facts + episodic), for building the memory graph. */
+  listMemory(): TMemoryItem[] {
+    return [...this.facts, ...this.episodic];
+  }
   removeMemory(id: string): void {
     this.facts = this.facts.filter((f) => f.id !== id);
     this.episodic = this.episodic.filter((f) => f.id !== id);
