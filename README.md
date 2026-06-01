@@ -59,6 +59,11 @@ how facts, people, and topics connect. Ideal for handing a departing person's co
 
 ![The memory brain — an interactive knowledge graph of the agent's memory](docs/img/memory-brain.png)
 
+<p align="center"><em>The interactive memory brain — search, click-to-focus, zoom/pan, and a 3D
+mode you can rotate.</em></p>
+
+![The memory brain in 3D — rotate, zoom, and pan the knowledge graph](docs/img/memory-brain-3d.png)
+
 ### One brain → install into any agent
 
 The same bundle installs into whichever framework the recipient runs. An **adapter** per

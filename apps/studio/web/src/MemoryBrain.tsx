@@ -30,6 +30,13 @@ function radiusFor(n: MemoryGraphNode): number {
 type GraphNode = MemoryGraphNode & { x?: number; y?: number };
 type GraphData = { nodes: GraphNode[]; links: Array<{ source: string; target: string }> };
 
+// react-force-graph-3d types cameraPosition only as a setter; the no-arg getter is real at runtime.
+type Vec3 = { x: number; y: number; z: number };
+type CameraFn = {
+  (): Vec3;
+  (pos: Partial<Vec3>, lookAt?: Vec3, ms?: number): unknown;
+};
+
 export function MemoryBrain({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [graph, setGraph] = useState<MemoryGraph | null>(null);
   const [loading, setLoading] = useState(false);
@@ -41,6 +48,12 @@ export function MemoryBrain({ open, onClose }: { open: boolean; onClose: () => v
   const containerRef = useRef<HTMLDivElement>(null);
   const fgRef = useRef<ForceGraphMethods<GraphNode> | undefined>(undefined);
   const fg3dRef = useRef<ForceGraphMethods3D | undefined>(undefined);
+  const tiltedRef = useRef(false); // one-time 3/4 camera tilt per 3D session
+
+  // Re-arm the 3D tilt whenever the user switches into 3D.
+  useEffect(() => {
+    if (mode === '3d') tiltedRef.current = false;
+  }, [mode]);
 
   useEffect(() => {
     if (!open) return;
@@ -252,7 +265,19 @@ export function MemoryBrain({ open, onClose }: { open: boolean; onClose: () => v
                     linkColor={() => '#64748b'}
                     linkOpacity={0.3}
                     cooldownTicks={120}
-                    onEngineStop={() => fg3dRef.current?.zoomToFit(500, 60)}
+                    onEngineStop={() => {
+                      const fg = fg3dRef.current;
+                      if (!fg || tiltedRef.current) return;
+                      tiltedRef.current = true;
+                      fg.zoomToFit(400, 60);
+                      // Tilt to a 3/4 view (same distance) so the depth reads as 3D, not flat-on.
+                      const cam = fg.cameraPosition as unknown as CameraFn;
+                      setTimeout(() => {
+                        const p = cam();
+                        const d = Math.hypot(p.x, p.y, p.z) || 260;
+                        cam({ x: d * 0.45, y: d * 0.32, z: d * 0.82 }, { x: 0, y: 0, z: 0 }, 900);
+                      }, 450);
+                    }}
                     onNodeClick={(n) => toggleFocus((n as GraphNode).id)}
                     onBackgroundClick={() => setFocusId(null)}
                   />
