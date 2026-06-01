@@ -28,5 +28,14 @@
   },
   "devDependencies": {
     "vitest": "^3.0.0"
-  }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/RiggdAI/uniqent.git",
+    "directory": "packages/adapter-claude-code"
+  },
+  "homepage": "https://github.com/RiggdAI/uniqent#readme"
 }
