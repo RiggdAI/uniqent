@@ -364,6 +364,55 @@ describe('uniqent cli', () => {
     }
   });
 
+  it('export auto-detects the framework and captures an installed project', async () => {
+    const dir = tmp();
+    const root = tmp();
+    try {
+      const file = await makeBundleFile(dir, true); // has github (bearer) + a skill + persona
+      await run(
+        [
+          'install',
+          file,
+          '--target',
+          'claude-code',
+          '--root',
+          root,
+          '--cred',
+          'github_pat=ghp_x',
+          '--yes',
+        ],
+        capture().io,
+      );
+      const out = join(dir, 'captured.uniqent');
+      const { io, logs } = capture();
+      // No --from: should auto-detect claude-code from the installed files.
+      const code = await run(['export', '--root', root, '-o', out], io);
+      expect(code).toBe(0);
+      const text = logs.join('\n');
+      expect(text).toContain('detected claude-code');
+      expect(text).toContain('credentials to re-supply');
+      expect(existsSync(out)).toBe(true);
+
+      const inspected = capture();
+      await run(['inspect', out], inspected.io);
+      expect(inspected.logs.join('\n')).toContain('github_token'); // requirement recovered
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('export errors with guidance when no framework is detected', async () => {
+    const root = tmp();
+    try {
+      const { io, errs } = capture();
+      expect(await run(['export', '--root', root], io)).toBe(1);
+      expect(errs.join('\n')).toContain('no known framework found');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('hub with no kind prints usage and fails', async () => {
     const { io, errs } = capture();
     expect(await run(['hub'], io)).toBe(1);

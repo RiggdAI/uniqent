@@ -92,6 +92,17 @@ interface ClaudeMcpEntry {
   args?: string[];
   type?: string;
   url?: string;
+  headers?: Record<string, string>;
+  env?: Record<string, string>;
+}
+
+/** A stable credential ref id from an MCP server id (e.g. "com.x/gh" → "com-x-gh_token"). */
+function credRefFor(id: string): string {
+  const slug = id
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return `${slug || 'mcp'}_token`;
 }
 
 export const claudeCodeAdapter: Adapter = {
@@ -193,23 +204,46 @@ export const claudeCodeAdapter: Adapter = {
         mcpServers?: Record<string, ClaudeMcpEntry>;
       };
       for (const [id, e] of Object.entries(parsed.mcpServers ?? {})) {
-        const server = e.command
-          ? {
-              id,
-              transport: 'stdio',
-              command: e.command,
-              args: e.args,
-              auth: { type: 'none' },
-              tools: { include: 'all' },
-            }
-          : {
-              id,
-              transport: e.type === 'sse' ? 'sse' : 'streamable-http',
-              url: e.url,
-              auth: { type: 'none' },
-              tools: { include: 'all' },
-            };
-        brain.addMcpServer(server);
+        if (e.command) {
+          brain.addMcpServer({
+            id,
+            transport: 'stdio',
+            command: e.command,
+            args: e.args,
+            auth: { type: 'none' },
+            tools: { include: 'all' },
+          });
+          continue;
+        }
+        // http/sse: recover the credential REQUIREMENT from any auth header — never its value —
+        // so the captured brain stays functional + shareable (and the secret-scan stays clean).
+        const headers = e.headers ?? {};
+        const authzKey = Object.keys(headers).find((h) => h.toLowerCase() === 'authorization');
+        const otherKey = Object.keys(headers).find((h) => h.toLowerCase() !== 'authorization');
+        const ref = credRefFor(id);
+        let auth: Record<string, unknown> = { type: 'none' };
+        if (authzKey && /^Bearer\s/i.test(headers[authzKey] ?? '')) {
+          auth = { type: 'bearer', credentialRef: ref };
+        } else if (otherKey) {
+          auth = { type: 'header', headerName: otherKey, credentialRef: ref };
+        }
+        brain.addMcpServer({
+          id,
+          transport: e.type === 'sse' ? 'sse' : 'streamable-http',
+          url: e.url,
+          auth,
+          tools: { include: 'all' },
+        });
+        if (auth.type !== 'none') {
+          brain.addCredential({
+            ref,
+            label: `${id} credential`,
+            type: auth.type === 'bearer' ? 'bearer' : 'header',
+            consumedBy: [`mcp:${id}`],
+            required: true,
+            help: 'Re-supplied locally at install; captured from the source agent without its value.',
+          });
+        }
       }
     } catch {
       /* no .mcp.json */
