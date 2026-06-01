@@ -166,6 +166,12 @@ export function Palette({ state, catalog, apply, selection, onSelect }: PaletteP
           active={selection === 'profile'}
           onClick={() => onSelect('profile')}
         />
+        <SelectRow
+          icon={Globe}
+          label="Browse memory hub…"
+          active={selection === 'memory-hub'}
+          onClick={() => onSelect('memory-hub')}
+        />
       </Section>
 
       <Section title="Channels">

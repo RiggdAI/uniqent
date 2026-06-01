@@ -219,6 +219,48 @@ describe('StudioSession', () => {
     expect(s.state().manifest.components.memory.facts).toBe(0); // not added
   });
 
+  it('searches the memory hub and pulls a pack into the brain (kinds preserved)', async () => {
+    const s = new StudioSession();
+    const orig = globalThis.fetch;
+    globalThis.fetch = (async (input: unknown) => {
+      const url = String(input);
+      if (/\/api\/v1\/memory\/[^?]/.test(url)) {
+        return new Response(
+          JSON.stringify({
+            facts: [
+              { kind: 'decision', text: 'use [[Postgres]] #db' },
+              { kind: 'fact', text: 'tune it for OLTP' },
+            ],
+          }),
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          packs: [
+            {
+              slug: 'platform',
+              name: 'Platform',
+              description: 'd',
+              tags: ['db'],
+              factCount: 2,
+              url: 'https://x/p.json',
+            },
+          ],
+        }),
+      );
+    }) as typeof fetch;
+    try {
+      const r = await s.searchMemoryHub('db', 'https://reg');
+      expect(r.results[0]?.slug).toBe('platform');
+      expect(r.results[0]?.factCount).toBe(2);
+      const n = await s.addMemoryPack('platform', 'https://reg');
+      expect(n).toBe(2);
+      expect(s.state().manifest.components.memory.facts).toBe(2);
+    } finally {
+      globalThis.fetch = orig;
+    }
+  });
+
   it('imports a skill from a URL', async () => {
     const s = new StudioSession();
     const orig = globalThis.fetch;

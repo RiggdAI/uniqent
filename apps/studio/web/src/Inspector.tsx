@@ -7,6 +7,7 @@ import type {
   InstallResult,
   McpHubResult,
   SkillHubResult,
+  MemoryPackResult,
 } from './types';
 import { api } from './api';
 import { Button } from './components/ui/button';
@@ -1210,7 +1211,100 @@ function ProfilePanel({ apply }: { apply: (p: Promise<StudioState>) => void }) {
   );
 }
 
+/** Browse the hosted memory hub (uniqent.ai) and add a pack's facts to the brain. */
+function MemoryHubPanel({ apply }: { apply: (p: Promise<StudioState>) => void }) {
+  const [registry, setRegistry] = useState('https://uniqent.ai');
+  const [query, setQuery] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [results, setResults] = useState<MemoryPackResult[]>([]);
+  const [errors, setErrors] = useState<Array<{ source: string; message: string }>>([]);
+  const [searched, setSearched] = useState(false);
+  const [added, setAdded] = useState<Set<string>>(new Set());
+
+  async function run(): Promise<void> {
+    setLoading(true);
+    try {
+      const r = await api.memoryHub(query, registry);
+      setResults(r.results);
+      setErrors(r.errors);
+      setSearched(true);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">
+        Pull a shareable memory pack from the hub into this brain — decisions, conventions, context.
+      </p>
+      <details className="rounded-lg border bg-secondary/30 px-3 py-2 text-sm">
+        <summary className="cursor-pointer select-none text-muted-foreground">Registry</summary>
+        <Input
+          className="mt-2 h-8"
+          value={registry}
+          onChange={(e) => setRegistry(e.target.value)}
+          data-testid="memory-hub-registry"
+        />
+      </details>
+      <div className="flex gap-2">
+        <Input
+          data-testid="memory-hub-query"
+          placeholder="e.g. architecture, onboarding"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && run()}
+        />
+        <Button data-testid="memory-hub-search" onClick={() => run()} disabled={loading}>
+          {loading ? 'Searching…' : 'Search'}
+        </Button>
+      </div>
+      {errors.map((e) => (
+        <p key={e.source} className="text-xs text-amber-500">
+          {e.source} unavailable: {e.message}
+        </p>
+      ))}
+      {searched && results.length === 0 && !loading && (
+        <p className="text-sm text-muted-foreground">No memory packs found.</p>
+      )}
+      <div className="space-y-2">
+        {results.map((r) => {
+          const isAdded = added.has(r.slug);
+          return (
+            <div key={r.slug} className="rounded-lg border p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <span className="truncate text-sm font-medium">{r.name}</span>
+                  <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
+                    {r.description}
+                  </p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    {r.factCount} facts{r.tags.length ? ` · ${r.tags.join(', ')}` : ''}
+                  </p>
+                </div>
+                <Button
+                  data-testid={`memory-hub-add-${r.slug}`}
+                  size="sm"
+                  variant={isAdded ? 'secondary' : 'outline'}
+                  disabled={isAdded}
+                  onClick={() => {
+                    apply(api.addMemoryPack(r.slug, registry));
+                    setAdded((prev) => new Set(prev).add(r.slug));
+                  }}
+                >
+                  {isAdded ? 'Added' : 'Add'}
+                </Button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function titleFor(selection: string): string {
+  if (selection === 'memory-hub') return 'Browse memory hub';
   if (selection === 'profile') return 'Profile (USER.md)';
   if (selection === 'hub-mcp') return 'Browse MCP hubs';
   if (selection === 'hub-skills') return 'Browse skill hubs';
@@ -1244,6 +1338,7 @@ export function Inspector(props: InspectorProps) {
         {selection === 'persona' && <PersonaEditor state={state} catalog={catalog} apply={apply} />}
         {selection === 'memory' && <MemoryEditor state={state} catalog={catalog} apply={apply} />}
         {selection === 'profile' && <ProfilePanel apply={apply} />}
+        {selection === 'memory-hub' && <MemoryHubPanel apply={apply} />}
         {selection.startsWith('mcp:') && (
           <McpDetails id={selection.slice(4)} catalog={catalog} apply={apply} onClose={onClose} />
         )}

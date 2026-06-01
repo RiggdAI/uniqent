@@ -10,6 +10,8 @@ import {
   installMcpHubResult,
   memoryGraph,
   parseMemoryMarkdown,
+  searchMemoryHub,
+  fetchMemoryPack,
 } from '@uniqent/builder';
 import type {
   BrainMeta,
@@ -18,7 +20,10 @@ import type {
   HubSearch,
   MemoryGraph,
   ImportedMemoryItem,
+  MemoryHubSearch,
 } from '@uniqent/builder';
+
+const DEFAULT_MEMORY_REGISTRY = 'https://uniqent.ai';
 import { validateBundle, generateKeypair, sign, pack, verify } from '@uniqent/core';
 import type { ValidationResult, Keypair } from '@uniqent/core';
 import type { Manifest } from '@uniqent/spec';
@@ -256,6 +261,25 @@ export class StudioSession {
     return memoryGraph(
       this.brain.listMemory().map((m) => ({ id: m.id, text: m.text, kind: m.kind })),
     );
+  }
+
+  /** Search the hosted memory hub (uniqent.ai by default) for shareable memory packs. */
+  searchMemoryHub(query: string, registry?: string): Promise<MemoryHubSearch> {
+    return searchMemoryHub(query, registry || DEFAULT_MEMORY_REGISTRY);
+  }
+
+  /** Pull a memory pack's facts from the hub into this brain (kinds preserved). Returns the count. */
+  async addMemoryPack(slug: string, registry?: string): Promise<number> {
+    const facts = await fetchMemoryPack(registry || DEFAULT_MEMORY_REGISTRY, slug);
+    for (const f of facts) {
+      this.brain.addMemory({
+        id: `fact-${++this.factCounter}`,
+        kind: f.kind || 'fact',
+        text: f.text,
+        createdAt: new Date().toISOString(),
+      });
+    }
+    return facts.length;
   }
 
   /** Parse a markdown/text document into structured memory items, WITHOUT importing them. */

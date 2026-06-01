@@ -10,6 +10,7 @@ import type {
   SkillHubResult,
   MemoryGraph,
   ImportedMemoryItem,
+  MemoryHubSearch,
 } from './types';
 
 async function unwrap<T>(res: Response): Promise<T> {
@@ -47,6 +48,10 @@ export const api = {
   memoryGraph: () => get<MemoryGraph>('/api/memory/graph'),
   previewMemory: (text: string) =>
     post<{ items: ImportedMemoryItem[]; graph: MemoryGraph }>('/api/memory/preview', { text }),
+  memoryHub: (query: string, registry?: string) =>
+    post<MemoryHubSearch>('/api/memory/hub/search', { query, registry }),
+  addMemoryPack: (slug: string, registry?: string) =>
+    post<StudioState>('/api/memory/hub/add', { slug, registry }),
   addMcp: (id: string) => post<StudioState>(`/api/mcp/catalog/${encodeURIComponent(id)}`, {}),
   addSkill: (name: string) =>
     post<StudioState>(`/api/skill/catalog/${encodeURIComponent(name)}`, {}),
