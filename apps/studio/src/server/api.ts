@@ -62,6 +62,23 @@ export async function handleApi(
   if (method === 'POST' && path === '/api/memory/preview') {
     return ok(session.previewMemoryImport(typeof b.text === 'string' ? b.text : ''));
   }
+  if (method === 'POST' && path === '/api/memory/hub/search') {
+    return ok(
+      await session.searchMemoryHub(
+        typeof b.query === 'string' ? b.query : '',
+        typeof b.registry === 'string' ? b.registry : undefined,
+      ),
+    );
+  }
+  if (method === 'POST' && path === '/api/memory/hub/add') {
+    if (typeof b.slug !== 'string' || !b.slug) return fail(400, 'slug is required');
+    try {
+      await session.addMemoryPack(b.slug, typeof b.registry === 'string' ? b.registry : undefined);
+      return ok(session.state());
+    } catch (e) {
+      return fail(502, (e as Error).message);
+    }
+  }
   if (method === 'GET' && path === '/api/profile') {
     return ok({ profile: session.getProfile() });
   }

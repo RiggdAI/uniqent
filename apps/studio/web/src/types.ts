@@ -149,3 +149,17 @@ export interface ImportedMemoryItem {
   entities: string[];
   tags: string[];
 }
+
+export interface MemoryPackResult {
+  source: string;
+  slug: string;
+  name: string;
+  description: string;
+  tags: string[];
+  factCount: number;
+  url: string;
+}
+export interface MemoryHubSearch {
+  results: MemoryPackResult[];
+  errors: Array<{ source: string; message: string }>;
+}
