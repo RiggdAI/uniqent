@@ -2,7 +2,7 @@ import { mkdir, writeFile, readFile, readdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { Bundle } from '@uniqent/core';
-import { Brain } from '@uniqent/builder';
+import { Brain, stripMemoryMarkup } from '@uniqent/builder';
 import type {
   Adapter,
   DetectResult,
@@ -81,7 +81,7 @@ function buildAgentsMd(bundle: Bundle): string {
   const facts = bundle.memoryFacts();
   if (facts.length > 0) {
     parts.push('## Memory', '');
-    for (const f of facts) parts.push(`- ${f.text}`);
+    for (const f of facts) parts.push(`- ${stripMemoryMarkup(f.text)}`);
     parts.push('');
   }
   return parts.join('\n');

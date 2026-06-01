@@ -2,7 +2,7 @@ import { mkdir, writeFile, readFile, readdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import type { Bundle } from '@uniqent/core';
 import { resolvePlaceholders } from '@uniqent/core';
-import { Brain } from '@uniqent/builder';
+import { Brain, stripMemoryMarkup } from '@uniqent/builder';
 import type { McpServer } from '@uniqent/spec';
 import type {
   Adapter,
@@ -68,7 +68,7 @@ function buildSoulMd(bundle: Bundle): string {
 
 function buildMemoryMd(bundle: Bundle): string {
   const parts: string[] = ['# Memory', ''];
-  for (const f of bundle.memoryFacts()) parts.push(`- ${f.text}`);
+  for (const f of bundle.memoryFacts()) parts.push(`- ${stripMemoryMarkup(f.text)}`);
   const profile = bundle.memoryProfile();
   if (profile && Object.keys(profile).length > 0) {
     parts.push('', '## User profile', '');

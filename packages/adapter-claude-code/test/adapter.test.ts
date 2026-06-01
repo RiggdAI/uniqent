@@ -21,7 +21,7 @@ function makeBundle() {
   b.addMemory({
     id: 'f1',
     kind: 'fact',
-    text: 'prefers TypeScript',
+    text: 'prefers [[TypeScript]] and [[pnpm]] #conventions', // Obsidian markup must be stripped on render
     createdAt: '2026-05-31T00:00:00.000Z',
   });
   b.addMcpFromCatalog('github');
@@ -63,7 +63,12 @@ describe('claudeCodeAdapter.apply', () => {
       );
 
       expect(existsSync(join(root, '.claude/skills/code-review/SKILL.md'))).toBe(true);
-      expect(readFileSync(join(root, 'AGENTS.md'), 'utf8')).toContain('Atlas');
+      const agents = readFileSync(join(root, 'AGENTS.md'), 'utf8');
+      expect(agents).toContain('Atlas');
+      // Obsidian wiki/tag syntax must NOT leak into the installed memory.
+      expect(agents).toContain('prefers TypeScript and pnpm');
+      expect(agents).not.toContain('[[');
+      expect(agents).not.toContain('#conventions');
       const mcp = JSON.parse(readFileSync(join(root, '.mcp.json'), 'utf8'));
       expect(mcp.mcpServers.github.type).toBe('http');
       expect(mcp.mcpServers.github.headers.Authorization).toBe(

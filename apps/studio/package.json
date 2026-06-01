@@ -19,7 +19,7 @@
     "@radix-ui/react-label": "^2.1.1",
     "@radix-ui/react-slot": "^1.1.1",
     "@xyflow/react": "^12.3.5",
-    "d3-force": "^3.0.0",
+    "react-force-graph-2d": "^1.25.0",
     "@uniqent/adapter-claude-code": "workspace:*",
     "@uniqent/adapter-hermes": "workspace:*",
     "@uniqent/adapter-openclaw": "workspace:*",
@@ -34,7 +34,6 @@
     "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
-    "@types/d3-force": "^3.0.10",
     "@types/node": "^22.10.2",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
