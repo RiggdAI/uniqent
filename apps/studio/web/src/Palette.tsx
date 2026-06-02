@@ -9,6 +9,8 @@ import {
   Workflow,
   Globe,
   UserRound,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react';
 import type { ComponentType } from 'react';
 import type { StudioState, CatalogView } from './types';
@@ -22,6 +24,48 @@ interface PaletteProps {
   apply: (p: Promise<StudioState>) => void;
   selection: string | null;
   onSelect: (s: string) => void;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
+}
+
+// The icon-rail entries when collapsed: the panels you navigate to (catalog "add" rows
+// stay in the expanded view). Each jumps straight to its inspector panel.
+const RAIL: Array<{ icon: ComponentType<{ className?: string }>; key: string; label: string }> = [
+  { icon: Brain, key: 'persona', label: 'Persona' },
+  { icon: Boxes, key: 'new-mcp', label: 'Stack (MCP)' },
+  { icon: Sparkles, key: 'new-skill', label: 'Skills' },
+  { icon: Database, key: 'memory', label: 'Memory' },
+  { icon: UserRound, key: 'profile', label: 'Profile' },
+  { icon: Workflow, key: 'new-task', label: 'Flows' },
+  { icon: Settings, key: 'agent', label: 'Config' },
+];
+
+function IconButton({
+  icon: Icon,
+  label,
+  active,
+  onClick,
+}: {
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      title={label}
+      aria-label={label}
+      onClick={onClick}
+      className={cn(
+        'flex size-9 items-center justify-center rounded-md transition-colors',
+        active
+          ? 'bg-secondary text-foreground'
+          : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground',
+      )}
+    >
+      <Icon className="size-4" />
+    </button>
+  );
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -90,12 +134,55 @@ function AddRow({
   );
 }
 
-export function Palette({ state, catalog, apply, selection, onSelect }: PaletteProps) {
+export function Palette({
+  state,
+  catalog,
+  apply,
+  selection,
+  onSelect,
+  collapsed,
+  onToggleCollapse,
+}: PaletteProps) {
   const mcpAdded = new Set(state.manifest.components.mcp);
   const skillAdded = new Set(state.manifest.components.skills);
   const channelAdded = new Set(state.manifest.components.channels);
+
+  if (collapsed) {
+    return (
+      <nav className="uq-scroll flex h-full flex-col items-center gap-1 overflow-auto p-2">
+        <button
+          title="Expand sidebar"
+          aria-label="Expand sidebar"
+          onClick={onToggleCollapse}
+          className="mb-1 flex size-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground"
+        >
+          <PanelLeftOpen className="size-4" />
+        </button>
+        {RAIL.map((it) => (
+          <IconButton
+            key={it.key}
+            icon={it.icon}
+            label={it.label}
+            active={selection === it.key}
+            onClick={() => onSelect(it.key)}
+          />
+        ))}
+      </nav>
+    );
+  }
+
   return (
-    <nav className="flex h-full flex-col gap-5 overflow-auto p-3">
+    <nav className="uq-scroll flex h-full flex-col gap-5 overflow-auto p-3">
+      <div className="-mb-2 flex justify-end">
+        <button
+          title="Collapse sidebar"
+          aria-label="Collapse sidebar"
+          onClick={onToggleCollapse}
+          className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground"
+        >
+          <PanelLeftClose className="size-4" />
+        </button>
+      </div>
       <Section title="Identity">
         <SelectRow
           icon={Brain}

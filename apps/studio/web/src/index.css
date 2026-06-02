@@ -99,3 +99,30 @@
 .react-flow__edge-textbg {
   fill: hsl(var(--background));
 }
+
+/* Custom, subtle scrollbar for the sidebars (palette + inspector). Thin, themed to the
+   design tokens, rounded, and darkening on hover. Firefox uses scrollbar-width/color. */
+.uq-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--border)) transparent;
+}
+.uq-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.uq-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.uq-scroll::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--border));
+  border-radius: 9999px;
+  /* inset the thumb so it reads as a slim pill with breathing room */
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+.uq-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: hsl(var(--muted-foreground) / 0.6);
+}
+.uq-scroll::-webkit-scrollbar-corner {
+  background: transparent;
+}

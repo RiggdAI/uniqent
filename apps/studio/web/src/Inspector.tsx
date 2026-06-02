@@ -1475,7 +1475,7 @@ export function Inspector(props: InspectorProps) {
           <X className="size-4" />
         </Button>
       </div>
-      <div className="flex-1 overflow-auto p-4">
+      <div className="uq-scroll flex-1 overflow-auto p-4">
         {selection === 'agent' && <ConfigEditor state={state} catalog={catalog} apply={apply} />}
         {selection === 'persona' && <PersonaEditor state={state} catalog={catalog} apply={apply} />}
         {selection === 'memory' && <MemoryEditor state={state} catalog={catalog} apply={apply} />}

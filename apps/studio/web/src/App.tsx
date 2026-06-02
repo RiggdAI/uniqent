@@ -21,6 +21,16 @@ export function App() {
   const [exportMsg, setExportMsg] = useState('');
   const [error, setError] = useState('');
   const [brainOpen, setBrainOpen] = useState(false);
+  const [paletteCollapsed, setPaletteCollapsed] = useState(
+    () => localStorage.getItem('uq.palette.collapsed') === '1',
+  );
+  function togglePalette(): void {
+    setPaletteCollapsed((c) => {
+      const next = !c;
+      localStorage.setItem('uq.palette.collapsed', next ? '1' : '0');
+      return next;
+    });
+  }
 
   useEffect(() => {
     Promise.all([api.catalog(), api.state()])
@@ -148,13 +158,20 @@ export function App() {
       </header>
 
       {/* Floating palette */}
-      <div className="absolute bottom-14 left-3 top-[4.25rem] z-10 w-56 overflow-hidden rounded-xl border bg-card/80 shadow-lg backdrop-blur">
+      <div
+        className={cn(
+          'absolute bottom-14 left-3 top-[4.25rem] z-10 overflow-hidden rounded-xl border bg-card/80 shadow-lg backdrop-blur transition-[width] duration-200',
+          paletteCollapsed ? 'w-14' : 'w-56',
+        )}
+      >
         <Palette
           state={state}
           catalog={catalog}
           apply={apply}
           selection={selection}
           onSelect={setSelection}
+          collapsed={paletteCollapsed}
+          onToggleCollapse={togglePalette}
         />
       </div>
 
