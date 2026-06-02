@@ -62,6 +62,26 @@ export async function handleApi(
   if (method === 'POST' && path === '/api/memory/preview') {
     return ok(session.previewMemoryImport(typeof b.text === 'string' ? b.text : ''));
   }
+  if (method === 'POST' && path === '/api/memory/vault/preview') {
+    if (typeof b.dir !== 'string' || !b.dir.trim()) return fail(400, 'vault folder path is required');
+    try {
+      return ok(await session.previewVault(b.dir.trim()));
+    } catch (e) {
+      return fail(400, `cannot read vault: ${(e as Error).message}`);
+    }
+  }
+  if (method === 'POST' && path === '/api/memory/vault/import') {
+    if (typeof b.dir !== 'string' || !b.dir.trim()) return fail(400, 'vault folder path is required');
+    try {
+      const stats = await session.importVaultDir(b.dir.trim(), {
+        persona: b.persona !== false,
+        profile: b.profile !== false,
+      });
+      return ok({ state: session.state(), stats });
+    } catch (e) {
+      return fail(400, `cannot import vault: ${(e as Error).message}`);
+    }
+  }
   if (method === 'POST' && path === '/api/memory/hub/search') {
     return ok(
       await session.searchMemoryHub(

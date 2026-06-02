@@ -163,3 +163,18 @@ export interface MemoryHubSearch {
   results: MemoryPackResult[];
   errors: Array<{ source: string; message: string }>;
 }
+
+export interface VaultImportStats {
+  files: number;
+  personaFrom?: string;
+  profileFrom?: string;
+  memoryFiles: number;
+  items: number;
+  episodic: number;
+}
+export interface VaultImport {
+  persona?: string;
+  profile?: Record<string, string>;
+  items: Array<ImportedMemoryItem & { source: string }>;
+  stats: VaultImportStats;
+}

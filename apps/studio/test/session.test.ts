@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtempSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { StudioSession } from '../src/server/session';
@@ -339,6 +339,40 @@ describe('StudioSession', () => {
     const root = mkdtempSync(join(tmpdir(), 'uniqent-inv-'));
     try {
       await expect(s.install('claude-code', root, {})).rejects.toThrow(/invalid/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('imports a second-brain vault from a folder (persona/profile/memory + episodic + skips)', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'uniqent-vault-'));
+    try {
+      mkdirSync(join(root, 'notes'));
+      mkdirSync(join(root, 'daily'));
+      mkdirSync(join(root, '.obsidian'));
+      writeFileSync(join(root, 'SOUL.md'), '# Soul\nCalm precise engineer.\n');
+      writeFileSync(join(root, 'USER.md'), '**Name:** Max\n- Role: founder\n');
+      writeFileSync(join(root, 'MEMORY.md'), '- Decision: chose [[Postgres]] #db\n- likes [[pnpm]]\n');
+      writeFileSync(join(root, 'notes', 'arch.md'), '[[Auth-Service]] owns sessions #arch\n');
+      writeFileSync(join(root, 'daily', '2026-06-01.md'), 'shipped [[Billing]] #milestone\n');
+      writeFileSync(join(root, '.obsidian', 'workspace.json'), '{}'); // must be skipped
+
+      const s = new StudioSession();
+      s.setMeta({ name: 'demo' });
+
+      const pv = await s.previewVault(root);
+      expect(pv.result.stats).toMatchObject({ memoryFiles: 3, items: 4, episodic: 1 });
+
+      const stats = await s.importVaultDir(root);
+      expect(stats.personaFrom).toBe('SOUL.md');
+      expect(stats.profileFrom).toBe('USER.md');
+
+      const c = s.state().manifest.components;
+      expect(c.identity).toBe(true); // persona set
+      expect(c.memory.facts).toBe(3);
+      expect(c.memory.episodic).toBe(1); // the dated daily note
+      expect(c.memory.hasProfile).toBe(true);
+      expect(s.getProfile()).toMatchObject({ Name: 'Max', Role: 'founder' });
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
