@@ -56,6 +56,11 @@ export const api = {
     post<MemoryHubSearch>('/api/memory/hub/search', { query, registry }),
   addMemoryPack: (slug: string, registry?: string) =>
     post<StudioState>('/api/memory/hub/add', { slug, registry }),
+  publishMemory: (token: string, registry?: string) =>
+    post<{ result: { slug: string; factCount: number; url?: string; persisted?: boolean } }>(
+      '/api/memory/hub/publish',
+      { token, registry },
+    ),
   previewVault: (dir: string) =>
     post<{ result: VaultImport; graph: MemoryGraph }>('/api/memory/vault/preview', { dir }),
   importVault: (dir: string, opts?: { persona?: boolean; profile?: boolean }) =>

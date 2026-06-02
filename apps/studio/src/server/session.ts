@@ -12,6 +12,7 @@ import {
   parseMemoryMarkdown,
   searchMemoryHub,
   fetchMemoryPack,
+  publishMemoryPack,
   importVault,
 } from '@uniqent/builder';
 import type {
@@ -22,6 +23,7 @@ import type {
   MemoryGraph,
   ImportedMemoryItem,
   MemoryHubSearch,
+  PublishResult,
   VaultFile,
   VaultImport,
 } from '@uniqent/builder';
@@ -301,6 +303,26 @@ export class StudioSession {
   /** Search the hosted memory hub (uniqent.ai by default) for shareable memory packs. */
   searchMemoryHub(query: string, registry?: string): Promise<MemoryHubSearch> {
     return searchMemoryHub(query, registry || DEFAULT_MEMORY_REGISTRY);
+  }
+
+  /**
+   * Publish this brain's SHAREABLE memory as a pack to the hub (default uniqent.ai). Personal
+   * facts never leave — they're dropped here and again server-side. Needs a publish token.
+   */
+  publishMemoryPack(token: string, registry?: string): Promise<PublishResult> {
+    const m = this.state().manifest;
+    const facts = this.brain
+      .listMemory()
+      .filter((f) => f.visibility !== 'personal')
+      .map((f) => ({ kind: f.kind, text: f.text }));
+    if (facts.length === 0) throw new Error('no shareable memory to publish');
+    return publishMemoryPack(registry || DEFAULT_MEMORY_REGISTRY, token, {
+      slug: m.name,
+      name: m.displayName,
+      description: m.description,
+      tags: m.tags,
+      facts,
+    });
   }
 
   /** Pull a memory pack's facts from the hub into this brain (kinds preserved). Returns the count. */

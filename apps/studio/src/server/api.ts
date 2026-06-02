@@ -109,6 +109,18 @@ export async function handleApi(
       ),
     );
   }
+  if (method === 'POST' && path === '/api/memory/hub/publish') {
+    if (typeof b.token !== 'string' || !b.token) return fail(400, 'token is required');
+    try {
+      const result = await session.publishMemoryPack(
+        b.token,
+        typeof b.registry === 'string' ? b.registry : undefined,
+      );
+      return ok({ result });
+    } catch (e) {
+      return fail(502, (e as Error).message);
+    }
+  }
   if (method === 'POST' && path === '/api/memory/hub/add') {
     if (typeof b.slug !== 'string' || !b.slug) return fail(400, 'slug is required');
     try {

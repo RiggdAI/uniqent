@@ -1439,6 +1439,10 @@ function MemoryHubPanel({ apply }: { apply: (p: Promise<StudioState>) => void })
   const [errors, setErrors] = useState<Array<{ source: string; message: string }>>([]);
   const [searched, setSearched] = useState(false);
   const [added, setAdded] = useState<Set<string>>(new Set());
+  const [token, setToken] = useState('');
+  const [publishing, setPublishing] = useState(false);
+  const [published, setPublished] = useState<{ slug: string; factCount: number } | null>(null);
+  const [publishErr, setPublishErr] = useState<string | null>(null);
 
   async function run(): Promise<void> {
     setLoading(true);
@@ -1449,6 +1453,20 @@ function MemoryHubPanel({ apply }: { apply: (p: Promise<StudioState>) => void })
       setSearched(true);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function publish(): Promise<void> {
+    setPublishing(true);
+    setPublishErr(null);
+    setPublished(null);
+    try {
+      const { result } = await api.publishMemory(token, registry);
+      setPublished({ slug: result.slug, factCount: result.factCount });
+    } catch (e) {
+      setPublishErr((e as Error).message);
+    } finally {
+      setPublishing(false);
     }
   }
 
@@ -1517,6 +1535,36 @@ function MemoryHubPanel({ apply }: { apply: (p: Promise<StudioState>) => void })
             </div>
           );
         })}
+      </div>
+
+      <div className="space-y-2 border-t pt-3">
+        <Label>Publish this brain's memory</Label>
+        <p className="text-xs text-muted-foreground">
+          Share this brain's <b>shareable</b> facts as a pack on the hub (personal memory never
+          leaves). Needs a publish token.
+        </p>
+        <div className="flex gap-2">
+          <Input
+            data-testid="memory-hub-token"
+            type="password"
+            placeholder="publish token"
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+          />
+          <Button
+            data-testid="memory-hub-publish"
+            onClick={() => publish()}
+            disabled={publishing || token.trim().length === 0}
+          >
+            {publishing ? 'Publishing…' : 'Publish'}
+          </Button>
+        </div>
+        {publishErr && <p className="text-xs text-red-500">{publishErr}</p>}
+        {published && (
+          <p className="text-xs text-emerald-500">
+            Published <b>{published.slug}</b> ({published.factCount} fact(s)) to the hub.
+          </p>
+        )}
       </div>
     </div>
   );

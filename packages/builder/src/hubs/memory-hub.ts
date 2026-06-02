@@ -47,6 +47,51 @@ export async function searchMemoryHub(
   }
 }
 
+export interface MemoryPackUpload {
+  slug: string;
+  name: string;
+  description?: string;
+  tags?: string[];
+  facts: Array<{ kind: string; text: string; visibility?: string }>;
+}
+export interface PublishResult {
+  ok: boolean;
+  slug: string;
+  factCount: number;
+  url?: string;
+  persisted?: boolean;
+}
+
+/**
+ * Publish a memory pack to a hosted registry's `POST /api/v1/memory` (bearer-token gated).
+ * `registry` is the SITE base (e.g. https://uniqent.ai), not an index.json URL. The server
+ * scrubs personal-visibility facts before hosting. Throws with the server's message on failure.
+ */
+export async function publishMemoryPack(
+  registry: string,
+  token: string,
+  pack: MemoryPackUpload,
+  signal?: AbortSignal,
+): Promise<PublishResult> {
+  if (!token) throw new Error('a publish token is required');
+  if (!pack.slug || !pack.name) throw new Error('slug and name are required');
+  const res = await fetch(`${base(registry)}/api/v1/memory`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+    body: JSON.stringify(pack),
+    ...(signal ? { signal } : {}),
+  });
+  const json = (await res.json().catch(() => ({}))) as Partial<PublishResult> & { error?: string };
+  if (!res.ok) throw new Error(json.error ?? `${res.status} ${res.statusText}`);
+  return {
+    ok: json.ok ?? true,
+    slug: json.slug ?? pack.slug,
+    factCount: json.factCount ?? 0,
+    url: json.url,
+    persisted: json.persisted,
+  };
+}
+
 /** Fetch a memory pack's facts from the registry. */
 export async function fetchMemoryPack(
   registry: string,

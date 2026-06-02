@@ -22,8 +22,10 @@ import {
   defaultSkillSources,
   Brain,
   importVault,
+  parseMemoryMarkdown,
+  publishMemoryPack,
 } from '@uniqent/builder';
-import type { VaultFile } from '@uniqent/builder';
+import type { VaultFile, MemoryPackUpload } from '@uniqent/builder';
 import { fetchIndex, findEntry, looksLikeSlug, registryUrl } from './registry.js';
 
 export interface CliIo {
@@ -608,6 +610,79 @@ async function importVaultCmd(args: string[], io: CliIo): Promise<number> {
   return 0;
 }
 
+const DEFAULT_HUB = 'https://uniqent.ai';
+
+/** Publish a memory pack to a hosted hub (default uniqent.ai). Accepts a .json pack or .md/.txt. */
+async function publishMemoryCmd(args: string[], io: CliIo): Promise<number> {
+  const { positionals, flags } = parseArgs(args);
+  const file = positionals[0];
+  if (!file) {
+    io.error('publish-memory: missing <pack.json|notes.md>');
+    return 1;
+  }
+  const token = typeof flags.token === 'string' ? flags.token : process.env.UNIQENT_PUBLISH_TOKEN;
+  if (!token) {
+    io.error('publish-memory: missing --token <value> (or set UNIQENT_PUBLISH_TOKEN)');
+    return 1;
+  }
+  const registry = typeof flags.registry === 'string' ? flags.registry : DEFAULT_HUB;
+
+  let pack: MemoryPackUpload;
+  try {
+    const raw = await readFile(file, 'utf8');
+    if (file.endsWith('.json')) {
+      const parsed = JSON.parse(raw) as Partial<MemoryPackUpload> & {
+        facts?: MemoryPackUpload['facts'];
+      };
+      const facts = Array.isArray(parsed.facts) ? parsed.facts : [];
+      pack = {
+        slug: (typeof flags.slug === 'string' ? flags.slug : parsed.slug) ?? '',
+        name: (typeof flags.name === 'string' ? flags.name : parsed.name) ?? '',
+        description: typeof flags.description === 'string' ? flags.description : parsed.description,
+        tags: typeof flags.tags === 'string' ? splitCsv(flags.tags) : parsed.tags,
+        facts,
+      };
+    } else {
+      // markdown/text → facts (kinds + [[links]]/#tags preserved); slug/name from flags
+      const items = parseMemoryMarkdown(raw);
+      pack = {
+        slug: typeof flags.slug === 'string' ? flags.slug : '',
+        name: typeof flags.name === 'string' ? flags.name : '',
+        description: typeof flags.description === 'string' ? flags.description : undefined,
+        tags: typeof flags.tags === 'string' ? splitCsv(flags.tags) : undefined,
+        facts: items.map((it) => ({ kind: it.kind, text: it.text })),
+      };
+    }
+  } catch (e) {
+    io.error(`publish-memory: cannot read ${file}: ${(e as Error).message}`);
+    return 1;
+  }
+  if (!pack.slug || !pack.name) {
+    io.error(
+      'publish-memory: slug and name required (pass --slug and --name, or set them in the .json)',
+    );
+    return 1;
+  }
+
+  try {
+    const r = await publishMemoryPack(registry, token, pack);
+    io.log(
+      `published ${r.slug} (${r.factCount} fact(s))${r.url ? ` → ${r.url}` : ''}${r.persisted === false ? ' (stored, not indexed)' : ''}`,
+    );
+    return 0;
+  } catch (e) {
+    io.error(`publish-memory: ${(e as Error).message}`);
+    return 1;
+  }
+}
+
+function splitCsv(s: string): string[] {
+  return s
+    .split(',')
+    .map((t) => t.trim())
+    .filter(Boolean);
+}
+
 export async function run(argv: string[], io: CliIo): Promise<number> {
   const [cmd, ...rest] = argv;
   if (cmd === 'inspect') return inspect(rest, io);
@@ -618,10 +693,11 @@ export async function run(argv: string[], io: CliIo): Promise<number> {
   if (cmd === 'hub') return hub(rest, io);
   if (cmd === 'export') return exportCmd(rest, io);
   if (cmd === 'import-vault') return importVaultCmd(rest, io);
+  if (cmd === 'publish-memory') return publishMemoryCmd(rest, io);
   if (cmd === 'keygen') return keygen(rest, io);
   if (cmd === 'sign') return signCmd(rest, io);
   io.error(
-    'usage: uniqent <inspect|install|validate|pack|search|hub|export|import-vault|keygen|sign> <file|dir|url|slug|query> [options]',
+    'usage: uniqent <inspect|install|validate|pack|search|hub|export|import-vault|publish-memory|keygen|sign> <file|dir|url|slug|query> [options]',
   );
   io.error(
     '  install <file|url|slug> --target <id> --root <dir> --cred <ref>=<value> [--registry <url>] [--allow-unsigned] [--yes]',
@@ -633,6 +709,9 @@ export async function run(argv: string[], io: CliIo): Promise<number> {
   );
   io.error(
     '  import-vault <dir> [--name <n>] [-o <file>] [--sign|--key <k>]   (Obsidian/second-brain → .uniqent)',
+  );
+  io.error(
+    '  publish-memory <pack.json|notes.md> --slug <s> --name <n> [--registry <site>] [--token <t>] [--tags a,b]',
   );
   io.error('  keygen [-o <keyfile>]    sign <file> --key <keyfile> [-o]    install … --dry-run');
   return cmd ? 1 : 0;
