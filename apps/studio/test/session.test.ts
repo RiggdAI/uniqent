@@ -352,7 +352,10 @@ describe('StudioSession', () => {
       mkdirSync(join(root, '.obsidian'));
       writeFileSync(join(root, 'SOUL.md'), '# Soul\nCalm precise engineer.\n');
       writeFileSync(join(root, 'USER.md'), '**Name:** Max\n- Role: founder\n');
-      writeFileSync(join(root, 'MEMORY.md'), '- Decision: chose [[Postgres]] #db\n- likes [[pnpm]]\n');
+      writeFileSync(
+        join(root, 'MEMORY.md'),
+        '- Decision: chose [[Postgres]] #db\n- likes [[pnpm]]\n',
+      );
       writeFileSync(join(root, 'notes', 'arch.md'), '[[Auth-Service]] owns sessions #arch\n');
       writeFileSync(join(root, 'daily', '2026-06-01.md'), 'shipped [[Billing]] #milestone\n');
       writeFileSync(join(root, '.obsidian', 'workspace.json'), '{}'); // must be skipped

@@ -373,12 +373,7 @@ function VaultImportPanel({ apply }: { apply: (p: Promise<StudioState>) => void 
           {preview.items.length > 6 && (
             <div className="text-muted-foreground">+{preview.items.length - 6} more…</div>
           )}
-          <Button
-            data-testid="vault-import"
-            size="sm"
-            disabled={busy}
-            onClick={doImport}
-          >
+          <Button data-testid="vault-import" size="sm" disabled={busy} onClick={doImport}>
             Import into brain
           </Button>
         </div>

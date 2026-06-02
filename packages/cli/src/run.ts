@@ -517,7 +517,10 @@ async function readVaultDir(dir: string): Promise<VaultFile[]> {
       const child = join(abs, e.name);
       if (e.isDirectory()) await walk(child);
       else if (e.isFile() && e.name.toLowerCase().endsWith('.md'))
-        files.push({ path: relative(dir, child).split(sep).join('/'), content: await readFile(child, 'utf8') });
+        files.push({
+          path: relative(dir, child).split(sep).join('/'),
+          content: await readFile(child, 'utf8'),
+        });
     }
   };
   await walk(dir);
@@ -548,10 +551,13 @@ async function importVaultCmd(args: string[], io: CliIo): Promise<number> {
     return 1;
   }
   const result = importVault(files);
-  const name = slugify(typeof flags.name === 'string' ? flags.name : basename(dir.replace(/\/+$/, '')));
+  const name = slugify(
+    typeof flags.name === 'string' ? flags.name : basename(dir.replace(/\/+$/, '')),
+  );
   const brain = Brain.create({
     name,
-    displayName: typeof flags.name === 'string' ? flags.name : basename(dir.replace(/\/+$/, '')) || name,
+    displayName:
+      typeof flags.name === 'string' ? flags.name : basename(dir.replace(/\/+$/, '')) || name,
     version: typeof flags.version === 'string' ? flags.version : '0.1.0',
     description:
       typeof flags.description === 'string' ? flags.description : `Imported from ${basename(dir)}`,
@@ -574,7 +580,9 @@ async function importVaultCmd(args: string[], io: CliIo): Promise<number> {
   const bundle = brain.toBundle();
   const valid = validateBundle(bundle);
   if (!valid.ok) {
-    io.error(`import-vault: produced an invalid bundle: ${valid.errors.map((e) => e.message).join('; ')}`);
+    io.error(
+      `import-vault: produced an invalid bundle: ${valid.errors.map((e) => e.message).join('; ')}`,
+    );
     return 1;
   }
   const findings = scanForSecrets(bundle);
@@ -594,7 +602,9 @@ async function importVaultCmd(args: string[], io: CliIo): Promise<number> {
   const out = typeof flags.out === 'string' ? flags.out : `${name}.uniqent`;
   await writeFile(out, await packBundle(signed));
   const v = await verify(signed);
-  io.log(`wrote ${out} (${v.signed ? 'signed ✓' : 'unsigned'}). Inspect with: uniqent inspect ${out}`);
+  io.log(
+    `wrote ${out} (${v.signed ? 'signed ✓' : 'unsigned'}). Inspect with: uniqent inspect ${out}`,
+  );
   return 0;
 }
 

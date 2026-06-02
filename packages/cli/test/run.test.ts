@@ -546,7 +546,10 @@ describe('uniqent cli', () => {
       writeFileSync(join(vault, 'notes', 'a.md'), '[[Auth-Service]] owns sessions #arch\n');
 
       const cap = capture();
-      const code = await run(['import-vault', vault, '--name', 'my-brain', '--sign', '-o', out], cap.io);
+      const code = await run(
+        ['import-vault', vault, '--name', 'my-brain', '--sign', '-o', out],
+        cap.io,
+      );
       expect(code).toBe(0);
       expect(existsSync(out)).toBe(true);
 
@@ -556,7 +559,9 @@ describe('uniqent cli', () => {
       expect(ins.logs.join('\n')).toContain('signature: valid');
 
       const inst = capture();
-      expect(await run(['install', out, '--target', 'claude-code', '--root', root, '--yes'], inst.io)).toBe(0);
+      expect(
+        await run(['install', out, '--target', 'claude-code', '--root', root, '--yes'], inst.io),
+      ).toBe(0);
       const agents = readFileSync(join(root, 'AGENTS.md'), 'utf8');
       expect(agents).toContain('Precise assistant');
       expect(agents).toContain('Postgres');

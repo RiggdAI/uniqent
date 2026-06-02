@@ -12,7 +12,10 @@ const vault: VaultFile[] = [
     content:
       '# Memory\n- Decision: standardized on [[Postgres]] over [[Mongo]] #database\n- prefers [[TypeScript]] strict mode #conventions\n',
   },
-  { path: 'notes/architecture.md', content: '# Arch\n[[Auth-Service]] owns sessions #architecture\n' },
+  {
+    path: 'notes/architecture.md',
+    content: '# Arch\n[[Auth-Service]] owns sessions #architecture\n',
+  },
   { path: 'daily/2026-06-01.md', content: '# Mon\nshipped the billing rewrite #milestone\n' },
   { path: '.obsidian/workspace.json', content: '{}' }, // ignored (not .md, but guard anyway)
 ];

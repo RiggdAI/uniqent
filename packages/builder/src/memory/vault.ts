@@ -63,7 +63,10 @@ export function parseProfile(md: string): Record<string, string> {
     const line = raw.trim();
     if (!line || /^#{1,6}\s/.test(line)) continue; // skip blanks + headings
     // Drop a leading bullet and bold/italic markers so "**Name:** Max" matches "Name: Max".
-    const clean = line.replace(/^[-*+]\s+/, '').replace(/\*\*|__/g, '').trim();
+    const clean = line
+      .replace(/^[-*+]\s+/, '')
+      .replace(/\*\*|__/g, '')
+      .trim();
     const m = clean.match(PROFILE_LINE);
     if (m && m[1] && m[2]) {
       const key = stripMemoryMarkup(m[1]).trim();
