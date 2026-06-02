@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { X, Trash2, KeyRound } from 'lucide-react';
 import type {
   StudioState,
@@ -44,24 +44,39 @@ function Field({
   );
 }
 
+// Lazy-loaded so TipTap/ProseMirror (~165KB gz) only ships when a text panel opens.
+const RichEditorLazy = lazy(() =>
+  import('./components/ui/rich-editor').then((m) => ({ default: m.RichEditor })),
+);
+function RichEditor(props: { value: string; onChange: (md: string) => void; testid?: string }) {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-[200px] animate-pulse rounded-md border border-input bg-secondary/20" />
+      }
+    >
+      <RichEditorLazy {...props} />
+    </Suspense>
+  );
+}
+
 function PersonaEditor({ state, apply }: Omit<InspectorProps, 'selection' | 'onClose'>) {
-  const [persona, setPersona] = useState('');
+  const [persona, setPersona] = useState(state.persona ?? '');
+  const dirty = persona !== (state.persona ?? '');
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">Personality, voice, role, and goals.</p>
-      <Textarea
-        data-testid="persona-input"
-        className="min-h-[240px] font-mono text-[13px] leading-relaxed"
-        placeholder={'# Persona\nYou are a helpful, precise engineering assistant…'}
-        value={persona}
-        onChange={(e) => setPersona(e.target.value)}
-      />
+      <RichEditor testid="persona-input" value={persona} onChange={setPersona} />
       <div className="flex items-center justify-between">
         <Badge variant={state.manifest.components.identity ? 'success' : 'outline'}>
           {state.manifest.components.identity ? 'identity set' : 'no identity yet'}
         </Badge>
-        <Button data-testid="persona-save" onClick={() => apply(api.setPersona(persona))}>
-          Save persona
+        <Button
+          data-testid="persona-save"
+          disabled={!dirty}
+          onClick={() => apply(api.setPersona(persona))}
+        >
+          {dirty ? 'Save persona' : 'Saved'}
         </Button>
       </div>
     </div>
@@ -378,6 +393,30 @@ function VaultImportPanel({ apply }: { apply: (p: Promise<StudioState>) => void 
           </Button>
         </div>
       )}
+    </div>
+  );
+}
+
+function AboutEditor({ state, apply }: Omit<InspectorProps, 'selection' | 'onClose'>) {
+  const [readme, setReadme] = useState(state.readme ?? '');
+  const dirty = readme !== (state.readme ?? '');
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">
+        A full description of this brain — what it does, how to use it, what it needs. Travels in
+        the bundle as <code className="rounded bg-secondary px-1">README.md</code> and shows on the
+        brain page.
+      </p>
+      <RichEditor testid="readme-input" value={readme} onChange={setReadme} />
+      <div className="flex items-center justify-end">
+        <Button
+          data-testid="readme-save"
+          disabled={!dirty}
+          onClick={() => apply(api.setReadme(readme))}
+        >
+          {dirty ? 'Save about' : 'Saved'}
+        </Button>
+      </div>
     </div>
   );
 }
@@ -1453,6 +1492,7 @@ function titleFor(selection: string): string {
   if (selection === 'install') return 'Install';
   if (selection === 'agent') return 'Config';
   if (selection === 'persona') return 'Persona';
+  if (selection === 'about') return 'About this brain';
   if (selection === 'memory') return 'Memory';
   if (selection === 'new-task') return 'New flow';
   if (selection === 'new-skill') return 'Custom skill';
@@ -1478,6 +1518,7 @@ export function Inspector(props: InspectorProps) {
       <div className="uq-scroll flex-1 overflow-auto p-4">
         {selection === 'agent' && <ConfigEditor state={state} catalog={catalog} apply={apply} />}
         {selection === 'persona' && <PersonaEditor state={state} catalog={catalog} apply={apply} />}
+        {selection === 'about' && <AboutEditor state={state} catalog={catalog} apply={apply} />}
         {selection === 'memory' && <MemoryEditor state={state} catalog={catalog} apply={apply} />}
         {selection === 'profile' && <ProfilePanel apply={apply} />}
         {selection === 'memory-hub' && <MemoryHubPanel apply={apply} />}

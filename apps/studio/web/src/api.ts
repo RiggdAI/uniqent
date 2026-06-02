@@ -40,6 +40,7 @@ export const api = {
   setMeta: (meta: Record<string, unknown>) => post<StudioState>('/api/meta', meta),
   setTargets: (targets: string[]) => post<StudioState>('/api/targets', { targets }),
   setPersona: (persona: string) => post<StudioState>('/api/persona', { persona }),
+  setReadme: (readme: string) => post<StudioState>('/api/readme', { readme }),
   addMemory: (text: string, importance?: number) =>
     post<StudioState>('/api/memory', { text, importance }),
   getProfile: () => get<{ profile: Record<string, string> }>('/api/profile'),

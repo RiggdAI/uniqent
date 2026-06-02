@@ -72,4 +72,19 @@ describe('Brain', () => {
     const round = Brain.fromBundle(first).toBundle();
     expect(canonicalDigest(round)).toBe(canonicalDigest(first));
   });
+
+  it('carries a README ("about this brain") into the bundle and back', () => {
+    const b = Brain.create(baseMeta());
+    b.setPersona('# Persona\nHi.\n');
+    b.setReadme('# Acme\nA coding agent for **TypeScript** repos.\n');
+    const bundle = b.toBundle();
+    expect(bundle.readme()).toContain('A coding agent');
+    // round-trips through fromBundle and is part of the signed digest (same file set)
+    const round = Brain.fromBundle(bundle);
+    expect(round.getReadme()).toBe('# Acme\nA coding agent for **TypeScript** repos.\n');
+    expect(canonicalDigest(round.toBundle())).toBe(canonicalDigest(bundle));
+    // empty/blank readme clears it (no README.md file)
+    b.setReadme('   ');
+    expect(b.toBundle().readme()).toBeUndefined();
+  });
 });

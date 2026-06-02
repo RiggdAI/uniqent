@@ -51,6 +51,10 @@ export interface Manifest {
 export interface StudioState {
   manifest: Manifest;
   validation: ValidationResult;
+  /** Current persona markdown (so the editor preloads instead of opening blank). */
+  persona?: string;
+  /** Long-form "about this brain" README markdown (travels in the bundle as README.md). */
+  readme?: string;
 }
 
 export interface CatalogView {

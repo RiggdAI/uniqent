@@ -28,6 +28,7 @@ const dec = new TextDecoder();
 export const PATHS = {
   manifest: 'uniqent.json',
   signature: 'signature.json',
+  readme: 'README.md',
   persona: 'identity/persona.md',
   policies: 'identity/policies.md',
   profile: 'memory/profile.json',
@@ -106,6 +107,10 @@ export class Bundle {
     if (!r.success)
       throw new BundleFormatError(`${PATHS.signature} failed schema: ${r.error.message}`);
     return r.data;
+  }
+
+  readme(): string | undefined {
+    return this.getText(PATHS.readme);
   }
 
   persona(): string | undefined {

@@ -47,6 +47,7 @@ interface SkillEntry {
 export class Brain {
   private meta: BrainMeta;
   private targets: string[] = [];
+  private readmeMd?: string;
   private personaMd?: string;
   private policiesMd?: string;
   private profile?: TMemoryProfile;
@@ -77,6 +78,16 @@ export class Brain {
   }
   setPersona(md: string): void {
     this.personaMd = md;
+  }
+  getPersona(): string | undefined {
+    return this.personaMd;
+  }
+  /** Long-form "about this brain" README (markdown). Travels in the bundle as README.md. */
+  setReadme(md: string): void {
+    this.readmeMd = md.trim() ? md : undefined;
+  }
+  getReadme(): string | undefined {
+    return this.readmeMd;
   }
   setPolicies(md: string): void {
     this.policiesMd = md;
@@ -221,6 +232,7 @@ export class Brain {
 
   toBundle(): Bundle {
     const b = Bundle.empty();
+    if (this.readmeMd !== undefined) b.set(PATHS.readme, this.readmeMd);
     if (this.personaMd !== undefined) b.set(PATHS.persona, this.personaMd);
     if (this.policiesMd !== undefined) b.set(PATHS.policies, this.policiesMd);
     if (this.profile !== undefined) b.set(PATHS.profile, JSON.stringify(this.profile, null, 2));
@@ -266,6 +278,8 @@ export class Brain {
       tags: [...m.tags],
     });
     brain.targets = [...m.compatibility.targets];
+    const readme = bundle.readme();
+    if (readme !== undefined) brain.readmeMd = readme;
     const persona = bundle.persona();
     if (persona !== undefined) brain.personaMd = persona;
     const policies = bundle.policies();

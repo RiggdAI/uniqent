@@ -92,6 +92,8 @@ export interface CatalogView {
 export interface StudioState {
   manifest: Manifest;
   validation: ValidationResult;
+  persona?: string;
+  readme?: string;
 }
 
 export interface ExportResult {
@@ -176,6 +178,11 @@ export class StudioSession {
 
   setPersona(md: string): void {
     this.brain.setPersona(md);
+  }
+
+  /** The brain's long-form README ("about this brain"), travels in the bundle as README.md. */
+  setReadme(md: string): void {
+    this.brain.setReadme(md);
   }
 
   addFact(input: {
@@ -491,7 +498,12 @@ export class StudioSession {
 
   state(): StudioState {
     const bundle = this.brain.toBundle();
-    return { manifest: bundle.manifest(), validation: validateBundle(bundle) };
+    return {
+      manifest: bundle.manifest(),
+      validation: validateBundle(bundle),
+      persona: this.brain.getPersona(),
+      readme: this.brain.getReadme(),
+    };
   }
 
   async export(opts: { sign?: boolean } = {}): Promise<ExportResult> {

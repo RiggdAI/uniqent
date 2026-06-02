@@ -36,6 +36,10 @@ export async function handleApi(
     session.setPersona(typeof b.persona === 'string' ? b.persona : '');
     return ok(session.state());
   }
+  if (method === 'POST' && path === '/api/readme') {
+    session.setReadme(typeof b.readme === 'string' ? b.readme : '');
+    return ok(session.state());
+  }
   if (method === 'POST' && path === '/api/memory') {
     if (typeof b.text !== 'string' || b.text.length === 0)
       return fail(400, 'memory text is required');
