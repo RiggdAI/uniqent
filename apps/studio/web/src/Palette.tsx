@@ -11,7 +11,6 @@ import {
   UserRound,
   PanelLeftClose,
   PanelLeftOpen,
-  FileText,
 } from 'lucide-react';
 import type { ComponentType } from 'react';
 import type { StudioState, CatalogView } from './types';
@@ -33,7 +32,6 @@ interface PaletteProps {
 // stay in the expanded view). Each jumps straight to its inspector panel.
 const RAIL: Array<{ icon: ComponentType<{ className?: string }>; key: string; label: string }> = [
   { icon: Brain, key: 'persona', label: 'Persona' },
-  { icon: FileText, key: 'about', label: 'About (README)' },
   { icon: Boxes, key: 'new-mcp', label: 'Stack (MCP)' },
   { icon: Sparkles, key: 'new-skill', label: 'Skills' },
   { icon: Database, key: 'memory', label: 'Memory' },
@@ -191,12 +189,6 @@ export function Palette({
           label="Persona"
           active={selection === 'persona'}
           onClick={() => onSelect('persona')}
-        />
-        <SelectRow
-          icon={FileText}
-          label="About (README)"
-          active={selection === 'about'}
-          onClick={() => onSelect('about')}
         />
       </Section>
 

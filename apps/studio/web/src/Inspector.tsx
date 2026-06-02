@@ -397,30 +397,6 @@ function VaultImportPanel({ apply }: { apply: (p: Promise<StudioState>) => void 
   );
 }
 
-function AboutEditor({ state, apply }: Omit<InspectorProps, 'selection' | 'onClose'>) {
-  const [readme, setReadme] = useState(state.readme ?? '');
-  const dirty = readme !== (state.readme ?? '');
-  return (
-    <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">
-        A full description of this brain — what it does, how to use it, what it needs. Travels in
-        the bundle as <code className="rounded bg-secondary px-1">README.md</code> and shows on the
-        brain page.
-      </p>
-      <RichEditor testid="readme-input" value={readme} onChange={setReadme} />
-      <div className="flex items-center justify-end">
-        <Button
-          data-testid="readme-save"
-          disabled={!dirty}
-          onClick={() => apply(api.setReadme(readme))}
-        >
-          {dirty ? 'Save about' : 'Saved'}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 function ConfigEditor({ state, apply }: Omit<InspectorProps, 'selection' | 'onClose'>) {
   const m = state.manifest;
   const [name, setName] = useState(m.name);
@@ -428,28 +404,47 @@ function ConfigEditor({ state, apply }: Omit<InspectorProps, 'selection' | 'onCl
   const [version, setVersion] = useState(m.version);
   const [description, setDescription] = useState(m.description);
   const [tags, setTags] = useState(m.tags.join(', '));
+  const [readme, setReadme] = useState(state.readme ?? '');
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">Bundle metadata.</p>
       <Field label="Name (slug)" value={name} onChange={setName} testid="config-name" />
       <Field label="Display name" value={displayName} onChange={setDisplayName} />
       <Field label="Version" value={version} onChange={setVersion} />
-      <Field label="Description" value={description} onChange={setDescription} />
+      <div className="space-y-1.5">
+        <Label>Description</Label>
+        <Input value={description} onChange={(e) => setDescription(e.target.value)} />
+        <p className="text-xs text-muted-foreground">
+          One-line tagline — shown on directory cards and in search.
+        </p>
+      </div>
       <Field label="Tags (comma-separated)" value={tags} onChange={setTags} />
+
+      <div className="space-y-1.5 border-t pt-3">
+        <Label>About this brain (README)</Label>
+        <p className="text-xs text-muted-foreground">
+          The full write-up — what it does, how to use it, what it needs. Travels in the bundle as{' '}
+          <code className="rounded bg-secondary px-1">README.md</code> and shows on the brain page.
+        </p>
+        <RichEditor testid="readme-input" value={readme} onChange={setReadme} />
+      </div>
+
       <Button
         data-testid="config-apply"
         onClick={() =>
           apply(
-            api.setMeta({
-              name,
-              displayName,
-              version,
-              description,
-              tags: tags
-                .split(',')
-                .map((t) => t.trim())
-                .filter(Boolean),
-            }),
+            api
+              .setMeta({
+                name,
+                displayName,
+                version,
+                description,
+                tags: tags
+                  .split(',')
+                  .map((t) => t.trim())
+                  .filter(Boolean),
+              })
+              .then(() => api.setReadme(readme)),
           )
         }
       >
@@ -1492,7 +1487,6 @@ function titleFor(selection: string): string {
   if (selection === 'install') return 'Install';
   if (selection === 'agent') return 'Config';
   if (selection === 'persona') return 'Persona';
-  if (selection === 'about') return 'About this brain';
   if (selection === 'memory') return 'Memory';
   if (selection === 'new-task') return 'New flow';
   if (selection === 'new-skill') return 'Custom skill';
@@ -1518,7 +1512,6 @@ export function Inspector(props: InspectorProps) {
       <div className="uq-scroll flex-1 overflow-auto p-4">
         {selection === 'agent' && <ConfigEditor state={state} catalog={catalog} apply={apply} />}
         {selection === 'persona' && <PersonaEditor state={state} catalog={catalog} apply={apply} />}
-        {selection === 'about' && <AboutEditor state={state} catalog={catalog} apply={apply} />}
         {selection === 'memory' && <MemoryEditor state={state} catalog={catalog} apply={apply} />}
         {selection === 'profile' && <ProfilePanel apply={apply} />}
         {selection === 'memory-hub' && <MemoryHubPanel apply={apply} />}
