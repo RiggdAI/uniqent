@@ -41,6 +41,8 @@ export const api = {
   setTargets: (targets: string[]) => post<StudioState>('/api/targets', { targets }),
   setPersona: (persona: string) => post<StudioState>('/api/persona', { persona }),
   setReadme: (readme: string) => post<StudioState>('/api/readme', { readme }),
+  setAvatar: (dataUrl: string) => post<StudioState>('/api/avatar', { dataUrl }),
+  removeAvatar: () => post<StudioState>('/api/avatar/remove', {}),
   addMemory: (text: string, importance?: number) =>
     post<StudioState>('/api/memory', { text, importance }),
   getProfile: () => get<{ profile: Record<string, string> }>('/api/profile'),

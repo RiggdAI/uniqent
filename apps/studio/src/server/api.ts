@@ -40,6 +40,19 @@ export async function handleApi(
     session.setReadme(typeof b.readme === 'string' ? b.readme : '');
     return ok(session.state());
   }
+  if (method === 'POST' && path === '/api/avatar') {
+    if (typeof b.dataUrl !== 'string') return fail(400, 'dataUrl is required');
+    try {
+      session.setAvatar(b.dataUrl);
+      return ok(session.state());
+    } catch (e) {
+      return fail(400, (e as Error).message);
+    }
+  }
+  if (method === 'POST' && path === '/api/avatar/remove') {
+    session.clearAvatar();
+    return ok(session.state());
+  }
   if (method === 'POST' && path === '/api/memory') {
     if (typeof b.text !== 'string' || b.text.length === 0)
       return fail(400, 'memory text is required');

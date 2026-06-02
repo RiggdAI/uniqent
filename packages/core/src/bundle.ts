@@ -113,6 +113,15 @@ export class Bundle {
     return this.getText(PATHS.readme);
   }
 
+  /** The brain's avatar image (avatar.png|jpg|webp|gif|svg), if present. Binary, travels signed. */
+  avatar(): { path: string; bytes: Uint8Array } | undefined {
+    const path = [...this.fileMap.keys()].find((p) =>
+      /^avatar\.(png|jpe?g|webp|gif|svg)$/i.test(p),
+    );
+    if (!path) return undefined;
+    return { path, bytes: this.fileMap.get(path)! };
+  }
+
   persona(): string | undefined {
     return this.getText(PATHS.persona);
   }

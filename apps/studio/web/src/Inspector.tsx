@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useState } from 'react';
-import { X, Trash2, KeyRound } from 'lucide-react';
+import { X, Trash2, KeyRound, ImagePlus } from 'lucide-react';
 import type {
   StudioState,
   CatalogView,
@@ -405,9 +405,52 @@ function ConfigEditor({ state, apply }: Omit<InspectorProps, 'selection' | 'onCl
   const [description, setDescription] = useState(m.description);
   const [tags, setTags] = useState(m.tags.join(', '));
   const [readme, setReadme] = useState(state.readme ?? '');
+
+  function onAvatar(e: React.ChangeEvent<HTMLInputElement>): void {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => apply(api.setAvatar(String(reader.result)));
+    reader.readAsDataURL(file);
+  }
+
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">Bundle metadata.</p>
+
+      <div className="flex items-center gap-3">
+        <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border bg-secondary/40">
+          {state.avatar ? (
+            <img src={state.avatar} alt="brain avatar" className="size-full object-cover" />
+          ) : (
+            <ImagePlus className="size-5 text-muted-foreground" />
+          )}
+        </div>
+        <div className="space-y-1">
+          <div className="flex gap-2">
+            <Button asChild size="sm" variant="outline">
+              <label className="cursor-pointer">
+                {state.avatar ? 'Change avatar' : 'Upload avatar'}
+                <input
+                  data-testid="avatar-input"
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+                  className="hidden"
+                  onChange={onAvatar}
+                />
+              </label>
+            </Button>
+            {state.avatar && (
+              <Button size="sm" variant="ghost" onClick={() => apply(api.removeAvatar())}>
+                Remove
+              </Button>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">PNG/JPG/WebP/SVG, up to 512KB.</p>
+        </div>
+      </div>
+
       <Field label="Name (slug)" value={name} onChange={setName} testid="config-name" />
       <Field label="Display name" value={displayName} onChange={setDisplayName} />
       <Field label="Version" value={version} onChange={setVersion} />

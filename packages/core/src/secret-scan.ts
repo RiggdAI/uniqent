@@ -19,6 +19,11 @@ const PREFIX_PATTERNS: Array<{ kind: string; re: RegExp }> = [
 const PLACEHOLDER_RE = /\$\{credentialRef:[^}]+\}/g;
 const HIGH_ENTROPY_TOKEN = /[A-Za-z0-9+/_=-]{32,}/g;
 
+// Image/binary assets (e.g. an avatar) aren't text — decoding their bytes as UTF-8 yields
+// high-entropy garbage that would false-positive the entropy detector. Secrets only ever leak
+// through the text surfaces (config, memory, manifest), which are still scanned.
+const BINARY_EXT = /\.(png|jpe?g|gif|webp|avif|ico|bmp|svg)$/i;
+
 /** Keys whose string values legitimately hold public key material; not secrets. */
 const ALLOWLISTED_KEYS = new Set(['pubkey', 'publicKey']);
 
@@ -65,6 +70,7 @@ export function scanForSecrets(bundle: Bundle): SecretFinding[] {
   const findings: SecretFinding[] = [];
   for (const [path, bytes] of bundle.entries()) {
     if (path === PATHS.signature) continue;
+    if (BINARY_EXT.test(path)) continue; // binary asset — not a text surface
     const text = dec.decode(bytes);
 
     const record = (hit: { kind: string; snippet: string } | null) => {

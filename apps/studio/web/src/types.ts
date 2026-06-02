@@ -55,6 +55,8 @@ export interface StudioState {
   persona?: string;
   /** Long-form "about this brain" README markdown (travels in the bundle as README.md). */
   readme?: string;
+  /** Avatar image as a data: URL for preview (stored in the bundle as avatar.<ext>). */
+  avatar?: string;
 }
 
 export interface CatalogView {

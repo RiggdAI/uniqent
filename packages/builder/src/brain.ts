@@ -48,6 +48,7 @@ export class Brain {
   private meta: BrainMeta;
   private targets: string[] = [];
   private readmeMd?: string;
+  private avatarFile?: { path: string; bytes: Uint8Array };
   private personaMd?: string;
   private policiesMd?: string;
   private profile?: TMemoryProfile;
@@ -88,6 +89,21 @@ export class Brain {
   }
   getReadme(): string | undefined {
     return this.readmeMd;
+  }
+  /** Set the brain's avatar from raw image bytes; ext must be png/jpg/jpeg/webp/gif/svg. */
+  setAvatar(ext: string, bytes: Uint8Array): void {
+    const e = ext.toLowerCase().replace(/^\./, '');
+    const norm = e === 'jpeg' ? 'jpg' : e;
+    if (!['png', 'jpg', 'webp', 'gif', 'svg'].includes(norm)) {
+      throw new Error(`unsupported avatar type "${ext}" (use png/jpg/webp/gif/svg)`);
+    }
+    this.avatarFile = { path: `avatar.${norm}`, bytes };
+  }
+  clearAvatar(): void {
+    this.avatarFile = undefined;
+  }
+  getAvatar(): { path: string; bytes: Uint8Array } | undefined {
+    return this.avatarFile;
   }
   setPolicies(md: string): void {
     this.policiesMd = md;
@@ -233,6 +249,7 @@ export class Brain {
   toBundle(): Bundle {
     const b = Bundle.empty();
     if (this.readmeMd !== undefined) b.set(PATHS.readme, this.readmeMd);
+    if (this.avatarFile) b.set(this.avatarFile.path, this.avatarFile.bytes);
     if (this.personaMd !== undefined) b.set(PATHS.persona, this.personaMd);
     if (this.policiesMd !== undefined) b.set(PATHS.policies, this.policiesMd);
     if (this.profile !== undefined) b.set(PATHS.profile, JSON.stringify(this.profile, null, 2));
@@ -280,6 +297,8 @@ export class Brain {
     brain.targets = [...m.compatibility.targets];
     const readme = bundle.readme();
     if (readme !== undefined) brain.readmeMd = readme;
+    const avatar = bundle.avatar();
+    if (avatar !== undefined) brain.avatarFile = avatar;
     const persona = bundle.persona();
     if (persona !== undefined) brain.personaMd = persona;
     const policies = bundle.policies();

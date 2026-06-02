@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Brain } from '../src/brain';
-import { validateBundle, canonicalDigest } from '@uniqent/core';
+import { validateBundle, canonicalDigest, scanForSecrets } from '@uniqent/core';
 
 function baseMeta() {
   return {
@@ -86,5 +86,26 @@ describe('Brain', () => {
     // empty/blank readme clears it (no README.md file)
     b.setReadme('   ');
     expect(b.toBundle().readme()).toBeUndefined();
+  });
+
+  it('carries an avatar image without tripping the secret scan, and round-trips', () => {
+    const b = Brain.create(baseMeta());
+    b.setPersona('# Persona\nHi.\n');
+    // High-entropy bytes (as a real PNG would be) that WOULD false-positive the entropy
+    // detector if the scanner didn't skip binary assets.
+    const bytes = new Uint8Array(2048);
+    for (let i = 0; i < bytes.length; i++) bytes[i] = (i * 167 + 13) % 256;
+    b.setAvatar('png', bytes);
+    const bundle = b.toBundle();
+    expect(bundle.avatar()?.path).toBe('avatar.png');
+    expect(scanForSecrets(bundle)).toEqual([]); // image bytes are skipped, no false positive
+    // round-trips through fromBundle and is part of the signed digest
+    const round = Brain.fromBundle(bundle);
+    expect(round.getAvatar()?.bytes).toEqual(bytes);
+    expect(canonicalDigest(round.toBundle())).toBe(canonicalDigest(bundle));
+    // jpeg normalizes to .jpg; unknown types rejected
+    b.setAvatar('jpeg', bytes);
+    expect(b.toBundle().avatar()?.path).toBe('avatar.jpg');
+    expect(() => b.setAvatar('exe', bytes)).toThrow(/unsupported avatar/);
   });
 });

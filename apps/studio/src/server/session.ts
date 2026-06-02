@@ -94,6 +94,7 @@ export interface StudioState {
   validation: ValidationResult;
   persona?: string;
   readme?: string;
+  avatar?: string;
 }
 
 export interface ExportResult {
@@ -183,6 +184,28 @@ export class StudioSession {
   /** The brain's long-form README ("about this brain"), travels in the bundle as README.md. */
   setReadme(md: string): void {
     this.brain.setReadme(md);
+  }
+
+  /** Set the brain avatar from a `data:image/...;base64,...` URL (max 512KB). */
+  setAvatar(dataUrl: string): void {
+    const m = /^data:image\/([a-zA-Z.+-]+);base64,(.+)$/s.exec(dataUrl.trim());
+    if (!m) throw new Error('expected a base64 data: image URL');
+    const ext = (m[1] ?? '').toLowerCase().replace('svg+xml', 'svg').replace('jpeg', 'jpg');
+    const bytes = Buffer.from(m[2] ?? '', 'base64');
+    if (bytes.length === 0) throw new Error('empty image');
+    if (bytes.length > 512 * 1024) throw new Error('avatar too large (max 512KB)');
+    this.brain.setAvatar(ext, new Uint8Array(bytes));
+  }
+  clearAvatar(): void {
+    this.brain.clearAvatar();
+  }
+  /** The avatar re-encoded as a data: URL for the UI preview (undefined when none). */
+  private avatarDataUrl(): string | undefined {
+    const a = this.brain.getAvatar();
+    if (!a) return undefined;
+    const ext = a.path.split('.').pop() ?? 'png';
+    const mime = ext === 'svg' ? 'image/svg+xml' : `image/${ext === 'jpg' ? 'jpeg' : ext}`;
+    return `data:${mime};base64,${Buffer.from(a.bytes).toString('base64')}`;
   }
 
   addFact(input: {
@@ -503,6 +526,7 @@ export class StudioSession {
       validation: validateBundle(bundle),
       persona: this.brain.getPersona(),
       readme: this.brain.getReadme(),
+      avatar: this.avatarDataUrl(),
     };
   }
 
