@@ -12,6 +12,7 @@ import {
   parseMemoryMarkdown,
   searchMemoryHub,
   fetchMemoryPack,
+  importVault,
 } from '@uniqent/builder';
 import type {
   BrainMeta,
@@ -21,7 +22,11 @@ import type {
   MemoryGraph,
   ImportedMemoryItem,
   MemoryHubSearch,
+  VaultFile,
+  VaultImport,
 } from '@uniqent/builder';
+import { readdir, readFile } from 'node:fs/promises';
+import { join, relative, sep } from 'node:path';
 
 const DEFAULT_MEMORY_REGISTRY = 'https://uniqent.ai';
 import { validateBundle, generateKeypair, sign, pack, verify } from '@uniqent/core';
@@ -280,6 +285,66 @@ export class StudioSession {
       });
     }
     return facts.length;
+  }
+
+  /**
+   * Walk a local folder for markdown notes, returning `{ path, content }` with POSIX-relative
+   * paths. Skips VCS/tooling dirs and any dot-directory; capped to keep a huge vault from hanging.
+   */
+  private async readVaultFiles(dir: string): Promise<VaultFile[]> {
+    const SKIP = new Set(['.git', '.obsidian', 'node_modules', '.trash']);
+    const MAX_FILES = 5000;
+    const files: VaultFile[] = [];
+    const walk = async (abs: string): Promise<void> => {
+      if (files.length >= MAX_FILES) return;
+      const entries = await readdir(abs, { withFileTypes: true });
+      for (const e of entries) {
+        if (files.length >= MAX_FILES) break;
+        if (e.name.startsWith('.') || SKIP.has(e.name)) continue;
+        const child = join(abs, e.name);
+        if (e.isDirectory()) {
+          await walk(child);
+        } else if (e.isFile() && e.name.toLowerCase().endsWith('.md')) {
+          const rel = relative(dir, child).split(sep).join('/');
+          files.push({ path: rel, content: await readFile(child, 'utf8') });
+        }
+      }
+    };
+    await walk(dir);
+    return files;
+  }
+
+  /** Parse a local vault folder WITHOUT importing — preview the persona/profile/memory it yields. */
+  async previewVault(dir: string): Promise<{ result: VaultImport; graph: MemoryGraph }> {
+    const result = importVault(await this.readVaultFiles(dir));
+    const graph = memoryGraph(
+      result.items.map((it, i) => ({ id: `v${i}`, text: it.text, kind: it.kind })),
+    );
+    return { result, graph };
+  }
+
+  /**
+   * Import a local "second-brain" vault: SOUL.md → persona, USER.md → profile, MEMORY.md + notes
+   * → memory (journal/dated notes become episodic). Provenance is kept in each item's `source`.
+   * `opts` can opt out of overwriting an existing persona/profile. Returns the import stats.
+   */
+  async importVaultDir(
+    dir: string,
+    opts?: { persona?: boolean; profile?: boolean },
+  ): Promise<VaultImport['stats']> {
+    const result = importVault(await this.readVaultFiles(dir));
+    if (result.persona && opts?.persona !== false) this.brain.setPersona(result.persona);
+    if (result.profile && opts?.profile !== false) this.setProfile(result.profile);
+    for (const it of result.items) {
+      this.brain.addMemory({
+        id: `fact-${++this.factCounter}`,
+        kind: it.kind,
+        text: it.text,
+        source: it.source,
+        createdAt: new Date().toISOString(),
+      });
+    }
+    return result.stats;
   }
 
   /** Parse a markdown/text document into structured memory items, WITHOUT importing them. */

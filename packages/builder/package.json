@@ -1,6 +1,6 @@
 {
   "name": "@uniqent/builder",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Framework-agnostic engine to assemble a brain into a validated .uniqent bundle.",
   "license": "Apache-2.0",
   "type": "module",
@@ -21,8 +21,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@uniqent/core": "workspace:*",
-    "@uniqent/spec": "workspace:*"
+    "@uniqent/core": "workspace:^",
+    "@uniqent/spec": "workspace:^"
   },
   "devDependencies": {
     "vitest": "^3.0.0"

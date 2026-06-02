@@ -11,6 +11,7 @@ import type {
   MemoryGraph,
   ImportedMemoryItem,
   MemoryHubSearch,
+  VaultImport,
 } from './types';
 
 async function unwrap<T>(res: Response): Promise<T> {
@@ -52,6 +53,13 @@ export const api = {
     post<MemoryHubSearch>('/api/memory/hub/search', { query, registry }),
   addMemoryPack: (slug: string, registry?: string) =>
     post<StudioState>('/api/memory/hub/add', { slug, registry }),
+  previewVault: (dir: string) =>
+    post<{ result: VaultImport; graph: MemoryGraph }>('/api/memory/vault/preview', { dir }),
+  importVault: (dir: string, opts?: { persona?: boolean; profile?: boolean }) =>
+    post<{ state: StudioState; stats: VaultImport['stats'] }>('/api/memory/vault/import', {
+      dir,
+      ...opts,
+    }),
   addMcp: (id: string) => post<StudioState>(`/api/mcp/catalog/${encodeURIComponent(id)}`, {}),
   addSkill: (name: string) =>
     post<StudioState>(`/api/skill/catalog/${encodeURIComponent(name)}`, {}),

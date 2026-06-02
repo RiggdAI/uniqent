@@ -8,6 +8,7 @@ import type {
   McpHubResult,
   SkillHubResult,
   MemoryPackResult,
+  VaultImport,
 } from './types';
 import { api } from './api';
 import { Button } from './components/ui/button';
@@ -236,6 +237,152 @@ function MemoryEditor({ state, apply }: Omit<InspectorProps, 'selection' | 'onCl
           </Button>
         </div>
       </div>
+
+      <VaultImportPanel apply={apply} />
+    </div>
+  );
+}
+
+/**
+ * Import an existing Obsidian / "second-brain" vault (a local folder of markdown) straight into
+ * the brain: SOUL.md → persona, USER.md → profile, MEMORY.md + notes → memory (journal/dated
+ * notes become episodic). Preview first; the apply overwrites persona/profile only if you keep
+ * the toggles on.
+ */
+function VaultImportPanel({ apply }: { apply: (p: Promise<StudioState>) => void }) {
+  const [dir, setDir] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [preview, setPreview] = useState<VaultImport | null>(null);
+  const [withPersona, setWithPersona] = useState(true);
+  const [withProfile, setWithProfile] = useState(true);
+  const [done, setDone] = useState<VaultImport['stats'] | null>(null);
+
+  async function doPreview(): Promise<void> {
+    setBusy(true);
+    setErr(null);
+    setDone(null);
+    try {
+      const { result } = await api.previewVault(dir.trim());
+      setPreview(result);
+    } catch (e) {
+      setPreview(null);
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function doImport(): Promise<void> {
+    setBusy(true);
+    setErr(null);
+    try {
+      const res = await api.importVault(dir.trim(), {
+        persona: withPersona,
+        profile: withProfile,
+      });
+      apply(Promise.resolve(res.state));
+      setDone(res.stats);
+      setPreview(null);
+      setDir('');
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-2 border-t pt-3">
+      <Label>Import a second-brain vault</Label>
+      <p className="text-xs text-muted-foreground">
+        Point at a local <b>Obsidian</b>/second-brain folder.{' '}
+        <code className="rounded bg-secondary px-1">SOUL.md</code> → persona,{' '}
+        <code className="rounded bg-secondary px-1">USER.md</code> → profile,{' '}
+        <code className="rounded bg-secondary px-1">MEMORY.md</code> + notes → memory (journal/dated
+        notes become episodic).
+      </p>
+      <div className="flex items-center gap-2">
+        <Input
+          data-testid="vault-dir"
+          placeholder="/Users/you/Documents/MyVault"
+          value={dir}
+          onChange={(e) => setDir(e.target.value)}
+        />
+        <Button
+          data-testid="vault-preview"
+          variant="outline"
+          size="sm"
+          disabled={busy || dir.trim().length === 0}
+          onClick={doPreview}
+        >
+          Preview
+        </Button>
+      </div>
+      {err && <div className="text-xs text-red-500">{err}</div>}
+      {done && (
+        <div className="rounded-lg border bg-secondary/30 p-2 text-xs text-muted-foreground">
+          Imported {done.items} memory item(s) from {done.memoryFiles} note(s)
+          {done.episodic > 0 && ` · ${done.episodic} episodic`}
+          {done.personaFrom && ` · persona from ${done.personaFrom}`}
+          {done.profileFrom && ` · profile from ${done.profileFrom}`}.
+        </div>
+      )}
+      {preview && (
+        <div className="space-y-2 rounded-lg border bg-secondary/30 p-2 text-xs">
+          <div className="text-muted-foreground">
+            {preview.stats.files} markdown file(s) · {preview.stats.items} memory item(s) from{' '}
+            {preview.stats.memoryFiles} note(s)
+            {preview.stats.episodic > 0 && (
+              <span> · {preview.stats.episodic} episodic (scrubbed on export)</span>
+            )}
+          </div>
+          {preview.persona && (
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={withPersona}
+                onChange={(e) => setWithPersona(e.target.checked)}
+              />
+              <span>
+                Set persona from <b>{preview.stats.personaFrom}</b> (overwrites current)
+              </span>
+            </label>
+          )}
+          {preview.profile && (
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={withProfile}
+                onChange={(e) => setWithProfile(e.target.checked)}
+              />
+              <span>
+                Set profile from <b>{preview.stats.profileFrom}</b> (
+                {Object.keys(preview.profile).length} field(s))
+              </span>
+            </label>
+          )}
+          {preview.items.slice(0, 6).map((it, i) => (
+            <div key={i} className="flex items-start gap-2">
+              <Badge variant="secondary" className="shrink-0 text-[10px]">
+                {it.kind}
+              </Badge>
+              <span className="truncate">{it.text}</span>
+            </div>
+          ))}
+          {preview.items.length > 6 && (
+            <div className="text-muted-foreground">+{preview.items.length - 6} more…</div>
+          )}
+          <Button
+            data-testid="vault-import"
+            size="sm"
+            disabled={busy}
+            onClick={doImport}
+          >
+            Import into brain
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 {
   "name": "@uniqent/cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "The `uniqent` CLI — inspect and install .uniqent bundles.",
   "license": "Apache-2.0",
   "type": "module",
@@ -18,12 +18,12 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@uniqent/adapter-claude-code": "workspace:*",
-    "@uniqent/adapter-hermes": "workspace:*",
-    "@uniqent/adapter-openclaw": "workspace:*",
-    "@uniqent/adapter-sdk": "workspace:*",
-    "@uniqent/builder": "workspace:*",
-    "@uniqent/core": "workspace:*"
+    "@uniqent/adapter-claude-code": "workspace:^",
+    "@uniqent/adapter-hermes": "workspace:^",
+    "@uniqent/adapter-openclaw": "workspace:^",
+    "@uniqent/adapter-sdk": "workspace:^",
+    "@uniqent/builder": "workspace:^",
+    "@uniqent/core": "workspace:^"
   },
   "devDependencies": {
     "vitest": "^3.0.0"

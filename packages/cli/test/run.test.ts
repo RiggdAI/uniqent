@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtempSync, rmSync, existsSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, writeFileSync, readFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Brain } from '@uniqent/builder';
@@ -530,6 +530,39 @@ describe('uniqent cli', () => {
       ).toBe(0);
     } finally {
       rmSync(dir, { recursive: true, force: true });
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('import-vault captures a folder into a signed, installable bundle', async () => {
+    const vault = tmp();
+    const out = join(tmp(), 'brain.uniqent');
+    const root = tmp();
+    try {
+      mkdirSync(join(vault, 'notes'));
+      writeFileSync(join(vault, 'SOUL.md'), '# Soul\nPrecise assistant.\n');
+      writeFileSync(join(vault, 'USER.md'), '**Name:** Max\n- Role: founder\n');
+      writeFileSync(join(vault, 'MEMORY.md'), '- Decision: chose [[Postgres]] #db\n');
+      writeFileSync(join(vault, 'notes', 'a.md'), '[[Auth-Service]] owns sessions #arch\n');
+
+      const cap = capture();
+      const code = await run(['import-vault', vault, '--name', 'my-brain', '--sign', '-o', out], cap.io);
+      expect(code).toBe(0);
+      expect(existsSync(out)).toBe(true);
+
+      // It's a valid, signed bundle that installs into a framework.
+      const ins = capture();
+      expect(await run(['inspect', out], ins.io)).toBe(0);
+      expect(ins.logs.join('\n')).toContain('signature: valid');
+
+      const inst = capture();
+      expect(await run(['install', out, '--target', 'claude-code', '--root', root, '--yes'], inst.io)).toBe(0);
+      const agents = readFileSync(join(root, 'AGENTS.md'), 'utf8');
+      expect(agents).toContain('Precise assistant');
+      expect(agents).toContain('Postgres');
+      expect(agents).not.toContain('[['); // wikilinks stripped on install
+    } finally {
+      rmSync(vault, { recursive: true, force: true });
       rmSync(root, { recursive: true, force: true });
     }
   });

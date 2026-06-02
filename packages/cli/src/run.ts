@@ -1,4 +1,5 @@
-import { readFile, writeFile, stat } from 'node:fs/promises';
+import { readFile, writeFile, stat, readdir } from 'node:fs/promises';
+import { basename, join, relative, sep } from 'node:path';
 import {
   unpack,
   verify,
@@ -19,7 +20,10 @@ import {
   searchSkillHubs,
   defaultMcpSources,
   defaultSkillSources,
+  Brain,
+  importVault,
 } from '@uniqent/builder';
+import type { VaultFile } from '@uniqent/builder';
 import { fetchIndex, findEntry, looksLikeSlug, registryUrl } from './registry.js';
 
 export interface CliIo {
@@ -501,6 +505,99 @@ async function exportCmd(args: string[], io: CliIo): Promise<number> {
   return 0;
 }
 
+/** Walk a folder for markdown notes (POSIX-relative paths), skipping VCS/tooling/dot dirs. */
+async function readVaultDir(dir: string): Promise<VaultFile[]> {
+  const SKIP = new Set(['.git', '.obsidian', 'node_modules', '.trash']);
+  const files: VaultFile[] = [];
+  const walk = async (abs: string): Promise<void> => {
+    if (files.length >= 5000) return;
+    for (const e of await readdir(abs, { withFileTypes: true })) {
+      if (files.length >= 5000) break;
+      if (e.name.startsWith('.') || SKIP.has(e.name)) continue;
+      const child = join(abs, e.name);
+      if (e.isDirectory()) await walk(child);
+      else if (e.isFile() && e.name.toLowerCase().endsWith('.md'))
+        files.push({ path: relative(dir, child).split(sep).join('/'), content: await readFile(child, 'utf8') });
+    }
+  };
+  await walk(dir);
+  return files;
+}
+
+function slugify(s: string): string {
+  const out = s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return out || 'brain';
+}
+
+/** Capture an Obsidian / second-brain vault folder into a canonical .uniqent bundle. */
+async function importVaultCmd(args: string[], io: CliIo): Promise<number> {
+  const { positionals, flags } = parseArgs(args);
+  const dir = positionals[0];
+  if (!dir) {
+    io.error('import-vault: missing <dir>');
+    return 1;
+  }
+  let files: VaultFile[];
+  try {
+    files = await readVaultDir(dir);
+  } catch (e) {
+    io.error(`import-vault: cannot read ${dir}: ${(e as Error).message}`);
+    return 1;
+  }
+  const result = importVault(files);
+  const name = slugify(typeof flags.name === 'string' ? flags.name : basename(dir.replace(/\/+$/, '')));
+  const brain = Brain.create({
+    name,
+    displayName: typeof flags.name === 'string' ? flags.name : basename(dir.replace(/\/+$/, '')) || name,
+    version: typeof flags.version === 'string' ? flags.version : '0.1.0',
+    description:
+      typeof flags.description === 'string' ? flags.description : `Imported from ${basename(dir)}`,
+    author: { name: typeof flags.author === 'string' ? flags.author : 'unknown' },
+    license: 'CC0-1.0',
+    tags: [],
+  });
+  if (result.persona) brain.setPersona(result.persona);
+  if (result.profile) brain.setProfile(result.profile);
+  let i = 0;
+  for (const it of result.items)
+    brain.addMemory({
+      id: `fact-${++i}`,
+      kind: it.kind,
+      text: it.text,
+      source: it.source,
+      createdAt: new Date().toISOString(),
+    });
+
+  const bundle = brain.toBundle();
+  const valid = validateBundle(bundle);
+  if (!valid.ok) {
+    io.error(`import-vault: produced an invalid bundle: ${valid.errors.map((e) => e.message).join('; ')}`);
+    return 1;
+  }
+  const findings = scanForSecrets(bundle);
+  if (findings.length > 0) {
+    io.error(
+      `import-vault: the vault contains ${findings.length} likely secret(s) (e.g. ${findings[0]?.kind}); refusing to pack. Remove secrets from your notes.`,
+    );
+    return 1;
+  }
+
+  io.log(`Captured ${name} from ${dir}:`);
+  io.log(
+    `  ${result.stats.files} file(s) · persona=${result.persona ? result.stats.personaFrom : 'none'} · profile=${result.profile ? `${result.stats.profileFrom}` : 'none'} · memory=${result.stats.items} (${result.stats.episodic} episodic)`,
+  );
+
+  const signed = await maybeSign(bundle, flags, io);
+  const out = typeof flags.out === 'string' ? flags.out : `${name}.uniqent`;
+  await writeFile(out, await packBundle(signed));
+  const v = await verify(signed);
+  io.log(`wrote ${out} (${v.signed ? 'signed ✓' : 'unsigned'}). Inspect with: uniqent inspect ${out}`);
+  return 0;
+}
+
 export async function run(argv: string[], io: CliIo): Promise<number> {
   const [cmd, ...rest] = argv;
   if (cmd === 'inspect') return inspect(rest, io);
@@ -510,10 +607,11 @@ export async function run(argv: string[], io: CliIo): Promise<number> {
   if (cmd === 'search') return search(rest, io);
   if (cmd === 'hub') return hub(rest, io);
   if (cmd === 'export') return exportCmd(rest, io);
+  if (cmd === 'import-vault') return importVaultCmd(rest, io);
   if (cmd === 'keygen') return keygen(rest, io);
   if (cmd === 'sign') return signCmd(rest, io);
   io.error(
-    'usage: uniqent <inspect|install|validate|pack|search|hub|export|keygen|sign> <file|dir|url|slug|query> [options]',
+    'usage: uniqent <inspect|install|validate|pack|search|hub|export|import-vault|keygen|sign> <file|dir|url|slug|query> [options]',
   );
   io.error(
     '  install <file|url|slug> --target <id> --root <dir> --cred <ref>=<value> [--registry <url>] [--allow-unsigned] [--yes]',
@@ -522,6 +620,9 @@ export async function run(argv: string[], io: CliIo): Promise<number> {
   io.error('  hub <mcp|skills> <query> [--index <url,url>] [--json]');
   io.error(
     '  export [--from <claude-code|hermes|openclaw>] --root <dir> [-o <file>] [--sign|--key <k>]',
+  );
+  io.error(
+    '  import-vault <dir> [--name <n>] [-o <file>] [--sign|--key <k>]   (Obsidian/second-brain → .uniqent)',
   );
   io.error('  keygen [-o <keyfile>]    sign <file> --key <keyfile> [-o]    install … --dry-run');
   return cmd ? 1 : 0;

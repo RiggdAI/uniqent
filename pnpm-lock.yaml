@@ -39,25 +39,25 @@ importers:
         specifier: ^1.1.1
         version: 1.2.4(@types/react@18.3.29)(react@18.3.1)
       '@uniqent/adapter-claude-code':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../../packages/adapter-claude-code
       '@uniqent/adapter-hermes':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../../packages/adapter-hermes
       '@uniqent/adapter-openclaw':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../../packages/adapter-openclaw
       '@uniqent/adapter-sdk':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../../packages/adapter-sdk
       '@uniqent/builder':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../../packages/builder
       '@uniqent/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../../packages/core
       '@uniqent/spec':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../../packages/spec
       '@xyflow/react':
         specifier: ^12.3.5
@@ -124,16 +124,16 @@ importers:
   packages/adapter-claude-code:
     dependencies:
       '@uniqent/adapter-sdk':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../adapter-sdk
       '@uniqent/builder':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../builder
       '@uniqent/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
       '@uniqent/spec':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../spec
     devDependencies:
       vitest:
@@ -143,20 +143,20 @@ importers:
   packages/adapter-hermes:
     dependencies:
       '@uniqent/adapter-sdk':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../adapter-sdk
       '@uniqent/builder':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../builder
       '@uniqent/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
       '@uniqent/spec':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../spec
     devDependencies:
       '@uniqent/adapter-claude-code':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../adapter-claude-code
       vitest:
         specifier: ^3.0.0
@@ -165,16 +165,16 @@ importers:
   packages/adapter-openclaw:
     dependencies:
       '@uniqent/adapter-sdk':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../adapter-sdk
       '@uniqent/builder':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../builder
       '@uniqent/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
       '@uniqent/spec':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../spec
     devDependencies:
       vitest:
@@ -184,7 +184,7 @@ importers:
   packages/adapter-sdk:
     dependencies:
       '@uniqent/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
     devDependencies:
       vitest:
@@ -194,10 +194,10 @@ importers:
   packages/builder:
     dependencies:
       '@uniqent/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
       '@uniqent/spec':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../spec
     devDependencies:
       vitest:
@@ -207,22 +207,22 @@ importers:
   packages/cli:
     dependencies:
       '@uniqent/adapter-claude-code':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../adapter-claude-code
       '@uniqent/adapter-hermes':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../adapter-hermes
       '@uniqent/adapter-openclaw':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../adapter-openclaw
       '@uniqent/adapter-sdk':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../adapter-sdk
       '@uniqent/builder':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../builder
       '@uniqent/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
     devDependencies:
       vitest:
@@ -235,7 +235,7 @@ importers:
         specifier: ^2.1.0
         version: 2.3.0
       '@uniqent/spec':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../spec
       tar-stream:
         specifier: ^3.1.7

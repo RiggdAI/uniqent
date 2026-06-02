@@ -34,9 +34,11 @@ brain into that framework's native layout.
 > not where the agent runs day-to-day (that's your framework). It sits _above_ the frameworks so
 > one brain travels between all of them.
 
-Building a brain from scratch in Studio is the primary path; **capturing an existing agent**
-(`uniqent export`) is the secondary on-ramp. Studio runs locally and open source — your brain and
-your secrets never leave your machine.
+Building a brain from scratch in Studio is the primary path; the secondary on-ramps capture what
+you already have — **an existing agent** (`uniqent export`) or **an Obsidian / "second-brain"
+vault** (`uniqent import-vault`, also a panel in Studio): `SOUL.md` → persona, `USER.md` → profile,
+`MEMORY.md` + notes → memory, with `[[wikilinks]]`/`#tags` preserved. Studio runs locally and open
+source — your brain and your secrets never leave your machine.
 
 ### A "brain" = everything that makes an agent that agent
 
@@ -174,57 +176,50 @@ Pre-1.0, under active development — but the core loop works today:
   "Install" button install an exported brain into the chosen framework, with credentials resolved
   locally. The **same signed `.uniqent`** installs into all three — Hermes truncates memory to its
   bounded budget and reports it; Claude Code transforms it. ✅
-- **Distribute** — three example brains in `examples/`, plus a file-based registry (`search` +
-  install-by-slug against any hosted `index.json` — no service required). ✅
-- **Next** — a hosted registry service + a `uniqent://` web "Install" handoff; Codex/Cursor/Gemini
-  adapters.
+- **Distribute** — the `uniqent` CLI is published on npm (`npm i -g @uniqent/cli`); three example
+  brains in `examples/`, plus a file-based registry (`search` + install-by-slug against any hosted
+  `index.json` — no service required). ✅
+- **Next** — a hosted registry (uniqent.ai) and a `uniqent://` web "Install" handoff;
+  Codex/Cursor/Gemini adapters.
 
 See [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md) for the plan and [`docs/SPEC.md`](docs/SPEC.md) for the
 bundle-format reference.
 
 ## Quickstart
 
+### Use the CLI
+
+```bash
+npm i -g @uniqent/cli
+
+# Capture an existing Obsidian / "second-brain" vault into a portable, signed brain:
+uniqent import-vault ~/my-vault --name my-brain --sign -o my-brain.uniqent
+uniqent inspect my-brain.uniqent
+
+# Install a brain into whatever framework you run (claude-code | hermes | openclaw),
+# resolving your own credentials locally:
+uniqent install my-brain.uniqent --target claude-code --root .
+
+# Install straight from a raw URL (no registry), or by slug from any hosted index.json:
+uniqent install https://example.com/dev-powerpack.uniqent --target openclaw --root .
+export UNIQENT_REGISTRY=https://raw.githubusercontent.com/RiggdAI/uniqent/main/registry/index.json
+uniqent search coding
+uniqent install dev-powerpack --target hermes --root . --cred github_pat=…
+
+# Discover MCP servers + skills across hubs (MCP Registry, Smithery, GitHub):
+uniqent hub mcp github
+uniqent hub skills "code review"
+```
+
+### Build from source
+
 Requires Node 22.13+ and pnpm (the repo pins pnpm via `packageManager`; `corepack enable` provisions it).
 
 ```bash
-pnpm install
-pnpm build
-pnpm test
+pnpm install && pnpm build && pnpm test
 
 # Launch the visual builder (local-first); open the URL it prints:
 pnpm --filter @uniqent/studio start
-
-# Pack an example brain and install it into any framework (claude-code | hermes | openclaw):
-node packages/cli/dist/bin.js pack examples/dev-powerpack -o dev-powerpack.uniqent
-node packages/cli/dist/bin.js inspect dev-powerpack.uniqent
-node packages/cli/dist/bin.js install dev-powerpack.uniqent --target hermes --root . --cred github_pat=…
-
-# Install straight from a raw URL (no registry), or by slug from any hosted index.json:
-node packages/cli/dist/bin.js install https://example.com/dev-powerpack.uniqent --target openclaw --root .
-export UNIQENT_REGISTRY=https://raw.githubusercontent.com/RiggdAI/uniqent/main/registry/index.json
-node packages/cli/dist/bin.js search coding
-node packages/cli/dist/bin.js install dev-powerpack --target claude-code --root .
-
-# Discover MCP servers + skills across hubs (MCP Registry, Smithery, GitHub):
-node packages/cli/dist/bin.js hub mcp github
-node packages/cli/dist/bin.js hub skills "code review"
-```
-
-## Layout
-
-```
-packages/spec/                 # the .uniqent schema (zod → JSON Schema → SPEC.md)        ✅
-packages/core/                 # bundle read/write, validation, signing, secret-scan      ✅
-packages/builder/              # framework-agnostic "assemble a brain" engine + catalogs   ✅
-apps/studio/                   # Uniqent Studio — the local-first visual builder           ✅
-packages/cli/                  # the `uniqent` CLI (inspect/install/validate/pack/search)   ✅
-packages/adapter-sdk/          # Adapter interface + conformance harness                   ✅
-packages/adapter-claude-code/  # installs a brain into Claude Code                         ✅
-packages/adapter-hermes/       # installs into Hermes (bounded memory)                     ✅
-packages/adapter-openclaw/     # installs into OpenClaw                                    ✅
-examples/                      # three ready-to-install example brains                     ✅
-registry/                      # sample registry index.json + format (file-based)          ✅
-docs/                          # SPEC, BUILD_PLAN, GOVERNANCE, CONTRIBUTING, SECURITY
 ```
 
 ## License

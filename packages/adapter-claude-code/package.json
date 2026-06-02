@@ -1,6 +1,6 @@
 {
   "name": "@uniqent/adapter-claude-code",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Uniqent adapter that installs a .uniqent brain into Claude Code.",
   "license": "Apache-2.0",
   "type": "module",
@@ -21,10 +21,10 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@uniqent/adapter-sdk": "workspace:*",
-    "@uniqent/builder": "workspace:*",
-    "@uniqent/core": "workspace:*",
-    "@uniqent/spec": "workspace:*"
+    "@uniqent/adapter-sdk": "workspace:^",
+    "@uniqent/builder": "workspace:^",
+    "@uniqent/core": "workspace:^",
+    "@uniqent/spec": "workspace:^"
   },
   "devDependencies": {
     "vitest": "^3.0.0"

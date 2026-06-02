@@ -1,6 +1,6 @@
 {
   "name": "@uniqent/adapter-sdk",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "The Uniqent Adapter interface + conformance harness for framework adapters.",
   "license": "Apache-2.0",
   "type": "module",
@@ -21,7 +21,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@uniqent/core": "workspace:*"
+    "@uniqent/core": "workspace:^"
   },
   "devDependencies": {
     "vitest": "^3.0.0"
