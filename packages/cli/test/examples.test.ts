@@ -7,7 +7,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const examplesDir = resolve(here, '../../../examples');
 
 describe('example bundles', () => {
-  for (const name of ['dev-powerpack', 'research-analyst', 'personal-assistant']) {
+  for (const name of ['dev-powerpack', 'research-analyst', 'personal-assistant', 'garry-stack']) {
     it(`${name} validates and packs (no secrets)`, async () => {
       const bundle = await readDir(resolve(examplesDir, name));
       expect(validateBundle(bundle).ok).toBe(true);

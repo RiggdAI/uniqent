@@ -24,6 +24,14 @@
       "url": "https://github.com/RiggdAI/uniqent/releases/download/examples/personal-assistant.uniqent",
       "tags": ["assistant", "telegram", "personal"],
       "author": "uniqent"
+    },
+    {
+      "name": "garry-stack",
+      "version": "0.1.0",
+      "description": "Garry Tan's g-stack in one brain — gbrain persistent memory + gstack dev-workflow skills (qa/review/ship/investigate), wired to GitHub.",
+      "url": "https://github.com/RiggdAI/uniqent/releases/download/examples/garry-stack.uniqent",
+      "tags": ["memory", "skills", "gbrain", "gstack", "dev"],
+      "author": "uniqent"
     }
   ]
 }

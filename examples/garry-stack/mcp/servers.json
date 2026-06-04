@@ -1,0 +1,43 @@
+{
+  "servers": [
+    {
+      "id": "gbrain",
+      "transport": "stdio",
+      "command": "gbrain",
+      "args": ["serve"],
+      "auth": {
+        "type": "none"
+      },
+      "tools": {
+        "include": "all"
+      },
+      "description": "GBrain memory MCP server (local; run `gbrain init` first)."
+    },
+    {
+      "id": "gbrain-remote",
+      "transport": "streamable-http",
+      "url": "https://your-gbrain.example.com/mcp",
+      "auth": {
+        "type": "bearer",
+        "credentialRef": "gbrain_token"
+      },
+      "tools": {
+        "include": "all"
+      },
+      "description": "Hosted GBrain memory MCP server."
+    },
+    {
+      "id": "github",
+      "transport": "streamable-http",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "auth": {
+        "type": "bearer",
+        "credentialRef": "github_pat"
+      },
+      "tools": {
+        "include": "all"
+      },
+      "description": "GitHub MCP server"
+    }
+  ]
+}

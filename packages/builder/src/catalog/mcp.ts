@@ -59,4 +59,40 @@ export const MCP_CATALOG: McpCatalogEntry[] = [
       description: 'Web fetch MCP server',
     },
   },
+  {
+    id: 'gbrain',
+    name: 'GBrain (memory)',
+    description:
+      'Persistent, queryable memory — search/think over a local gbrain. Requires gbrain installed.',
+    server: {
+      id: 'gbrain',
+      transport: 'stdio',
+      command: 'gbrain',
+      args: ['serve'],
+      auth: { type: 'none' },
+      tools: { include: 'all' },
+      description: 'GBrain memory MCP server (local; run `gbrain init` first).',
+    },
+  },
+  {
+    id: 'gbrain-remote',
+    name: 'GBrain (remote)',
+    description: 'Connect to a hosted gbrain over HTTP with a bearer token.',
+    server: {
+      id: 'gbrain-remote',
+      transport: 'streamable-http',
+      url: 'https://your-gbrain.example.com/mcp',
+      auth: { type: 'bearer', credentialRef: 'gbrain_token' },
+      tools: { include: 'all' },
+      description: 'Hosted GBrain memory MCP server.',
+    },
+    credential: {
+      ref: 'gbrain_token',
+      label: 'GBrain access token',
+      type: 'bearer',
+      consumedBy: [],
+      required: true,
+      help: 'From your gbrain server: gbrain connect <url> --token <tok>.',
+    },
+  },
 ];

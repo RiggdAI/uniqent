@@ -1,0 +1,58 @@
+{
+  "specVersion": "0.1",
+  "name": "garry-stack",
+  "displayName": "Garry Tan's Stack",
+  "version": "0.1.0",
+  "description": "Garry Tan's g-stack in one brain — gbrain persistent memory + gstack dev-workflow skills (qa/review/ship/investigate), wired to GitHub.",
+  "author": {
+    "name": "uniqent",
+    "url": "https://uniqent.ai"
+  },
+  "license": "CC0-1.0",
+  "tags": ["memory", "skills", "gbrain", "gstack", "dev"],
+  "components": {
+    "identity": true,
+    "memory": {
+      "facts": 3,
+      "episodic": 0,
+      "hasProfile": false
+    },
+    "skills": ["investigate", "qa", "review", "ship"],
+    "mcp": ["gbrain", "gbrain-remote", "github"],
+    "tools": [],
+    "tasks": [],
+    "channels": []
+  },
+  "credentials": [
+    {
+      "ref": "gbrain_token",
+      "label": "GBrain access token",
+      "type": "bearer",
+      "consumedBy": ["mcp:gbrain-remote"],
+      "required": true,
+      "help": "From your gbrain server: gbrain connect <url> --token <tok>."
+    },
+    {
+      "ref": "github_pat",
+      "label": "GitHub Personal Access Token",
+      "type": "apiKey",
+      "consumedBy": ["mcp:github"],
+      "required": true,
+      "help": "Create at https://github.com/settings/tokens with the scopes you need."
+    }
+  ],
+  "permissions": {
+    "filesystem": {
+      "read": [],
+      "write": []
+    },
+    "network": {
+      "endpoints": ["api.githubcopilot.com", "your-gbrain.example.com"]
+    },
+    "autonomy": "suggest",
+    "spawnsProcesses": true
+  },
+  "compatibility": {
+    "targets": ["claude-code", "hermes", "openclaw"]
+  }
+}
