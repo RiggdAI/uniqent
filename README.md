@@ -42,16 +42,17 @@ source — your brain and your secrets never leave your machine.
 
 ### A "brain" = everything that makes an agent that agent
 
-| Part             | What it is                                                              |
-| ---------------- | ----------------------------------------------------------------------- |
-| **Persona**      | personality, voice, role, goals — the identity                          |
-| **Stacks (MCP)** | the MCP servers it can use (GitHub, filesystem, web, …) and which tools |
-| **Skills**       | reusable, cross-agent `SKILL.md` capabilities                           |
-| **Memory**       | durable facts, decisions, preferences, a user/agent profile             |
-| **Tools**        | native built-ins it has on (web search, browser, code exec, …)          |
-| **Automations**  | scheduled/triggered tasks (e.g. a daily briefing)                       |
-| **Channels**     | where it's reachable (Telegram, Discord, Slack, …)                      |
-| **Config**       | model/provider prefs, autonomy level, allowlists                        |
+| Part             | What it is                                                                      |
+| ---------------- | ------------------------------------------------------------------------------- |
+| **Persona**      | personality, voice, role, goals — the identity                                  |
+| **About**        | a README + avatar describing the brain (travels in the bundle)                  |
+| **Stacks (MCP)** | the MCP servers it can use (GitHub, filesystem, web, gbrain, …) and which tools |
+| **Skills**       | reusable, cross-agent `SKILL.md` capabilities                                   |
+| **Memory**       | durable facts, decisions, preferences, a user/agent profile                     |
+| **Tools**        | native built-ins it has on (web search, browser, code exec, …)                  |
+| **Automations**  | scheduled/triggered tasks (e.g. a daily briefing)                               |
+| **Channels**     | where it's reachable (Telegram, Discord, Slack, …)                              |
+| **Config**       | model/provider prefs, autonomy level, allowlists                                |
 
 You compose those, run `uniqent pack`, and get one signed file. That file is the brain.
 
@@ -170,16 +171,20 @@ Pre-1.0, under active development — but the core loop works today:
 
 - **Spec · core · builder** — the `.uniqent` schema, bundle read/write + validation + secret-scan +
   Ed25519 signing, and a framework-agnostic engine to assemble a brain. ✅
-- **Uniqent Studio** — a local-first React canvas to build a brain (persona, MCP, skills, memory,
-  channels, flows; catalog + custom + import) and export a signed `.uniqent`. ✅
+- **Uniqent Studio** — a local-first React canvas to build a brain (persona, About/README + avatar,
+  MCP, skills, memory, channels, flows; catalog + custom + import) and export a signed `.uniqent`.
+  Memory editing uses a WYSIWYG-but-markdown editor; the sidebar collapses to an icon rail. ✅
+- **Bring what you have** — `uniqent import-vault` (and a Studio panel) turns an existing
+  **Obsidian / second-brain vault** into a brain; `uniqent export` captures a running agent. ✅
 - **Install** — three adapters (Claude Code, Hermes, OpenClaw) + the `uniqent` CLI and a Studio
   "Install" button install an exported brain into the chosen framework, with credentials resolved
   locally. The **same signed `.uniqent`** installs into all three — Hermes truncates memory to its
   bounded budget and reports it; Claude Code transforms it. ✅
-- **Distribute** — the `uniqent` CLI is published on npm (`npm i -g @uniqent/cli`); three example
-  brains in `examples/`, plus a file-based registry (`search` + install-by-slug against any hosted
-  `index.json` — no service required). ✅
-- **Next** — a hosted registry (uniqent.ai) and a `uniqent://` web "Install" handoff;
+- **Distribute** — the `uniqent` CLI is published on npm (`npm i -g @uniqent/cli`); example brains in
+  `examples/` (including **`garry-stack`** — gbrain memory + gstack-style skills, one-click), a
+  file-based registry (`search` + install-by-slug against any hosted `index.json` — no service
+  required), and **memory-pack publishing** (`uniqent publish-memory`, plus Studio + a web form). ✅
+- **Next** — accounts on the hosted registry (uniqent.ai) and a `uniqent://` web "Install" handoff;
   Codex/Cursor/Gemini adapters.
 
 See [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md) for the plan and [`docs/SPEC.md`](docs/SPEC.md) for the
@@ -205,6 +210,12 @@ uniqent install https://example.com/dev-powerpack.uniqent --target openclaw --ro
 export UNIQENT_REGISTRY=https://raw.githubusercontent.com/RiggdAI/uniqent/main/registry/index.json
 uniqent search coding
 uniqent install dev-powerpack --target hermes --root . --cred github_pat=…
+
+# Install a sample that packs gbrain memory + gstack-style skills (one click):
+uniqent install garry-stack --target claude-code --root . --cred gbrain_token=… --cred github_pat=…
+
+# Publish shareable memory as a pack to a hosted hub (personal facts never leave):
+uniqent publish-memory pack.json --slug team-context --name "Team context" --token …
 
 # Discover MCP servers + skills across hubs (MCP Registry, Smithery, GitHub):
 uniqent hub mcp github

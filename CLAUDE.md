@@ -146,7 +146,7 @@ Surfaces: CLI `uniqent hub mcp|skills <query>` and Studio palette **"Browse hubs
 against frozen fixtures of the real responses; verified live and in a browser.
 
 CLI surface:
-`uniqent inspect | install <file|url|slug> | validate <dir|file> | pack <dir> [-o] | search <q> | hub <mcp|skills> <q> | export [--from <id>] --root <dir> | import-vault <dir> | keygen | sign`.
+`uniqent inspect | install <file|url|slug> | validate <dir|file> | pack <dir> [-o] | search <q> | hub <mcp|skills> <q> | export [--from <id>] --root <dir> | import-vault <dir> | publish-memory <pack> | keygen | sign`.
 `export` captures an existing framework setup back into a `.uniqent` (auto-detects the framework;
 recovers MCP credential _requirements_ from auth headers without their values). `import-vault <dir>`
 captures an Obsidian/"second-brain" vault folder into a signed `.uniqent` (SOUL.md→persona,
