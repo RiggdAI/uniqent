@@ -43,14 +43,14 @@ function snippet(match: string): string {
 }
 
 /**
- * A long token made only of single-case letters + path/identifier separators (no digits, no mixed
- * case) is a natural identifier or URL path — e.g. `dataforseo_labs_google_competitors_domain` or
- * `com/search/docs/creating-helpful-content` — not a secret. Real secrets (base64/hex/random)
- * always carry digits and/or mixed case, so this never exempts an actual key. Known-format secrets
- * (sk-, ghp_, …) are matched by PREFIX_PATTERNS regardless.
+ * The longest run of a token with no identifier/path separators (`/ _ - + = .`). A real secret is a
+ * long UNBROKEN random string (base64/hex/token), so its longest run is long; natural identifiers
+ * and URL/file paths — `dataforseo_labs_google_competitors_domain`, `claude/skills/foo/SKILL.md` —
+ * break into short word segments. We only entropy-flag when the longest unbroken run is long enough
+ * to be a key. Known-format secrets (sk-, ghp_, …) are matched by PREFIX_PATTERNS regardless.
  */
-function looksLikeIdentifier(token: string): boolean {
-  return /^[a-z][a-z/_-]*$/.test(token) || /^[A-Z][A-Z/_-]*$/.test(token);
+function longestUnbrokenRun(token: string): number {
+  return token.split(/[/_+=.-]/).reduce((max, seg) => Math.max(max, seg.length), 0);
 }
 
 /** Detect a secret in a single string value (placeholders already allowed). */
@@ -61,7 +61,7 @@ function detect(value: string): { kind: string; snippet: string } | null {
     if (m) return { kind, snippet: snippet(m[0]) };
   }
   for (const m of cleaned.matchAll(HIGH_ENTROPY_TOKEN)) {
-    if (looksLikeIdentifier(m[0])) continue; // natural identifier / URL path, not a secret
+    if (longestUnbrokenRun(m[0]) < 20) continue; // identifier / path, not a secret-like run
     if (shannonEntropy(m[0]) >= 4.0) return { kind: 'high-entropy', snippet: snippet(m[0]) };
   }
   return null;

@@ -35,7 +35,7 @@ describe('scanForSecrets', () => {
     expect(scanForSecrets(b).some((x) => x.kind === 'high-entropy')).toBe(true);
   });
 
-  it('does not flag long natural identifiers / URL paths (single-case, no digits)', () => {
+  it('does not flag long natural identifiers / URL & file paths (broken into short words)', () => {
     const b = Bundle.empty();
     b.set(
       'skills/seo/SKILL.md',
@@ -43,6 +43,7 @@ describe('scanForSecrets', () => {
         'Use dataforseo_labs_google_competitors_domain and dataforseo_labs_bulk_keyword_difficulty.',
         'See https://developers.google.com/search/docs/fundamentals/creating-helpful-content',
         'Refs live at skills/seo-geo/references/google-ai-optimization-guide.',
+        'A mixed-case path: claude/skills/gstack/codex/SKILL.md and .factory/skills/gstack-qa.',
         'An all-caps constant: DATAFORSEO_LABS_BULK_TRAFFIC_ESTIMATION.',
       ].join('\n'),
     );
