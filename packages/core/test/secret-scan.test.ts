@@ -35,6 +35,20 @@ describe('scanForSecrets', () => {
     expect(scanForSecrets(b).some((x) => x.kind === 'high-entropy')).toBe(true);
   });
 
+  it('does not flag long natural identifiers / URL paths (single-case, no digits)', () => {
+    const b = Bundle.empty();
+    b.set(
+      'skills/seo/SKILL.md',
+      [
+        'Use dataforseo_labs_google_competitors_domain and dataforseo_labs_bulk_keyword_difficulty.',
+        'See https://developers.google.com/search/docs/fundamentals/creating-helpful-content',
+        'Refs live at skills/seo-geo/references/google-ai-optimization-guide.',
+        'An all-caps constant: DATAFORSEO_LABS_BULK_TRAFFIC_ESTIMATION.',
+      ].join('\n'),
+    );
+    expect(scanForSecrets(b)).toHaveLength(0);
+  });
+
   it('allows ${credentialRef:...} placeholders', () => {
     const b = Bundle.empty();
     b.set('mcp/servers.json', JSON.stringify({ token: '${credentialRef:github_pat}' }));
