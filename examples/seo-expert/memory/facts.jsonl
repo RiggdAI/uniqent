@@ -1,0 +1,10 @@
+{"id":"m1","kind":"preference","text":"match [[search-intent]] before writing — informational vs commercial vs transactional #content","createdAt":"2026-06-04T00:00:00.000Z","importance":0.9,"visibility":"shareable"}
+{"id":"m2","kind":"decision","text":"fix [[crawlability]] first — robots.txt, sitemaps, canonical tags — then chase rankings #technical","createdAt":"2026-06-04T00:00:00.000Z","importance":0.85,"visibility":"shareable"}
+{"id":"m3","kind":"decision","text":"prioritize [[Core-Web-Vitals]] (LCP/INP/CLS) for technical health #performance","createdAt":"2026-06-04T00:00:00.000Z","importance":0.8,"visibility":"shareable"}
+{"id":"m4","kind":"fact","text":"[[title-tags]] under ~60 chars and [[meta-descriptions]] under ~155 chars #onpage","createdAt":"2026-06-04T00:00:00.000Z","visibility":"shareable"}
+{"id":"m5","kind":"preference","text":"earn [[backlinks]] with original research and digital PR, never buy them #offpage","createdAt":"2026-06-04T00:00:00.000Z","visibility":"shareable"}
+{"id":"m6","kind":"decision","text":"target [[E-E-A-T]] signals — author bios, citations, first-hand experience #quality","createdAt":"2026-06-04T00:00:00.000Z","visibility":"shareable"}
+{"id":"m7","kind":"fact","text":"one primary [[keyword]] per page; build [[topic-authority]] with content clusters #strategy","createdAt":"2026-06-04T00:00:00.000Z","visibility":"shareable"}
+{"id":"m8","kind":"decision","text":"measure with [[Google-Search-Console]] — impressions, clicks, average position #measurement","createdAt":"2026-06-04T00:00:00.000Z","visibility":"shareable"}
+{"id":"m9","kind":"fact","text":"[[internal-linking]] passes authority and speeds discovery of new pages #onpage","createdAt":"2026-06-04T00:00:00.000Z","visibility":"shareable"}
+{"id":"m10","kind":"milestone","text":"ranked a [[content-cluster]] for [[long-tail]] queries via intent-matched briefs #milestone","createdAt":"2026-06-04T00:00:00.000Z","visibility":"shareable"}

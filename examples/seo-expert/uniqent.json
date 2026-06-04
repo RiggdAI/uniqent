@@ -1,0 +1,50 @@
+{
+  "specVersion": "0.1",
+  "name": "seo-expert",
+  "displayName": "SEO Expert",
+  "version": "0.1.0",
+  "description": "An SEO strategist — keyword research, technical audits, on-page + content optimization — wired to Brave Search, Google Search Console, and Keywords Everywhere.",
+  "author": {
+    "name": "uniqent",
+    "url": "https://uniqent.ai"
+  },
+  "license": "CC0-1.0",
+  "tags": ["seo", "marketing", "content", "research"],
+  "components": {
+    "identity": true,
+    "memory": {
+      "facts": 10,
+      "episodic": 0,
+      "hasProfile": false
+    },
+    "skills": ["content-brief", "keyword-research", "on-page-optimization", "technical-audit"],
+    "mcp": ["brave", "fetch", "google-search-console", "keywords-everywhere"],
+    "tools": [],
+    "tasks": [],
+    "channels": []
+  },
+  "credentials": [
+    {
+      "ref": "smithery_api_key",
+      "label": "Smithery API key",
+      "type": "apiKey",
+      "consumedBy": ["mcp:brave", "mcp:google-search-console", "mcp:keywords-everywhere"],
+      "required": true,
+      "help": "Create at https://smithery.ai/account/api-keys"
+    }
+  ],
+  "permissions": {
+    "filesystem": {
+      "read": [],
+      "write": []
+    },
+    "network": {
+      "endpoints": ["server.smithery.ai"]
+    },
+    "autonomy": "suggest",
+    "spawnsProcesses": true
+  },
+  "compatibility": {
+    "targets": ["claude-code", "hermes", "openclaw"]
+  }
+}

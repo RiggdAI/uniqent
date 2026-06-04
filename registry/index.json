@@ -32,6 +32,14 @@
       "url": "https://github.com/RiggdAI/uniqent/releases/download/examples/garry-stack.uniqent",
       "tags": ["memory", "skills", "gbrain", "gstack", "dev"],
       "author": "uniqent"
+    },
+    {
+      "name": "seo-expert",
+      "version": "0.1.0",
+      "description": "An SEO strategist — keyword research, technical audits, on-page + content optimization — wired to Brave Search, Google Search Console, and Keywords Everywhere.",
+      "url": "https://github.com/RiggdAI/uniqent/releases/download/examples/seo-expert.uniqent",
+      "tags": ["seo", "marketing", "content", "research"],
+      "author": "uniqent"
     }
   ]
 }
