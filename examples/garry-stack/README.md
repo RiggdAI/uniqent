@@ -7,4 +7,4 @@ A ready-to-install brain that bundles two open-source pieces of the `g*` toolkit
 
 Install it into Claude Code, Hermes, or OpenClaw and you get the memory engine + the dev skills wired up. Bring your own GitHub token and (optional) hosted gbrain token — no secrets travel in the bundle.
 
-> Run `gbrain init` once locally for the memory engine. gbrain and gstack are by Garry Tan.
+> Install gbrain once with `bun install -g github:garrytan/gbrain`, then `gbrain init`. gbrain and gstack are by Garry Tan.

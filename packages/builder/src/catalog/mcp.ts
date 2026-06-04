@@ -63,7 +63,7 @@ export const MCP_CATALOG: McpCatalogEntry[] = [
     id: 'gbrain',
     name: 'GBrain (memory)',
     description:
-      'Persistent, queryable memory — search/think over a local gbrain. Requires gbrain installed.',
+      'Persistent, queryable memory — search/think over a local gbrain (by Garry Tan). Requires gbrain installed.',
     server: {
       id: 'gbrain',
       transport: 'stdio',
@@ -71,7 +71,8 @@ export const MCP_CATALOG: McpCatalogEntry[] = [
       args: ['serve'],
       auth: { type: 'none' },
       tools: { include: 'all' },
-      description: 'GBrain memory MCP server (local; run `gbrain init` first).',
+      description:
+        'GBrain memory MCP server (local). Install once: `bun install -g github:garrytan/gbrain`, then `gbrain init`.',
     },
   },
   {

@@ -13,7 +13,7 @@
   "components": {
     "identity": true,
     "memory": {
-      "facts": 3,
+      "facts": 10,
       "episodic": 0,
       "hasProfile": false
     },

@@ -11,7 +11,7 @@
       "tools": {
         "include": "all"
       },
-      "description": "GBrain memory MCP server (local; run `gbrain init` first)."
+      "description": "GBrain memory MCP server (local). Install once: `bun install -g github:garrytan/gbrain`, then `gbrain init`."
     },
     {
       "id": "gbrain-remote",
