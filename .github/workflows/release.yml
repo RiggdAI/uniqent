@@ -1,0 +1,58 @@
+name: Release
+
+# Publish all public @uniqent/* packages to npm when a version tag is pushed.
+# Tag a release with:  git tag v0.1.2 && git push origin v0.1.2
+# Requires an npm automation token in the repo secret NPM_TOKEN (bypasses 2FA OTP).
+on:
+  push:
+    tags: ['v*']
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write # for npm provenance attestations
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+      # Emit a verifiable provenance statement for each published package.
+      NPM_CONFIG_PROVENANCE: 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          # Writes ~/.npmrc with the registry auth token used by pnpm publish.
+          registry-url: 'https://registry.npmjs.org'
+
+      # Provision the exact pnpm from package.json "packageManager" via corepack
+      # (mirrors ci.yml — pnpm/action-setup's self-installer fails on the runner).
+      - name: Enable pnpm (corepack)
+        run: |
+          npm install -g corepack@latest
+          corepack enable
+          corepack prepare --activate
+
+      - run: pnpm install --frozen-lockfile
+
+      # Build first: cli's prepublishOnly also rebuilds, but building here lets the
+      # gates below resolve cross-package dist/*.d.ts before we publish.
+      - run: pnpm build
+
+      - run: pnpm typecheck
+
+      - run: pnpm test
+
+      # Publish every public package. pnpm skips versions already on the registry,
+      # so re-running the same tag is safe (idempotent). The cli's prepublishOnly
+      # regenerates the signed featured/ bundle so it ships in the tarball.
+      - name: Publish to npm
+        run: pnpm -r --filter "./packages/*" publish --no-git-checks --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
