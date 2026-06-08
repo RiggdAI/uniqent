@@ -15,4 +15,13 @@ describe('example bundles', () => {
       expect(bytes.length).toBeGreaterThan(0);
     });
   }
+
+  it('research-analyst is a rich hero: ≥10 facts, creds-free, has suggestedPrompts', async () => {
+    const bundle = await readDir(resolve(examplesDir, 'research-analyst'));
+    const m = JSON.parse(new TextDecoder().decode(bundle.get('uniqent.json')!));
+    expect(m.components.memory.facts).toBeGreaterThanOrEqual(10);
+    expect(m.credentials).toEqual([]);
+    expect(Array.isArray(m.suggestedPrompts)).toBe(true);
+    expect(m.suggestedPrompts[0]).toMatch(/cite/i);
+  });
 });

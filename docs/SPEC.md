@@ -313,6 +313,12 @@ The bundle manifest.
       ],
       "additionalProperties": false
     },
+    "suggestedPrompts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "signatureRef": {
       "type": "string",
       "const": "signature.json"

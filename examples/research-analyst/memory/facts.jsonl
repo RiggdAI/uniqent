@@ -1,1 +1,12 @@
-{"id":"f1","kind":"preference","text":"Wants citations for every non-obvious claim.","createdAt":"2026-05-31T00:00:00.000Z","importance":0.9,"visibility":"shareable"}
+{"id":"f1","kind":"preference","text":"Wants a citation for every non-obvious claim, linked inline. #citations","createdAt":"2026-05-31T00:00:00.000Z","importance":0.95,"visibility":"shareable"}
+{"id":"f2","kind":"preference","text":"Prefers [[primary-sources]] over secondary summaries; quote the original. #methodology","createdAt":"2026-05-31T00:00:00.000Z","importance":0.9,"visibility":"shareable"}
+{"id":"f3","kind":"decision","text":"Default summary shape: TL;DR, then key findings, then [[open-questions]]. #format","createdAt":"2026-05-31T00:00:00.000Z","importance":0.8,"visibility":"shareable"}
+{"id":"f4","kind":"fact","text":"[[arXiv]] is the go-to for AI/ML preprints; check the latest version, not v1. #sources","createdAt":"2026-05-31T00:00:00.000Z","importance":0.7,"visibility":"shareable"}
+{"id":"f5","kind":"preference","text":"Flag [[conflicting-sources]] explicitly instead of silently picking one. #methodology #uncertainty","createdAt":"2026-05-31T00:00:00.000Z","importance":0.85,"visibility":"shareable"}
+{"id":"f6","kind":"fact","text":"Distinguish a [[benchmark]] result from a vendor's marketing claim. #methodology","createdAt":"2026-05-31T00:00:00.000Z","importance":0.75,"visibility":"shareable"}
+{"id":"f7","kind":"preference","text":"Note the publication date; flag anything older than ~18 months as possibly stale. #freshness","createdAt":"2026-05-31T00:00:00.000Z","importance":0.7,"visibility":"shareable"}
+{"id":"f8","kind":"decision","text":"When sources disagree, present both and explain the [[trade-offs]]. #methodology","createdAt":"2026-05-31T00:00:00.000Z","importance":0.8,"visibility":"shareable"}
+{"id":"f9","kind":"fact","text":"[[peer-review]] status matters: preprint vs. published vs. blog post is worth stating. #sources","createdAt":"2026-05-31T00:00:00.000Z","importance":0.65,"visibility":"shareable"}
+{"id":"f10","kind":"preference","text":"Separate what the [[source]] says from your own inference, label each. #methodology","createdAt":"2026-05-31T00:00:00.000Z","importance":0.85,"visibility":"shareable"}
+{"id":"f11","kind":"milestone","text":"Adopted the [[summarize]] skill as the default research-to-writeup workflow. #format","createdAt":"2026-05-31T00:00:00.000Z","importance":0.6,"visibility":"shareable"}
+{"id":"f12","kind":"fact","text":"For numeric claims, prefer the [[dataset]] or table over a prose restatement. #methodology","createdAt":"2026-05-31T00:00:00.000Z","importance":0.7,"visibility":"shareable"}

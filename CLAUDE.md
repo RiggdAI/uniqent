@@ -135,6 +135,8 @@ default).
   button and the `uniqent install --target <claude-code|hermes|openclaw>` CLI both drive them; the
   local server is hardened (127.0.0.1-only + localhost Origin/Host guard).
 
+**Wow first-run** — `npx @uniqent/cli try <brain>` auto-detects the running framework (filesystem probe in `packages/builder/src/detect.ts`) and one-command-installs a featured, signed, creds-free brain (the enriched `research-analyst`), ending with the manifest's `suggestedPrompts`. Featured bundles are packed+signed into `packages/cli/featured/` at build (`build:featured`); `uniqent try` reuses the shared `runInstall` pipeline in `packages/cli/src/run.ts`. Manifest gained optional `suggestedPrompts`.
+
 **Hub discovery** — `packages/builder/src/hubs/` adds a framework-agnostic `CatalogSource` layer
 (built once; CLI + Studio consume it). `searchMcpHubs`/`searchSkillHubs` fan out across sources
 with per-source error isolation; sources: the official **MCP Registry** + **Smithery** (MCP) and
@@ -146,7 +148,7 @@ Surfaces: CLI `uniqent hub mcp|skills <query>` and Studio palette **"Browse hubs
 against frozen fixtures of the real responses; verified live and in a browser.
 
 CLI surface:
-`uniqent inspect | install <file|url|slug> | validate <dir|file> | pack <dir> [-o] | search <q> | hub <mcp|skills> <q> | export [--from <id>] --root <dir> | import-vault <dir> | publish-memory <pack> | keygen | sign`.
+`uniqent try <brain> | inspect | install <file|url|slug> | validate <dir|file> | pack <dir> [-o] | search <q> | hub <mcp|skills> <q> | export [--from <id>] --root <dir> | import-vault <dir> | publish-memory <pack> | keygen | sign`.
 `export` captures an existing framework setup back into a `.uniqent` (auto-detects the framework;
 recovers MCP credential _requirements_ from auth headers without their values). `import-vault <dir>`
 captures an Obsidian/"second-brain" vault folder into a signed `.uniqent` (SOUL.md→persona,

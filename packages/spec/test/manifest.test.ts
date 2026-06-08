@@ -195,3 +195,42 @@ describe('MemoryItem', () => {
     expect(r.success).toBe(false);
   });
 });
+
+describe('suggestedPrompts', () => {
+  const base = {
+    specVersion: '0.1',
+    name: 'research-analyst',
+    displayName: 'Research Analyst',
+    version: '0.1.0',
+    description: 'x',
+    author: { name: 'Uniqent' },
+    license: 'CC0-1.0',
+    tags: ['research'],
+    components: {
+      identity: true,
+      memory: { facts: 12, episodic: 0, hasProfile: false },
+      skills: ['summarize'],
+      mcp: ['fetch'],
+      tools: [],
+      tasks: [],
+      channels: [],
+    },
+    credentials: [],
+    permissions: {
+      filesystem: { read: [], write: [] },
+      network: { endpoints: [] },
+      autonomy: 'suggest',
+      spawnsProcesses: true,
+    },
+    compatibility: { targets: ['claude-code'] },
+  };
+
+  it('accepts a suggestedPrompts array', () => {
+    const m = Manifest.parse({ ...base, suggestedPrompts: ['Research X and cite every claim.'] });
+    expect(m.suggestedPrompts).toEqual(['Research X and cite every claim.']);
+  });
+
+  it('is optional', () => {
+    expect(Manifest.parse(base).suggestedPrompts).toBeUndefined();
+  });
+});

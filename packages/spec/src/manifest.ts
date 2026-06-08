@@ -49,6 +49,8 @@ export const Manifest = z.object({
   credentials: z.array(CredentialRequirement),
   permissions: PermissionScope,
   compatibility: Compatibility,
+  /** Demo prompts the brain advertises — shown after install ("now ask it this"). */
+  suggestedPrompts: z.array(z.string()).optional(),
   signatureRef: z.literal('signature.json').optional(),
 });
 export type Manifest = z.infer<typeof Manifest>;

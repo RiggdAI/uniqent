@@ -10,10 +10,14 @@
   },
   "license": "CC0-1.0",
   "tags": ["research", "web"],
+  "suggestedPrompts": [
+    "Research the best vector database for a RAG app and cite every claim.",
+    "Summarize the current state of small open-weight LLMs, with sources."
+  ],
   "components": {
     "identity": true,
     "memory": {
-      "facts": 1,
+      "facts": 12,
       "episodic": 0,
       "hasProfile": false
     },
