@@ -103,7 +103,7 @@ What makes it defensible — four things `.dotagents`-style sharing lacks:
 
 | Framework       | How the brain lands                                              | Status        |
 | --------------- | --------------------------------------------------------------- | ------------- |
-| **Claude Code** | skills → `.claude/skills`, persona+memory → instructions, MCP → `.mcp.json` | ✅ v1 |
+| **Claude Code** | skills → `.claude/skills`, persona+memory → `AGENTS.md`, MCP → `.mcp.json` | ✅ v1 |
 | **Hermes**      | persona → `SOUL.md`, **bounded** memory (prioritized + trimmed, reported), MCP/channels → `hermes.json` | ✅ v1 |
 | **OpenClaw**    | persona → `SOUL.md`, memory → `MEMORY.md`, skills → `skills/`, MCP/channels → `openclaw.json` | ✅ v1 |
 | Codex · Cursor · Gemini | —                                                       | planned       |
