@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="300" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="14">
+  <rect width="760" height="300" rx="10" fill="#0d1117"/>
+  <circle cx="22" cy="22" r="6" fill="#ff5f56"/><circle cx="42" cy="22" r="6" fill="#ffbd2e"/><circle cx="62" cy="22" r="6" fill="#27c93f"/>
+  <text x="20" y="70" fill="#7ee787">$ <tspan fill="#e6edf3">npx @uniqent/cli try research-analyst</tspan></text>
+  <text x="20" y="100" fill="#8b949e">detected: Claude Code (~/.claude)</text>
+  <text x="20" y="124" fill="#8b949e">signature: valid ✓</text>
+  <text x="20" y="148" fill="#e6edf3">installing Research Analyst…</text>
+  <text x="20" y="172" fill="#58a6ff">  ✓ persona, summarize skill, web-fetch MCP (no API key)</text>
+  <text x="20" y="196" fill="#58a6ff">  ✓ 12 memories → knowledge graph</text>
+  <text x="20" y="232" fill="#e6edf3">Done. Open this folder in Claude Code and ask:</text>
+  <text x="20" y="258" fill="#d2a8ff">  → "Research the best vector database for a RAG app</text>
+  <text x="20" y="278" fill="#d2a8ff">     and cite every claim."</text>
+</svg>
