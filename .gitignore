@@ -10,6 +10,7 @@ coverage/
 
 # build artifacts
 *.uniqent
+packages/cli/featured/
 dist-web/
 .gstack/
 .playwright-mcp/

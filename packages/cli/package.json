@@ -10,12 +10,15 @@
   "main": "./dist/run.js",
   "types": "./dist/run.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "featured"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && tsx scripts/build-featured.ts",
+    "build:featured": "tsx scripts/build-featured.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepublishOnly": "pnpm build"
   },
   "dependencies": {
     "@uniqent/adapter-claude-code": "workspace:^",
@@ -26,6 +29,7 @@
     "@uniqent/core": "workspace:^"
   },
   "devDependencies": {
+    "tsx": "^4.19.2",
     "vitest": "^3.0.0"
   },
   "publishConfig": {
