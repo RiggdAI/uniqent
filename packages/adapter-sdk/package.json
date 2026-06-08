@@ -1,6 +1,6 @@
 {
   "name": "@uniqent/adapter-sdk",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "The Uniqent Adapter interface + conformance harness for framework adapters.",
   "license": "Apache-2.0",
   "type": "module",

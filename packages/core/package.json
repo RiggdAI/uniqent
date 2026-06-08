@@ -1,6 +1,6 @@
 {
   "name": "@uniqent/core",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Bundle read/write, validation, digest, secret-scan, and signing for .uniqent.",
   "license": "Apache-2.0",
   "type": "module",

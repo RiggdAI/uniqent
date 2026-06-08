@@ -1,6 +1,6 @@
 {
   "name": "@uniqent/adapter-hermes",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Uniqent adapter that installs a .uniqent brain into Hermes (bounded memory).",
   "license": "Apache-2.0",
   "type": "module",
