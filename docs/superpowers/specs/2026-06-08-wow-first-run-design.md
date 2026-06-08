@@ -21,7 +21,7 @@ command, ~60 seconds, zero config, zero API keys** — the single highest-levera
    a bundle URL/file, then `uniqent install <file> --target claude-code --root <dir>` — three steps
    plus arguments.
 2. **No auto-detect.** `install` defaults `--root` to cwd and `--target` to `claude-code` but never
-   *looks* for the user's framework. Each adapter already exposes `detect({root})` — it is simply
+   _looks_ for the user's framework. Each adapter already exposes `detect({root})` — it is simply
    unused for routing.
 3. **Thin hero brain.** `research-analyst` is a 3-line persona, **1** memory fact, the `fetch` MCP,
    and one `summarize` skill. The memory-brain graph would be nearly empty.
@@ -72,7 +72,7 @@ A small framework-agnostic module that owns the featured set and detection routi
 and (later) Studio can share it.
 
 - **`featuredBrains(): FeaturedBrain[]`** — returns the curated list: `{ name, displayName, pitch,
-  suggestedPrompts }`. Source of truth is a single data file; the actual bundle bytes are loaded by
+suggestedPrompts }`. Source of truth is a single data file; the actual bundle bytes are loaded by
   the CLI (which knows its own package layout) — builder stays fs-agnostic.
 - **`detectTarget(adapters, { cwd, home }): Promise<{ id, configRoot } | null>`** — iterates the
   given adapters calling `detect()`, returns the first present by priority
@@ -160,7 +160,7 @@ npx @uniqent/cli try research-analyst
 
 ## Error handling
 
-- **No framework detected** → default to `claude-code` in cwd, create `.claude/`, and *say so*
+- **No framework detected** → default to `claude-code` in cwd, create `.claude/`, and _say so_
   ("no agent detected — set up Claude Code here").
 - **Unknown brain name** (not featured, not a valid slug/URL/file) → list the featured brains and
   exit non-zero.

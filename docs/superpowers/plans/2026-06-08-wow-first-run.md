@@ -13,6 +13,7 @@
 ## File Structure
 
 **Create:**
+
 - `packages/builder/src/featured.ts` — featured-brain catalog (name, displayName, pitch, suggestedPrompts).
 - `packages/builder/src/detect.ts` — `detectTarget()` filesystem probe for the user's framework.
 - `packages/builder/test/featured.test.ts` — featured catalog tests.
@@ -23,6 +24,7 @@
 - `docs/img/try-demo.svg` — committed terminal-card demo asset for the README.
 
 **Modify:**
+
 - `packages/spec/src/manifest.ts` — add optional `suggestedPrompts`.
 - `packages/builder/src/index.ts` — export `featured.js` + `detect.js`.
 - `examples/research-analyst/identity/persona.md` — richer persona.
@@ -39,6 +41,7 @@
 ## Task 1: Spec — add `suggestedPrompts` to the manifest
 
 **Files:**
+
 - Modify: `packages/spec/src/manifest.ts:37-53`
 - Test: `packages/spec/test/manifest.test.ts`
 
@@ -70,7 +73,12 @@ describe('suggestedPrompts', () => {
       channels: [],
     },
     credentials: [],
-    permissions: { filesystem: { read: [], write: [] }, network: { endpoints: [] }, autonomy: 'suggest', spawnsProcesses: true },
+    permissions: {
+      filesystem: { read: [], write: [] },
+      network: { endpoints: [] },
+      autonomy: 'suggest',
+      spawnsProcesses: true,
+    },
     compatibility: { targets: ['claude-code'] },
   };
 
@@ -121,6 +129,7 @@ git commit -m "feat(spec): add optional suggestedPrompts to the manifest"
 ## Task 2: builder — `featuredBrains()` catalog
 
 **Files:**
+
 - Create: `packages/builder/src/featured.ts`
 - Modify: `packages/builder/src/index.ts:4-9`
 - Test: `packages/builder/test/featured.test.ts`
@@ -215,6 +224,7 @@ git commit -m "feat(builder): featured-brain catalog"
 ## Task 3: builder — `detectTarget()` framework probe
 
 **Files:**
+
 - Create: `packages/builder/src/detect.ts`
 - Modify: `packages/builder/src/index.ts`
 - Test: `packages/builder/test/detect.test.ts`
@@ -247,17 +257,25 @@ afterEach(async () => {
 describe('detectTarget', () => {
   it('detects claude-code from a project .claude dir, root = cwd', async () => {
     await mkdir(join(cwd, '.claude'));
-    expect(await detectTarget({ cwd, home, env: {} })).toEqual({ id: 'claude-code', configRoot: cwd });
+    expect(await detectTarget({ cwd, home, env: {} })).toEqual({
+      id: 'claude-code',
+      configRoot: cwd,
+    });
   });
 
   it('detects claude-code from ~/.claude but still installs into cwd', async () => {
     await mkdir(join(home, '.claude'));
-    expect(await detectTarget({ cwd, home, env: {} })).toEqual({ id: 'claude-code', configRoot: cwd });
+    expect(await detectTarget({ cwd, home, env: {} })).toEqual({
+      id: 'claude-code',
+      configRoot: cwd,
+    });
   });
 
   it('detects openclaw from OPENCLAW_STATE_DIR', async () => {
-    expect(await detectTarget({ cwd, home, env: { OPENCLAW_STATE_DIR: '/tmp/oc' } }))
-      .toEqual({ id: 'openclaw', configRoot: '/tmp/oc' });
+    expect(await detectTarget({ cwd, home, env: { OPENCLAW_STATE_DIR: '/tmp/oc' } })).toEqual({
+      id: 'openclaw',
+      configRoot: '/tmp/oc',
+    });
   });
 
   it('detects hermes from a hermes.json', async () => {
@@ -327,7 +345,8 @@ export async function detectTarget(input: DetectInput): Promise<TargetGuess | nu
 
   // OpenClaw: explicit state dir, or an openclaw.json in cwd.
   if (env.OPENCLAW_STATE_DIR) return { id: 'openclaw', configRoot: env.OPENCLAW_STATE_DIR };
-  if (await exists(join(input.cwd, 'openclaw.json'))) return { id: 'openclaw', configRoot: input.cwd };
+  if (await exists(join(input.cwd, 'openclaw.json')))
+    return { id: 'openclaw', configRoot: input.cwd };
 
   // Hermes: a hermes.json in cwd, or ~/.hermes.
   if (await exists(join(input.cwd, 'hermes.json'))) return { id: 'hermes', configRoot: input.cwd };
@@ -362,6 +381,7 @@ git commit -m "feat(builder): detectTarget framework probe"
 ## Task 4: Enrich the `research-analyst` hero brain
 
 **Files:**
+
 - Modify: `examples/research-analyst/identity/persona.md`
 - Modify: `examples/research-analyst/memory/facts.jsonl`
 - Modify: `examples/research-analyst/skills/summarize/SKILL.md`
@@ -544,6 +564,7 @@ git commit -m "feat(examples): enrich research-analyst into the wow hero (12 lin
 ## Task 5: CLI — `build:featured` script + featured loader
 
 **Files:**
+
 - Create: `packages/cli/scripts/build-featured.ts`
 - Create: `packages/cli/src/featured.ts`
 - Modify: `packages/cli/package.json`
@@ -554,6 +575,7 @@ git commit -m "feat(examples): enrich research-analyst into the wow hero (12 lin
 - [ ] **Step 1: Add the build:featured script + featured to files**
 
 In `packages/cli/package.json`:
+
 - Add `"featured"` to the `files` array: `"files": ["dist", "featured"]`.
 - Add to `scripts`: `"build:featured": "node --experimental-strip-types scripts/build-featured.ts"`.
 - In `scripts.build`, chain it so a normal build produces the bundles:
@@ -682,6 +704,7 @@ git commit -m "feat(cli): pack+sign featured brains into the package + loader"
 ## Task 6: CLI — extract `runInstall`, add the `try` command
 
 **Files:**
+
 - Modify: `packages/cli/src/run.ts` (extract shared helper from `install` at 156-238; add `tryCmd`; wire dispatch at 686-712)
 - Test: `packages/cli/test/try.test.ts`
 
@@ -715,7 +738,9 @@ async function runInstall(bundle: Bundle, opts: RunInstallOpts, io: CliIo): Prom
       );
       return 1;
     }
-    io.log(`WARNING: installing an ${v.signed ? 'INVALID' : 'unsigned'} bundle (--allow-unsigned).`);
+    io.log(
+      `WARNING: installing an ${v.signed ? 'INVALID' : 'unsigned'} bundle (--allow-unsigned).`,
+    );
   } else {
     io.log('signature: valid ✓');
   }
@@ -906,7 +931,11 @@ async function tryCmd(args: string[], io: CliIo): Promise<number> {
   let target = typeof flags.target === 'string' ? flags.target : undefined;
   let root = typeof flags.root === 'string' ? flags.root : undefined;
   if (!target || !root) {
-    const guess = await detectTarget({ cwd: root ?? process.cwd(), home: homedir(), env: process.env });
+    const guess = await detectTarget({
+      cwd: root ?? process.cwd(),
+      home: homedir(),
+      env: process.env,
+    });
     if (guess) {
       target ??= guess.id;
       root ??= guess.configRoot;
@@ -914,7 +943,9 @@ async function tryCmd(args: string[], io: CliIo): Promise<number> {
     } else {
       target ??= 'claude-code';
       root ??= process.cwd();
-      io.log(`no agent detected — setting up ${ADAPTERS[target]?.displayName ?? target} in ${root}`);
+      io.log(
+        `no agent detected — setting up ${ADAPTERS[target]?.displayName ?? target} in ${root}`,
+      );
     }
   }
 
@@ -947,15 +978,18 @@ async function tryCmd(args: string[], io: CliIo): Promise<number> {
 - [ ] **Step 7: Add `list` to BOOLEAN_FLAGS and wire dispatch + help**
 
 In `packages/cli/src/run.ts`:
+
 - Add `'list'` to `BOOLEAN_FLAGS`: `const BOOLEAN_FLAGS = new Set(['yes', 'allow-unsigned', 'json', 'sign', 'dry-run', 'list']);`
 - In `run()`, add before the usage error: `if (cmd === 'try') return tryCmd(rest, io);`
 - Add `try` to the usage line and a help line:
 
 ```ts
-  io.error(
-    'usage: uniqent <try|inspect|install|validate|pack|search|hub|export|import-vault|publish-memory|keygen|sign> …',
-  );
-  io.error('  try <brain> [--target <id>] [--root <dir>] [--yes] [--list]   (one-command install of a featured brain)');
+io.error(
+  'usage: uniqent <try|inspect|install|validate|pack|search|hub|export|import-vault|publish-memory|keygen|sign> …',
+);
+io.error(
+  '  try <brain> [--target <id>] [--root <dir>] [--yes] [--list]   (one-command install of a featured brain)',
+);
 ```
 
 - [ ] **Step 8: Run the `try` tests to verify they pass**
@@ -975,6 +1009,7 @@ pnpm build
 TMP=$(mktemp -d) && mkdir "$TMP/.claude"
 node packages/cli/dist/bin.js try research-analyst --root "$TMP" --yes
 ```
+
 Expected: prints `detected: Claude Code`, `signature: valid ✓`, the plan writes, and a `→ "Research the best vector database…"` payoff line; `$TMP/.claude` contains skills + the merged config.
 
 - [ ] **Step 11: Commit**
@@ -988,12 +1023,13 @@ git commit -m "feat(cli): uniqent try <brain> — auto-detect + one-command inst
 
 ## Task 7: README restructure (Hermes-style, action-first) + demo asset
 
-**Goal:** Reorder the README so a newcomer sees *what it is* and *what to type* in the first
+**Goal:** Reorder the README so a newcomer sees _what it is_ and _what to type_ in the first
 screenful — modeled on the clarity of `nousresearch/hermes-agent` (badge row → 1-paragraph intro →
 install command up top → scannable feature blocks → command tables → dividers). Keep every accurate
 claim; change ordering and density, not facts.
 
 **Files:**
+
 - Create: `docs/img/try-demo.svg`
 - Modify: `README.md` (full restructure)
 
@@ -1026,7 +1062,7 @@ table → Status (collapsed) → License → Contributing & Community.**
 
 > Preserve the existing screenshots (`docs/img/studio-canvas.png`, `docs/img/memory-brain.png`,
 > `docs/img/memory-brain-3d.png`) — move the memory-brain images into the "What you can do" →
-> *Build one visually* block rather than the top. Keep all repo URLs (`RiggdAI/uniqent`).
+> _Build one visually_ block rather than the top. Keep all repo URLs (`RiggdAI/uniqent`).
 
 ````markdown
 # Uniqent ☉
@@ -1102,7 +1138,7 @@ the brain into that framework's native layout and asks only for the recipient's 
 2. **Pack + sign** it into a `.uniqent` (Ed25519 signature over a content digest) — a fail-closed
    secret-scan guarantees **no API keys** travel in the bundle.
 3. **Share** it as a raw file or URL (e.g. straight from GitHub) — no hosted service required.
-4. **Install** it: the adapter verifies the signature, shows a permission sheet, resolves *your*
+4. **Install** it: the adapter verifies the signature, shows a permission sheet, resolves _your_
    credentials locally, dry-runs in a sandbox, then writes the framework's native layout.
 
 What makes it defensible — four things `.dotagents`-style sharing lacks:
@@ -1118,26 +1154,26 @@ What makes it defensible — four things `.dotagents`-style sharing lacks:
 
 ### A "brain" = everything that makes an agent that agent
 
-| Part             | What it is                                                                      |
-| ---------------- | ------------------------------------------------------------------------------- |
-| **Persona**      | personality, voice, role, goals — the identity                                  |
-| **About**        | a README + avatar describing the brain (travels in the bundle)                  |
-| **Stacks (MCP)** | the MCP servers it can use (GitHub, filesystem, web, …) and which tools         |
-| **Skills**       | reusable, cross-agent `SKILL.md` capabilities                                   |
-| **Memory**       | durable facts, decisions, preferences, a user/agent profile                     |
-| **Tools**        | native built-ins it has on (web search, browser, code exec, …)                  |
-| **Automations**  | scheduled/triggered tasks (e.g. a daily briefing)                               |
-| **Channels**     | where it's reachable (Telegram, Discord, Slack, …)                              |
-| **Config**       | model/provider prefs, autonomy level, allowlists                                |
+| Part             | What it is                                                              |
+| ---------------- | ----------------------------------------------------------------------- |
+| **Persona**      | personality, voice, role, goals — the identity                          |
+| **About**        | a README + avatar describing the brain (travels in the bundle)          |
+| **Stacks (MCP)** | the MCP servers it can use (GitHub, filesystem, web, …) and which tools |
+| **Skills**       | reusable, cross-agent `SKILL.md` capabilities                           |
+| **Memory**       | durable facts, decisions, preferences, a user/agent profile             |
+| **Tools**        | native built-ins it has on (web search, browser, code exec, …)          |
+| **Automations**  | scheduled/triggered tasks (e.g. a daily briefing)                       |
+| **Channels**     | where it's reachable (Telegram, Discord, Slack, …)                      |
+| **Config**       | model/provider prefs, autonomy level, allowlists                        |
 
 ### Install into any agent
 
-| Framework       | How the brain lands                                              | Status        |
-| --------------- | --------------------------------------------------------------- | ------------- |
-| **Claude Code** | skills → `.claude/skills`, persona+memory → instructions, MCP → `.mcp.json` | ✅ v1 |
-| **Hermes**      | persona → `SOUL.md`, **bounded** memory (prioritized + trimmed, reported), MCP/channels → `hermes.json` | ✅ v1 |
-| **OpenClaw**    | persona → `SOUL.md`, memory → `MEMORY.md`, skills → `skills/`, MCP/channels → `openclaw.json` | ✅ v1 |
-| Codex · Cursor · Gemini | —                                                       | planned       |
+| Framework               | How the brain lands                                                                                     | Status  |
+| ----------------------- | ------------------------------------------------------------------------------------------------------- | ------- |
+| **Claude Code**         | skills → `.claude/skills`, persona+memory → instructions, MCP → `.mcp.json`                             | ✅ v1   |
+| **Hermes**              | persona → `SOUL.md`, **bounded** memory (prioritized + trimmed, reported), MCP/channels → `hermes.json` | ✅ v1   |
+| **OpenClaw**            | persona → `SOUL.md`, memory → `MEMORY.md`, skills → `skills/`, MCP/channels → `openclaw.json`           | ✅ v1   |
+| Codex · Cursor · Gemini | —                                                                                                       | planned |
 
 ---
 
@@ -1147,16 +1183,16 @@ What makes it defensible — four things `.dotagents`-style sharing lacks:
 npm i -g @uniqent/cli      # or use npx @uniqent/cli <command>
 ```
 
-| Command | What it does |
-| --- | --- |
-| `try <brain>` | One-command install of a featured brain (auto-detects your framework). `--list` to browse. |
-| `install <file\|url\|slug>` | Install a brain into `--target <claude-code\|hermes\|openclaw>` (`--root <dir>`, `--cred ref=val`). |
-| `inspect <file>` | Show a bundle's manifest, components, and permissions. |
-| `export --root <dir>` | Capture a running agent into a `.uniqent` (auto-detects the framework). |
-| `import-vault <dir>` | Turn an Obsidian / second-brain vault into a signed brain. |
-| `pack <dir>` · `validate <dir\|file>` | Build / check a brain from a source directory. |
-| `search <q>` · `hub <mcp\|skills> <q>` | Find brains in a registry index; discover MCP servers + skills across hubs. |
-| `keygen` · `sign <file>` | Generate an Ed25519 keypair; sign a bundle. |
+| Command                                | What it does                                                                                        |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `try <brain>`                          | One-command install of a featured brain (auto-detects your framework). `--list` to browse.          |
+| `install <file\|url\|slug>`            | Install a brain into `--target <claude-code\|hermes\|openclaw>` (`--root <dir>`, `--cred ref=val`). |
+| `inspect <file>`                       | Show a bundle's manifest, components, and permissions.                                              |
+| `export --root <dir>`                  | Capture a running agent into a `.uniqent` (auto-detects the framework).                             |
+| `import-vault <dir>`                   | Turn an Obsidian / second-brain vault into a signed brain.                                          |
+| `pack <dir>` · `validate <dir\|file>`  | Build / check a brain from a source directory.                                                      |
+| `search <q>` · `hub <mcp\|skills> <q>` | Find brains in a registry index; discover MCP servers + skills across hubs.                         |
+| `keygen` · `sign <file>`               | Generate an Ed25519 keypair; sign a bundle.                                                         |
 
 A few real flows:
 
@@ -1190,13 +1226,13 @@ pnpm install && pnpm build && pnpm test
 
 ## Docs
 
-| Doc | What's in it |
-| --- | --- |
-| [`docs/SPEC.md`](docs/SPEC.md) | The `.uniqent` bundle-format reference (generated from the zod schema). |
-| [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md) | Full engineering spec + milestone plan. |
-| [`docs/UX-REVIEW.md`](docs/UX-REVIEW.md) | CLI UX review + roadmap of gaps. |
-| [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) · [`docs/GOVERNANCE.md`](docs/GOVERNANCE.md) | How to contribute + project governance. |
-| [`docs/SECURITY.md`](docs/SECURITY.md) | Security policy + disclosures. |
+| Doc                                                                                         | What's in it                                                            |
+| ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| [`docs/SPEC.md`](docs/SPEC.md)                                                              | The `.uniqent` bundle-format reference (generated from the zod schema). |
+| [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md)                                                  | Full engineering spec + milestone plan.                                 |
+| [`docs/UX-REVIEW.md`](docs/UX-REVIEW.md)                                                    | CLI UX review + roadmap of gaps.                                        |
+| [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) · [`docs/GOVERNANCE.md`](docs/GOVERNANCE.md) | How to contribute + project governance.                                 |
+| [`docs/SECURITY.md`](docs/SECURITY.md)                                                      | Security policy + disclosures.                                          |
 
 <details>
 <summary><strong>Status</strong> — pre-1.0, core loop works today</summary>
@@ -1258,6 +1294,7 @@ Expected: all green.
 - [ ] **Step 3: Update CLAUDE.md status + CLI surface line**
 
 In `CLAUDE.md`, add `try` to the documented CLI surface line and note the wow path:
+
 - In the `CLI surface:` block, prepend `try <brain>` to the command list.
 - Add a one-line note under Current status: "**Wow first-run** — `npx @uniqent/cli try <brain>` auto-detects the framework and one-command-installs a featured, signed, creds-free brain (research-analyst), ending with a suggested prompt."
 

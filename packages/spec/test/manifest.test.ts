@@ -216,7 +216,12 @@ describe('suggestedPrompts', () => {
       channels: [],
     },
     credentials: [],
-    permissions: { filesystem: { read: [], write: [] }, network: { endpoints: [] }, autonomy: 'suggest', spawnsProcesses: true },
+    permissions: {
+      filesystem: { read: [], write: [] },
+      network: { endpoints: [] },
+      autonomy: 'suggest',
+      spawnsProcesses: true,
+    },
     compatibility: { targets: ['claude-code'] },
   };
 

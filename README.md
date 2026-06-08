@@ -71,7 +71,7 @@ the brain into that framework's native layout and asks only for the recipient's 
 2. **Pack + sign** it into a `.uniqent` (Ed25519 signature over a content digest) — a fail-closed
    secret-scan guarantees **no API keys** travel in the bundle.
 3. **Share** it as a raw file or URL (e.g. straight from GitHub) — no hosted service required.
-4. **Install** it: the adapter verifies the signature, shows a permission sheet, resolves *your*
+4. **Install** it: the adapter verifies the signature, shows a permission sheet, resolves _your_
    credentials locally, dry-runs in a sandbox, then writes the framework's native layout.
 
 What makes it defensible — four things `.dotagents`-style sharing lacks:
@@ -87,26 +87,26 @@ What makes it defensible — four things `.dotagents`-style sharing lacks:
 
 ### A "brain" = everything that makes an agent that agent
 
-| Part             | What it is                                                                      |
-| ---------------- | ------------------------------------------------------------------------------- |
-| **Persona**      | personality, voice, role, goals — the identity                                  |
-| **About**        | a README + avatar describing the brain (travels in the bundle)                  |
-| **Stacks (MCP)** | the MCP servers it can use (GitHub, filesystem, web, …) and which tools         |
-| **Skills**       | reusable, cross-agent `SKILL.md` capabilities                                   |
-| **Memory**       | durable facts, decisions, preferences, a user/agent profile                     |
-| **Tools**        | native built-ins it has on (web search, browser, code exec, …)                  |
-| **Automations**  | scheduled/triggered tasks (e.g. a daily briefing)                               |
-| **Channels**     | where it's reachable (Telegram, Discord, Slack, …)                              |
-| **Config**       | model/provider prefs, autonomy level, allowlists                                |
+| Part             | What it is                                                              |
+| ---------------- | ----------------------------------------------------------------------- |
+| **Persona**      | personality, voice, role, goals — the identity                          |
+| **About**        | a README + avatar describing the brain (travels in the bundle)          |
+| **Stacks (MCP)** | the MCP servers it can use (GitHub, filesystem, web, …) and which tools |
+| **Skills**       | reusable, cross-agent `SKILL.md` capabilities                           |
+| **Memory**       | durable facts, decisions, preferences, a user/agent profile             |
+| **Tools**        | native built-ins it has on (web search, browser, code exec, …)          |
+| **Automations**  | scheduled/triggered tasks (e.g. a daily briefing)                       |
+| **Channels**     | where it's reachable (Telegram, Discord, Slack, …)                      |
+| **Config**       | model/provider prefs, autonomy level, allowlists                        |
 
 ### Install into any agent
 
-| Framework       | How the brain lands                                              | Status        |
-| --------------- | --------------------------------------------------------------- | ------------- |
-| **Claude Code** | skills → `.claude/skills`, persona+memory → `AGENTS.md`, MCP → `.mcp.json` | ✅ v1 |
-| **Hermes**      | persona → `SOUL.md`, **bounded** memory (prioritized + trimmed, reported), MCP/channels → `hermes.json` | ✅ v1 |
-| **OpenClaw**    | persona → `SOUL.md`, memory → `MEMORY.md`, skills → `skills/`, MCP/channels → `openclaw.json` | ✅ v1 |
-| Codex · Cursor · Gemini | —                                                       | planned       |
+| Framework               | How the brain lands                                                                                     | Status  |
+| ----------------------- | ------------------------------------------------------------------------------------------------------- | ------- |
+| **Claude Code**         | skills → `.claude/skills`, persona+memory → `AGENTS.md`, MCP → `.mcp.json`                              | ✅ v1   |
+| **Hermes**              | persona → `SOUL.md`, **bounded** memory (prioritized + trimmed, reported), MCP/channels → `hermes.json` | ✅ v1   |
+| **OpenClaw**            | persona → `SOUL.md`, memory → `MEMORY.md`, skills → `skills/`, MCP/channels → `openclaw.json`           | ✅ v1   |
+| Codex · Cursor · Gemini | —                                                                                                       | planned |
 
 ---
 
@@ -116,16 +116,16 @@ What makes it defensible — four things `.dotagents`-style sharing lacks:
 npm i -g @uniqent/cli      # or use npx @uniqent/cli <command>
 ```
 
-| Command | What it does |
-| --- | --- |
-| `try <brain>` | One-command install of a featured brain (auto-detects your framework). `--list` to browse. |
-| `install <file\|url\|slug>` | Install a brain into `--target <claude-code\|hermes\|openclaw>` (`--root <dir>`, `--cred ref=val`). |
-| `inspect <file>` | Show a bundle's manifest, components, and permissions. |
-| `export --root <dir>` | Capture a running agent into a `.uniqent` (auto-detects the framework). |
-| `import-vault <dir>` | Turn an Obsidian / second-brain vault into a signed brain. |
-| `pack <dir>` · `validate <dir\|file>` | Build / check a brain from a source directory. |
-| `search <q>` · `hub <mcp\|skills> <q>` | Find brains in a registry index; discover MCP servers + skills across hubs. |
-| `keygen` · `sign <file>` | Generate an Ed25519 keypair; sign a bundle. |
+| Command                                | What it does                                                                                        |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `try <brain>`                          | One-command install of a featured brain (auto-detects your framework). `--list` to browse.          |
+| `install <file\|url\|slug>`            | Install a brain into `--target <claude-code\|hermes\|openclaw>` (`--root <dir>`, `--cred ref=val`). |
+| `inspect <file>`                       | Show a bundle's manifest, components, and permissions.                                              |
+| `export --root <dir>`                  | Capture a running agent into a `.uniqent` (auto-detects the framework).                             |
+| `import-vault <dir>`                   | Turn an Obsidian / second-brain vault into a signed brain.                                          |
+| `pack <dir>` · `validate <dir\|file>`  | Build / check a brain from a source directory.                                                      |
+| `search <q>` · `hub <mcp\|skills> <q>` | Find brains in a registry index; discover MCP servers + skills across hubs.                         |
+| `keygen` · `sign <file>`               | Generate an Ed25519 keypair; sign a bundle.                                                         |
 
 A few real flows:
 
@@ -159,13 +159,13 @@ pnpm install && pnpm build && pnpm test
 
 ## Docs
 
-| Doc | What's in it |
-| --- | --- |
-| [`docs/SPEC.md`](docs/SPEC.md) | The `.uniqent` bundle-format reference (generated from the zod schema). |
-| [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md) | Full engineering spec + milestone plan. |
-| [`docs/UX-REVIEW.md`](docs/UX-REVIEW.md) | CLI UX review + roadmap of gaps. |
-| [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) · [`docs/GOVERNANCE.md`](docs/GOVERNANCE.md) | How to contribute + project governance. |
-| [`docs/SECURITY.md`](docs/SECURITY.md) | Security policy + disclosures. |
+| Doc                                                                                         | What's in it                                                            |
+| ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| [`docs/SPEC.md`](docs/SPEC.md)                                                              | The `.uniqent` bundle-format reference (generated from the zod schema). |
+| [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md)                                                  | Full engineering spec + milestone plan.                                 |
+| [`docs/UX-REVIEW.md`](docs/UX-REVIEW.md)                                                    | CLI UX review + roadmap of gaps.                                        |
+| [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) · [`docs/GOVERNANCE.md`](docs/GOVERNANCE.md) | How to contribute + project governance.                                 |
+| [`docs/SECURITY.md`](docs/SECURITY.md)                                                      | Security policy + disclosures.                                          |
 
 <details>
 <summary><strong>Status</strong> — pre-1.0, core loop works today</summary>

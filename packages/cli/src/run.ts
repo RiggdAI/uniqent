@@ -183,7 +183,9 @@ async function runInstall(bundle: Bundle, opts: RunInstallOpts, io: CliIo): Prom
       );
       return 1;
     }
-    io.log(`WARNING: installing an ${v.signed ? 'INVALID' : 'unsigned'} bundle (--allow-unsigned).`);
+    io.log(
+      `WARNING: installing an ${v.signed ? 'INVALID' : 'unsigned'} bundle (--allow-unsigned).`,
+    );
   } else {
     io.log('signature: valid ✓');
   }
@@ -295,15 +297,25 @@ async function tryCmd(args: string[], io: CliIo): Promise<number> {
   // Print brain identity.
   const manifestBytes = bundle.get('uniqent.json');
   const manifestData = manifestBytes
-    ? (JSON.parse(new TextDecoder().decode(manifestBytes)) as { displayName?: string; description?: string })
+    ? (JSON.parse(new TextDecoder().decode(manifestBytes)) as {
+        displayName?: string;
+        description?: string;
+      })
     : undefined;
-  if (manifestData?.displayName) io.log(`${manifestData.displayName}${manifestData.description ? ` — ${manifestData.description}` : ''}`);
+  if (manifestData?.displayName)
+    io.log(
+      `${manifestData.displayName}${manifestData.description ? ` — ${manifestData.description}` : ''}`,
+    );
 
   // Resolve target + root: explicit flags win, else auto-detect, else default claude-code in cwd.
   let target: string | undefined = typeof flags.target === 'string' ? flags.target : undefined;
   let root: string | undefined = typeof flags.root === 'string' ? flags.root : undefined;
   if (!target || !root) {
-    const guess = await detectTarget({ cwd: root ?? process.cwd(), home: homedir(), env: process.env });
+    const guess = await detectTarget({
+      cwd: root ?? process.cwd(),
+      home: homedir(),
+      env: process.env,
+    });
     if (guess) {
       target = target ?? guess.id;
       root = root ?? guess.configRoot;
@@ -311,7 +323,9 @@ async function tryCmd(args: string[], io: CliIo): Promise<number> {
     } else {
       target = target ?? 'claude-code';
       root = root ?? process.cwd();
-      io.log(`no agent detected — setting up ${ADAPTERS[target]?.displayName ?? target} in ${root}`);
+      io.log(
+        `no agent detected — setting up ${ADAPTERS[target]?.displayName ?? target} in ${root}`,
+      );
     }
   }
   // Both are guaranteed to be set by the if block above.
@@ -335,7 +349,9 @@ async function tryCmd(args: string[], io: CliIo): Promise<number> {
   // The payoff: surface the brain's suggested prompts.
   const prompts: string[] =
     (manifestData as { suggestedPrompts?: string[] } | undefined)?.suggestedPrompts ?? [];
-  io.log(`\nDone. Open this folder in ${ADAPTERS[resolvedTarget]?.displayName ?? resolvedTarget} and ask:`);
+  io.log(
+    `\nDone. Open this folder in ${ADAPTERS[resolvedTarget]?.displayName ?? resolvedTarget} and ask:`,
+  );
   if (prompts.length) for (const p of prompts) io.log(`  → "${p}"`);
   else io.log('  → ask it anything in its wheelhouse.');
   return 0;
@@ -807,7 +823,9 @@ export async function run(argv: string[], io: CliIo): Promise<number> {
   io.error(
     'usage: uniqent <try|inspect|install|validate|pack|search|hub|export|import-vault|publish-memory|keygen|sign> <file|dir|url|slug|query> [options]',
   );
-  io.error('  try <brain> [--target <id>] [--root <dir>] [--yes] [--list]   (one-command install of a featured brain)');
+  io.error(
+    '  try <brain> [--target <id>] [--root <dir>] [--yes] [--list]   (one-command install of a featured brain)',
+  );
   io.error(
     '  install <file|url|slug> --target <id> --root <dir> --cred <ref>=<value> [--registry <url>] [--allow-unsigned] [--yes]',
   );

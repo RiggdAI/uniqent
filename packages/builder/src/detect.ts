@@ -38,7 +38,8 @@ export async function detectTarget(input: DetectInput): Promise<TargetGuess | nu
 
   // OpenClaw: explicit state dir, or an openclaw.json in cwd.
   if (env.OPENCLAW_STATE_DIR) return { id: 'openclaw', configRoot: env.OPENCLAW_STATE_DIR };
-  if (await exists(join(input.cwd, 'openclaw.json'))) return { id: 'openclaw', configRoot: input.cwd };
+  if (await exists(join(input.cwd, 'openclaw.json')))
+    return { id: 'openclaw', configRoot: input.cwd };
 
   // Hermes: a hermes.json in cwd, or ~/.hermes.
   if (await exists(join(input.cwd, 'hermes.json'))) return { id: 'hermes', configRoot: input.cwd };

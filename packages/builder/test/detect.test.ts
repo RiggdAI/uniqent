@@ -19,17 +19,25 @@ afterEach(async () => {
 describe('detectTarget', () => {
   it('detects claude-code from a project .claude dir, root = cwd', async () => {
     await mkdir(join(cwd, '.claude'));
-    expect(await detectTarget({ cwd, home, env: {} })).toEqual({ id: 'claude-code', configRoot: cwd });
+    expect(await detectTarget({ cwd, home, env: {} })).toEqual({
+      id: 'claude-code',
+      configRoot: cwd,
+    });
   });
 
   it('detects claude-code from ~/.claude but still installs into cwd', async () => {
     await mkdir(join(home, '.claude'));
-    expect(await detectTarget({ cwd, home, env: {} })).toEqual({ id: 'claude-code', configRoot: cwd });
+    expect(await detectTarget({ cwd, home, env: {} })).toEqual({
+      id: 'claude-code',
+      configRoot: cwd,
+    });
   });
 
   it('detects openclaw from OPENCLAW_STATE_DIR', async () => {
-    expect(await detectTarget({ cwd, home, env: { OPENCLAW_STATE_DIR: '/tmp/oc' } }))
-      .toEqual({ id: 'openclaw', configRoot: '/tmp/oc' });
+    expect(await detectTarget({ cwd, home, env: { OPENCLAW_STATE_DIR: '/tmp/oc' } })).toEqual({
+      id: 'openclaw',
+      configRoot: '/tmp/oc',
+    });
   });
 
   it('detects hermes from a hermes.json', async () => {
