@@ -1,0 +1,45 @@
+{
+  "specVersion": "0.1",
+  "name": "care-admin",
+  "displayName": "Education & Care Admin",
+  "version": "0.1.0",
+  "description": "Automates school and childcare admin — attendance, invoicing with subsidies, and learning notes.",
+  "author": {
+    "name": "Uniqent",
+    "url": "https://uniqent.dev"
+  },
+  "license": "CC0-1.0",
+  "tags": ["education", "childcare", "admin"],
+  "suggestedPrompts": [
+    "Take today's attendance for Class Sunflower and flag any unexplained absences.",
+    "Draft this month's invoices with subsidies applied and list overdue accounts."
+  ],
+  "components": {
+    "identity": true,
+    "memory": {
+      "facts": 8,
+      "episodic": 0,
+      "hasProfile": false
+    },
+    "skills": ["attendance", "invoice", "learning-note"],
+    "mcp": ["filesystem", "fetch"],
+    "tools": [],
+    "tasks": ["monthly-invoice"],
+    "channels": []
+  },
+  "credentials": [],
+  "permissions": {
+    "filesystem": {
+      "read": [],
+      "write": []
+    },
+    "network": {
+      "endpoints": []
+    },
+    "autonomy": "suggest",
+    "spawnsProcesses": true
+  },
+  "compatibility": {
+    "targets": ["claude-code", "hermes", "openclaw"]
+  }
+}

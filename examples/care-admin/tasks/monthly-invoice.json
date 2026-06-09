@@ -1,0 +1,13 @@
+{
+  "id": "monthly-invoice",
+  "name": "Monthly invoicing",
+  "trigger": {
+    "type": "schedule",
+    "cron": "0 9 1 * *"
+  },
+  "action": {
+    "kind": "prompt",
+    "prompt": "Generate this month's invoices with subsidies applied and list any overdue accounts."
+  },
+  "enabled": true
+}

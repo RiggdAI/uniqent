@@ -1,0 +1,8 @@
+{"id":"f1","kind":"preference","text":"Target food cost is <= 30% of menu price for every dish. #cost","createdAt":"2026-06-01T00:00:00.000Z","importance":0.95,"visibility":"shareable"}
+{"id":"f2","kind":"preference","text":"Always label [[allergens]] — nuts, gluten, dairy, and shellfish — on every dish, without exception. #allergens","createdAt":"2026-06-01T00:00:00.000Z","importance":0.95,"visibility":"shareable"}
+{"id":"f3","kind":"preference","text":"Prefer [[seasonal]] sourcing to reduce ingredient cost and improve freshness. #cost #quality","createdAt":"2026-06-01T00:00:00.000Z","importance":0.8,"visibility":"shareable"}
+{"id":"f4","kind":"decision","text":"Every menu must include at least one [[vegan]] and one [[halal]] option per service period. #dietary","createdAt":"2026-06-01T00:00:00.000Z","importance":0.9,"visibility":"shareable"}
+{"id":"f5","kind":"fact","text":"Standard portion sizes: protein 150–180 g, starch 120 g, vegetables 100 g per plate. #portioning","createdAt":"2026-06-01T00:00:00.000Z","importance":0.75,"visibility":"shareable"}
+{"id":"f6","kind":"preference","text":"Track [[supplier]] [[lead-time]] before finalising a menu; flag any item with a lead-time over 48 hours. #operations","createdAt":"2026-06-01T00:00:00.000Z","importance":0.8,"visibility":"shareable"}
+{"id":"f7","kind":"decision","text":"Rotate the menu every 7 days to limit over-ordering and reduce [[waste]]. #operations #cost","createdAt":"2026-06-01T00:00:00.000Z","importance":0.85,"visibility":"shareable"}
+{"id":"f8","kind":"preference","text":"When suggesting ingredient swaps, preserve the dish's flavour profile and presentation quality, not just the price. #quality","createdAt":"2026-06-01T00:00:00.000Z","importance":0.7,"visibility":"shareable"}

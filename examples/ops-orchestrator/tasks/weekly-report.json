@@ -1,0 +1,13 @@
+{
+  "id": "weekly-report",
+  "name": "Weekly operations report",
+  "trigger": {
+    "type": "schedule",
+    "cron": "0 8 * * 1"
+  },
+  "action": {
+    "kind": "prompt",
+    "prompt": "Compile last week's orders, reconciliations, and exceptions into the weekly operations report."
+  },
+  "enabled": true
+}

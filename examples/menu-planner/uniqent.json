@@ -1,0 +1,45 @@
+{
+  "specVersion": "0.1",
+  "name": "menu-planner",
+  "displayName": "F&B Menu Planner",
+  "version": "0.1.0",
+  "description": "Plans menus, optimizes food cost, and checks dietary compliance for F&B operators.",
+  "author": {
+    "name": "Uniqent",
+    "url": "https://uniqent.dev"
+  },
+  "license": "CC0-1.0",
+  "tags": ["fnb", "menu", "food"],
+  "suggestedPrompts": [
+    "Plan a 7-day lunch menu under 30% food cost with vegan and nut-free options, and flag every allergen.",
+    "Review this menu for dietary compliance and suggest cheaper ingredient swaps that keep quality."
+  ],
+  "components": {
+    "identity": true,
+    "memory": {
+      "facts": 8,
+      "episodic": 0,
+      "hasProfile": false
+    },
+    "skills": ["plan-menu", "cost-optimize", "dietary-check"],
+    "mcp": ["fetch"],
+    "tools": [],
+    "tasks": [],
+    "channels": []
+  },
+  "credentials": [],
+  "permissions": {
+    "filesystem": {
+      "read": [],
+      "write": []
+    },
+    "network": {
+      "endpoints": []
+    },
+    "autonomy": "suggest",
+    "spawnsProcesses": true
+  },
+  "compatibility": {
+    "targets": ["claude-code", "hermes", "openclaw"]
+  }
+}
