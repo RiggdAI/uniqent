@@ -1,0 +1,30 @@
+{
+  "servers": [
+    {
+      "id": "filesystem",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "${HOME}"],
+      "auth": {
+        "type": "none"
+      },
+      "tools": {
+        "include": "all"
+      },
+      "description": "Local filesystem MCP server"
+    },
+    {
+      "id": "fetch",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-fetch"],
+      "auth": {
+        "type": "none"
+      },
+      "tools": {
+        "include": "all"
+      },
+      "description": "Web fetch MCP server"
+    }
+  ]
+}

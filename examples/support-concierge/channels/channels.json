@@ -1,0 +1,9 @@
+{
+  "channels": [
+    {
+      "id": "whatsapp",
+      "kind": "whatsapp",
+      "credentialRef": "whatsapp_token"
+    }
+  ]
+}

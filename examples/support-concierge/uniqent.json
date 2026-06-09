@@ -1,0 +1,54 @@
+{
+  "specVersion": "0.1",
+  "name": "support-concierge",
+  "displayName": "Support Concierge",
+  "version": "0.1.0",
+  "description": "Multilingual customer-support agent — triages inquiries, drafts on-brand replies, and escalates by policy.",
+  "author": {
+    "name": "Uniqent",
+    "url": "https://uniqent.dev"
+  },
+  "license": "CC0-1.0",
+  "tags": ["support", "customer", "whatsapp"],
+  "suggestedPrompts": [
+    "A customer says their order hasn't arrived in 5 days — draft an on-brand reply and decide whether to escalate.",
+    "Triage these 10 incoming messages by topic and urgency, and draft replies for the easy ones."
+  ],
+  "components": {
+    "identity": true,
+    "memory": {
+      "facts": 8,
+      "episodic": 0,
+      "hasProfile": false
+    },
+    "skills": ["triage-inquiry", "draft-reply", "escalation-policy"],
+    "mcp": ["fetch"],
+    "tools": [],
+    "tasks": ["unresolved-digest"],
+    "channels": ["whatsapp"]
+  },
+  "credentials": [
+    {
+      "ref": "whatsapp_token",
+      "label": "WhatsApp Business Token",
+      "type": "bearer",
+      "consumedBy": ["channel:whatsapp"],
+      "required": true,
+      "help": "From the WhatsApp Business / Meta developer console."
+    }
+  ],
+  "permissions": {
+    "filesystem": {
+      "read": [],
+      "write": []
+    },
+    "network": {
+      "endpoints": []
+    },
+    "autonomy": "suggest",
+    "spawnsProcesses": true
+  },
+  "compatibility": {
+    "targets": ["claude-code", "hermes", "openclaw"]
+  }
+}

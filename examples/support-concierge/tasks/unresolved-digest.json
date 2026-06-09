@@ -1,0 +1,13 @@
+{
+  "id": "unresolved-digest",
+  "name": "Unresolved digest",
+  "trigger": {
+    "type": "schedule",
+    "cron": "0 18 * * 1-5"
+  },
+  "action": {
+    "kind": "prompt",
+    "prompt": "Summarize today's unresolved or escalated tickets and what's blocking each."
+  },
+  "enabled": true
+}

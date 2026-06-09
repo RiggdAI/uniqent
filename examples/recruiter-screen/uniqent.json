@@ -1,0 +1,31 @@
+{
+  "specVersion": "0.1",
+  "name": "recruiter-screen",
+  "displayName": "AI Recruiter",
+  "version": "0.1.0",
+  "description": "Screens CVs against a role, scores candidates on evidence with bias mitigation, and drafts an interview kit.",
+  "author": { "name": "Uniqent", "url": "https://uniqent.dev" },
+  "license": "CC0-1.0",
+  "tags": ["hr", "recruiting", "screening"],
+  "suggestedPrompts": [
+    "Screen these CVs against the role brief and give a top-5 shortlist with evidence-based reasons.",
+    "Draft an interview kit (questions + what good answers look like) for the shortlisted candidates."
+  ],
+  "components": {
+    "identity": true,
+    "memory": { "facts": 9, "episodic": 0, "hasProfile": false },
+    "skills": ["screen-cv", "interview-kit", "shortlist"],
+    "mcp": ["filesystem", "fetch"],
+    "tools": [],
+    "tasks": [],
+    "channels": []
+  },
+  "credentials": [],
+  "permissions": {
+    "filesystem": { "read": [], "write": [] },
+    "network": { "endpoints": [] },
+    "autonomy": "suggest",
+    "spawnsProcesses": true
+  },
+  "compatibility": { "targets": ["claude-code", "hermes", "openclaw"] }
+}

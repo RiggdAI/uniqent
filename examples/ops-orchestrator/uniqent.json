@@ -1,0 +1,45 @@
+{
+  "specVersion": "0.1",
+  "name": "ops-orchestrator",
+  "displayName": "Operations Orchestrator",
+  "version": "0.1.0",
+  "description": "Automates back-office workflows — order processing, reconciliation, and a weekly operations report.",
+  "author": {
+    "name": "Uniqent",
+    "url": "https://uniqent.dev"
+  },
+  "license": "CC0-1.0",
+  "tags": ["operations", "backoffice", "automation"],
+  "suggestedPrompts": [
+    "Process today's orders, reconcile them against the ledger, and flag any mismatches.",
+    "Draft this week's operations report from the order and reconciliation logs."
+  ],
+  "components": {
+    "identity": true,
+    "memory": {
+      "facts": 8,
+      "episodic": 0,
+      "hasProfile": false
+    },
+    "skills": ["process-order", "reconcile", "weekly-report"],
+    "mcp": ["filesystem", "fetch"],
+    "tools": [],
+    "tasks": ["weekly-report"],
+    "channels": []
+  },
+  "credentials": [],
+  "permissions": {
+    "filesystem": {
+      "read": [],
+      "write": []
+    },
+    "network": {
+      "endpoints": []
+    },
+    "autonomy": "suggest",
+    "spawnsProcesses": true
+  },
+  "compatibility": {
+    "targets": ["claude-code", "hermes", "openclaw"]
+  }
+}
