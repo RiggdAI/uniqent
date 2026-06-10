@@ -78,6 +78,11 @@ function walkJson(node: unknown, key: string | undefined, onString: (s: string) 
   }
 }
 
+/** True when a single string value looks like a secret (known prefix or high entropy). */
+export function isLikelySecretValue(value: string): boolean {
+  return detect(value) !== null;
+}
+
 export function scanForSecrets(bundle: Bundle): SecretFinding[] {
   const findings: SecretFinding[] = [];
   for (const [path, bytes] of bundle.entries()) {

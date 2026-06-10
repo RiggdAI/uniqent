@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Bundle } from '../src/bundle';
-import { scanForSecrets } from '../src/secret-scan';
+import { scanForSecrets, isLikelySecretValue } from '../src/secret-scan';
 import { makeValidBundle } from './helpers';
 
 describe('scanForSecrets', () => {
@@ -64,5 +64,18 @@ describe('scanForSecrets', () => {
     );
     b.set('uniqent.json', JSON.stringify({ author: { name: 'x', pubkey: 'deadbeef'.repeat(8) } }));
     expect(scanForSecrets(b)).toHaveLength(0);
+  });
+});
+
+describe('isLikelySecretValue', () => {
+  it('flags known-prefix and high-entropy values', () => {
+    expect(isLikelySecretValue('sk-abcdefghijklmnopqrstuvwxyz0123')).toBe(true);
+    expect(isLikelySecretValue('ghp_0123456789abcdefghijklmnopqrstuvwxyz')).toBe(true);
+    expect(isLikelySecretValue('kJ8s0LkQ2mZ9rT4wX7bV1nC6pY3dF5gH8jL0aS2')).toBe(true);
+  });
+  it('does not flag placeholders or plain text', () => {
+    expect(isLikelySecretValue('${credentialRef:foo_token}')).toBe(false);
+    expect(isLikelySecretValue('hello world')).toBe(false);
+    expect(isLikelySecretValue('')).toBe(false);
   });
 });
