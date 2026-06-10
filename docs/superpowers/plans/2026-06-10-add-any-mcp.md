@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Let a user add *any* MCP server they find — by pasting the standard `mcpServers` config blob, by searching GitHub, or via the existing hubs/catalog — and package it, with secrets always lifted to credential *requirements* so the fail-closed secret gate stays intact.
+**Goal:** Let a user add _any_ MCP server they find — by pasting the standard `mcpServers` config blob, by searching GitHub, or via the existing hubs/catalog — and package it, with secrets always lifted to credential _requirements_ so the fail-closed secret gate stays intact.
 
 **Architecture:** A new pure builder primitive `normalizeMcpConfig()` converts any common MCP config shape into canonical `McpServer[]` + `CredentialRequirement[]`, lifting secret env/headers to `${credentialRef:…}`. A new GitHub MCP discovery source reuses it on repo READMEs. Studio's "Custom / import" panel gains a "Paste config" mode over a new preview route. No new command, no new runtime.
 
@@ -32,6 +32,7 @@ Spec: `docs/superpowers/specs/2026-06-10-add-any-mcp-design.md`.
 ## Task 1: Core — value-level secret detector
 
 **Files:**
+
 - Modify: `packages/core/src/secret-scan.ts`
 - Test: `packages/core/test/secret-scan.test.ts` (append)
 
@@ -87,6 +88,7 @@ git commit -m "feat(core): export value-level isLikelySecretValue"
 ## Task 2: Builder — `normalizeMcpConfig()` primitive
 
 **Files:**
+
 - Create: `packages/builder/src/mcp/normalize.ts`
 - Modify: `packages/builder/src/index.ts`
 - Test: `packages/builder/test/mcp-normalize.test.ts`
@@ -149,13 +151,21 @@ describe('normalizeMcpConfig', () => {
     });
     const s = r.servers[0]!;
     expect(s.transport).toBe('streamable-http');
-    expect(s.auth).toEqual({ type: 'header', headerName: 'X-API-Key', credentialRef: 'svc_x_api_key' });
+    expect(s.auth).toEqual({
+      type: 'header',
+      headerName: 'X-API-Key',
+      credentialRef: 'svc_x_api_key',
+    });
   });
 
   it('passes through an already-canonical McpServer', () => {
     const canonical = {
-      id: 'gh', transport: 'stdio', command: 'npx', args: ['-y', 'x'],
-      auth: { type: 'none' }, tools: { include: 'all' },
+      id: 'gh',
+      transport: 'stdio',
+      command: 'npx',
+      args: ['-y', 'x'],
+      auth: { type: 'none' },
+      tools: { include: 'all' },
     };
     const r = normalizeMcpConfig(canonical);
     expect(r.servers[0]!.id).toBe('gh');
@@ -170,11 +180,19 @@ describe('normalizeMcpConfig', () => {
 
   it('a pasted blob with a RAW secret packs cleanly (gate passes)', async () => {
     const r = normalizeMcpConfig({
-      mcpServers: { x: { command: 'run', env: { OPENAI_API_KEY: 'sk-abcdefghijklmnopqrstuvwxyz0123' } } },
+      mcpServers: {
+        x: { command: 'run', env: { OPENAI_API_KEY: 'sk-abcdefghijklmnopqrstuvwxyz0123' } },
+      },
     });
     const bundle = new Bundle();
-    bundle.set('uniqent.json', new TextEncoder().encode(JSON.stringify({ schemaVersion: '1.0.0' })));
-    bundle.set('mcp/servers.json', new TextEncoder().encode(JSON.stringify({ servers: r.servers })));
+    bundle.set(
+      'uniqent.json',
+      new TextEncoder().encode(JSON.stringify({ schemaVersion: '1.0.0' })),
+    );
+    bundle.set(
+      'mcp/servers.json',
+      new TextEncoder().encode(JSON.stringify({ servers: r.servers })),
+    );
     await expect(pack(bundle)).resolves.toBeInstanceOf(Uint8Array); // no secret leaked → gate OK
   });
 });
@@ -227,7 +245,8 @@ function mapOne(id: string, raw: RawServer, out: NormalizeResult): void {
   const isRemote = !!raw.url && !raw.command;
 
   if (isRemote) {
-    const transport = /sse(\b|$|\/)/.test(raw.url!) || raw.transport === 'sse' ? 'sse' : 'streamable-http';
+    const transport =
+      /sse(\b|$|\/)/.test(raw.url!) || raw.transport === 'sse' ? 'sse' : 'streamable-http';
     let auth: McpServer['auth'] = { type: 'none' };
     const headers = (raw.headers ?? {}) as Record<string, unknown>;
     const secretHeaders = Object.entries(headers).filter(
@@ -240,16 +259,28 @@ function mapOne(id: string, raw: RawServer, out: NormalizeResult): void {
         auth = { type: 'bearer', credentialRef: ref };
         creds.push(credFor(ref, hName, id));
       } else {
-        const ref = `${id}_${hName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')}`;
+        const ref = `${id}_${hName
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '_')
+          .replace(/^_|_$/g, '')}`;
         auth = { type: 'header', headerName: hName, credentialRef: ref };
         creds.push(credFor(ref, hName, id));
       }
       if (secretHeaders.length > 1) {
-        out.lossiness.push(`${id}: only the first auth header is kept; dropped ${secretHeaders.slice(1).map(([k]) => k).join(', ')}`);
+        out.lossiness.push(
+          `${id}: only the first auth header is kept; dropped ${secretHeaders
+            .slice(1)
+            .map(([k]) => k)
+            .join(', ')}`,
+        );
       }
     }
     const server = {
-      id, transport, url: raw.url, auth, tools: { include: 'all' as const },
+      id,
+      transport,
+      url: raw.url,
+      auth,
+      tools: { include: 'all' as const },
       ...(description ? { description } : {}),
     };
     pushValidated(server, creds, out);
@@ -257,12 +288,17 @@ function mapOne(id: string, raw: RawServer, out: NormalizeResult): void {
   }
 
   // stdio
-  const args = Array.isArray(raw.args) ? raw.args.filter((a): a is string => typeof a === 'string') : [];
+  const args = Array.isArray(raw.args)
+    ? raw.args.filter((a): a is string => typeof a === 'string')
+    : [];
   const env: Record<string, string> = {};
   for (const [k, v] of Object.entries(raw.env ?? {})) {
     if (typeof v !== 'string') continue;
     if (isSecretName(k) || isLikelySecretValue(v)) {
-      const ref = `${id}_${k.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')}`;
+      const ref = `${id}_${k
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_|_$/g, '')}`;
       env[k] = `\${credentialRef:${ref}}`;
       creds.push(credFor(ref, k, id));
     } else {
@@ -270,16 +306,23 @@ function mapOne(id: string, raw: RawServer, out: NormalizeResult): void {
     }
   }
   const server = {
-    id, transport: 'stdio', command: raw.command ?? 'npx',
+    id,
+    transport: 'stdio',
+    command: raw.command ?? 'npx',
     ...(args.length ? { args } : {}),
     ...(Object.keys(env).length ? { env } : {}),
-    auth: { type: 'none' as const }, tools: { include: 'all' as const },
+    auth: { type: 'none' as const },
+    tools: { include: 'all' as const },
     ...(description ? { description } : {}),
   };
   pushValidated(server, creds, out);
 }
 
-function pushValidated(server: unknown, creds: CredentialRequirement[], out: NormalizeResult): void {
+function pushValidated(
+  server: unknown,
+  creds: CredentialRequirement[],
+  out: NormalizeResult,
+): void {
   const parsed = McpServerSchema.safeParse(server);
   if (!parsed.success) {
     out.lossiness.push(`skipped a server: ${parsed.error.issues[0]?.message ?? 'invalid'}`);
@@ -305,7 +348,10 @@ export function normalizeMcpConfig(input: unknown): NormalizeResult {
   // Already-canonical (or near) single server: has id + transport.
   if (typeof obj.id === 'string' && typeof obj.transport === 'string') {
     const canonical = McpServerSchema.safeParse({ tools: { include: 'all' }, ...obj });
-    if (canonical.success) { out.servers.push(canonical.data); return out; }
+    if (canonical.success) {
+      out.servers.push(canonical.data);
+      return out;
+    }
   }
 
   if (obj.mcpServers && typeof obj.mcpServers === 'object') {
@@ -356,20 +402,25 @@ git commit -m "feat(builder): normalizeMcpConfig — accept any MCP config, lift
 ## Task 3: Builder — GitHub MCP discovery source
 
 **Files:**
+
 - Create: `packages/builder/src/hubs/github-mcp.ts`
 - Modify: `packages/builder/src/hubs/defaults.ts`, `packages/builder/src/hubs/index.ts`
 - Test: `packages/builder/test/github-mcp.test.ts`
 
 - [ ] **Step 1: Write the failing test** — `packages/builder/test/github-mcp.test.ts`:
 
-```ts
+````ts
 import { describe, it, expect } from 'vitest';
 import { mapGithubMcpRepo, extractMcpFromReadme } from '../src/hubs/github-mcp.js';
 
 const FIXTURE = {
   items: [
-    { full_name: 'acme/cool-mcp', html_url: 'https://github.com/acme/cool-mcp',
-      description: 'A cool MCP server', stargazers_count: 42 },
+    {
+      full_name: 'acme/cool-mcp',
+      html_url: 'https://github.com/acme/cool-mcp',
+      description: 'A cool MCP server',
+      stargazers_count: 42,
+    },
     { full_name: 'no/name-stripped' },
   ],
 };
@@ -387,7 +438,9 @@ describe('github-mcp source', () => {
 
   it('extracts a real mcpServers block from a README via the normalizer', () => {
     const readme = [
-      '# Cool MCP', 'Install:', '```json',
+      '# Cool MCP',
+      'Install:',
+      '```json',
       '{ "mcpServers": { "cool": { "command": "npx", "args": ["-y", "cool-mcp"],',
       '  "env": { "COOL_API_KEY": "sk-abcdefghijklmnopqrstuvwxyz0123" } } } }',
       '```',
@@ -395,14 +448,16 @@ describe('github-mcp source', () => {
     const r = extractMcpFromReadme('cool-mcp', readme);
     expect(r).not.toBeNull();
     expect(r!.entry.server.command).toBe('npx');
-    expect(r!.credentials.some((c) => c.ref.includes('cool_api_key') || c.ref.includes('api_key'))).toBe(true);
+    expect(
+      r!.credentials.some((c) => c.ref.includes('cool_api_key') || c.ref.includes('api_key')),
+    ).toBe(true);
   });
 
   it('returns null when the README has no config block', () => {
     expect(extractMcpFromReadme('x', '# Just prose, no code')).toBeNull();
   });
 });
-```
+````
 
 - [ ] **Step 2: Run it — expect FAIL** (module missing)
 
@@ -411,7 +466,7 @@ Expected: FAIL — cannot find `../src/hubs/github-mcp.js`.
 
 - [ ] **Step 3: Implement** — `packages/builder/src/hubs/github-mcp.ts`:
 
-```ts
+````ts
 import type { CatalogSource, McpHubResult } from './types.js';
 import { slugifyId } from './types.js';
 import { normalizeMcpConfig } from '../mcp/normalize.js';
@@ -424,7 +479,9 @@ interface GithubRepo {
   description?: string;
   stargazers_count?: number;
 }
-interface GithubSearchResponse { items?: GithubRepo[] }
+interface GithubSearchResponse {
+  items?: GithubRepo[];
+}
 
 /** Map a repo to a hub result with a best-effort `npx -y <repo>` guess (refined on add). */
 export function mapGithubMcpRepo(repo: GithubRepo): McpHubResult | null {
@@ -434,10 +491,16 @@ export function mapGithubMcpRepo(repo: GithubRepo): McpHubResult | null {
   return {
     source: 'github',
     entry: {
-      id, name, description: repo.description ?? '',
+      id,
+      name,
+      description: repo.description ?? '',
       server: {
-        id, transport: 'stdio', command: 'npx', args: ['-y', name],
-        auth: { type: 'none' }, tools: { include: 'all' },
+        id,
+        transport: 'stdio',
+        command: 'npx',
+        args: ['-y', name],
+        auth: { type: 'none' },
+        tools: { include: 'all' },
         description: repo.description ?? `${repo.full_name} (GitHub) — verify the run command`,
       },
     },
@@ -469,17 +532,28 @@ export function extractMcpFromReadme(id: string, readme: string): McpHubResult |
         const server = r.servers[0]!;
         return {
           source: 'github',
-          entry: { id: server.id, name: server.id, description: server.description ?? '', server,
-            ...(r.credentials[0] ? { credential: r.credentials[0] } : {}) },
+          entry: {
+            id: server.id,
+            name: server.id,
+            description: server.description ?? '',
+            server,
+            ...(r.credentials[0] ? { credential: r.credentials[0] } : {}),
+          },
           credentials: r.credentials,
         };
       }
-    } catch { /* try the next block */ }
+    } catch {
+      /* try the next block */
+    }
   }
   return null;
 }
 
-export interface GithubMcpOptions { endpoint?: string; perPage?: number; token?: string }
+export interface GithubMcpOptions {
+  endpoint?: string;
+  perPage?: number;
+  token?: string;
+}
 
 /** Discover MCP servers as GitHub repos. Repo search now; run-config refined from the README on add. */
 export function githubMcpSource(opts: GithubMcpOptions = {}): CatalogSource {
@@ -500,7 +574,7 @@ export function githubMcpSource(opts: GithubMcpOptions = {}): CatalogSource {
     },
   };
 }
-```
+````
 
 - [ ] **Step 4: Register + export** — in `packages/builder/src/hubs/defaults.ts`, import and add to `defaultMcpSources`:
 
@@ -533,6 +607,7 @@ git commit -m "feat(builder): GitHub MCP discovery source (README run-config ext
 ## Task 4: Studio server — paste routes + normalizer-backed import
 
 **Files:**
+
 - Modify: `apps/studio/src/server/session.ts`
 - Modify: `apps/studio/src/server/api.ts`
 - Test: `apps/studio/test/paste-mcp.test.ts`
@@ -544,7 +619,13 @@ import { describe, it, expect } from 'vitest';
 import { StudioSession } from '../src/server/session.js';
 
 const BLOB = JSON.stringify({
-  mcpServers: { brave: { command: 'npx', args: ['-y', 'brave'], env: { BRAVE_API_KEY: 'sk-abcdefghijklmnopqrstuvwxyz0123' } } },
+  mcpServers: {
+    brave: {
+      command: 'npx',
+      args: ['-y', 'brave'],
+      env: { BRAVE_API_KEY: 'sk-abcdefghijklmnopqrstuvwxyz0123' },
+    },
+  },
 });
 
 describe('paste MCP', () => {
@@ -612,19 +693,19 @@ Replace the body of `importMcpServers` and add the two paste methods:
 - [ ] **Step 4: Add routes** — in `apps/studio/src/server/api.ts`, after the `/api/mcp/import` block (line ~198):
 
 ```ts
-  if (method === 'POST' && path === '/api/mcp/paste') {
-    if (typeof b.text !== 'string') return fail(400, 'text is required');
-    return ok(session.previewPastedMcp(b.text));
+if (method === 'POST' && path === '/api/mcp/paste') {
+  if (typeof b.text !== 'string') return fail(400, 'text is required');
+  return ok(session.previewPastedMcp(b.text));
+}
+if (method === 'POST' && path === '/api/mcp/paste/add') {
+  if (typeof b.text !== 'string') return fail(400, 'text is required');
+  try {
+    session.addPastedMcp(b.text);
+    return ok(session.state());
+  } catch (e) {
+    return fail(400, (e as Error).message);
   }
-  if (method === 'POST' && path === '/api/mcp/paste/add') {
-    if (typeof b.text !== 'string') return fail(400, 'text is required');
-    try {
-      session.addPastedMcp(b.text);
-      return ok(session.state());
-    } catch (e) {
-      return fail(400, (e as Error).message);
-    }
-  }
+}
 ```
 
 - [ ] **Step 5: Run it — expect PASS**
@@ -644,6 +725,7 @@ git commit -m "feat(studio): paste-any-MCP routes + normalizer-backed import"
 ## Task 5: Studio client — "Paste config" mode
 
 **Files:**
+
 - Modify: `apps/studio/web/src/api.ts`
 - Modify: `apps/studio/web/src/types.ts`
 - Modify: `apps/studio/web/src/Inspector.tsx`
@@ -670,44 +752,69 @@ Add `McpNormalizePreview` to the type import at the top of `api.ts`.
 - [ ] **Step 3: Add the "Paste config" UI** — in `apps/studio/web/src/Inspector.tsx`, inside `CustomMcpEditor`, add a paste textarea + preview above the existing form. Add state and a block at the top of the returned JSX (after the intro `<p>`):
 
 ```tsx
-  const [paste, setPaste] = useState('');
-  const [preview, setPreview] = useState<McpNormalizePreview | null>(null);
+const [paste, setPaste] = useState('');
+const [preview, setPreview] = useState<McpNormalizePreview | null>(null);
 ```
 
 ```tsx
-      <div className="space-y-1.5 rounded-md border border-border p-3">
-        <Label>Paste an MCP config</Label>
-        <p className="text-xs text-muted-foreground">
-          Drop the <code>mcpServers</code> block from any README. Secrets become credential
-          requirements automatically.
-        </p>
-        <textarea
-          data-testid="paste-mcp"
-          className={selectClass + ' min-h-[120px] font-mono text-xs'}
-          placeholder='{ "mcpServers": { "brave": { "command": "npx", "args": ["-y", "..."], "env": { "BRAVE_API_KEY": "..." } } } }'
-          value={paste}
-          onChange={(e) => setPaste(e.target.value)}
-        />
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" disabled={!paste.trim()}
-            onClick={async () => setPreview(await api.pasteMcpPreview(paste))}>
-            Preview
-          </Button>
-          <Button size="sm" data-testid="paste-mcp-add"
-            disabled={!preview || preview.servers.length === 0}
-            onClick={() => { apply(api.addPastedMcp(paste)); setPaste(''); setPreview(null); }}>
-            Add {preview?.servers.length ? `(${preview.servers.length})` : ''}
-          </Button>
+<div className="space-y-1.5 rounded-md border border-border p-3">
+  <Label>Paste an MCP config</Label>
+  <p className="text-xs text-muted-foreground">
+    Drop the <code>mcpServers</code> block from any README. Secrets become credential requirements
+    automatically.
+  </p>
+  <textarea
+    data-testid="paste-mcp"
+    className={selectClass + ' min-h-[120px] font-mono text-xs'}
+    placeholder='{ "mcpServers": { "brave": { "command": "npx", "args": ["-y", "..."], "env": { "BRAVE_API_KEY": "..." } } } }'
+    value={paste}
+    onChange={(e) => setPaste(e.target.value)}
+  />
+  <div className="flex gap-2">
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={!paste.trim()}
+      onClick={async () => setPreview(await api.pasteMcpPreview(paste))}
+    >
+      Preview
+    </Button>
+    <Button
+      size="sm"
+      data-testid="paste-mcp-add"
+      disabled={!preview || preview.servers.length === 0}
+      onClick={() => {
+        apply(api.addPastedMcp(paste));
+        setPaste('');
+        setPreview(null);
+      }}
+    >
+      Add {preview?.servers.length ? `(${preview.servers.length})` : ''}
+    </Button>
+  </div>
+  {preview && (
+    <div className="text-xs">
+      {preview.servers.map((s) => (
+        <div key={s.id}>
+          ✓ {s.id} <span className="text-muted-foreground">({s.transport})</span>
         </div>
-        {preview && (
-          <div className="text-xs">
-            {preview.servers.map((s) => <div key={s.id}>✓ {s.id} <span className="text-muted-foreground">({s.transport})</span></div>)}
-            {preview.credentials.map((c) => <div key={c.ref} className="text-amber-500">needs {c.ref}</div>)}
-            {preview.lossiness.map((l, i) => <div key={i} className="text-muted-foreground">⚠ {l}</div>)}
-            {preview.servers.length === 0 && <div className="text-destructive">No MCP servers found in that config.</div>}
-          </div>
-        )}
-      </div>
+      ))}
+      {preview.credentials.map((c) => (
+        <div key={c.ref} className="text-amber-500">
+          needs {c.ref}
+        </div>
+      ))}
+      {preview.lossiness.map((l, i) => (
+        <div key={i} className="text-muted-foreground">
+          ⚠ {l}
+        </div>
+      ))}
+      {preview.servers.length === 0 && (
+        <div className="text-destructive">No MCP servers found in that config.</div>
+      )}
+    </div>
+  )}
+</div>
 ```
 
 Import `McpNormalizePreview` in the Inspector's type imports.
@@ -739,7 +846,7 @@ Expected: all green.
 UNIQENT_STUDIO_PORT=4173 pnpm --filter @uniqent/studio start &
 ```
 
-- [ ] **Step 3: Browser dogfood** — open `http://127.0.0.1:4173`, click **Custom / import…** under STACK (MCP), paste a real `mcpServers` blob with a fake `sk-…` key, click **Preview** (see the server + "needs …_api_key"), click **Add**, confirm the MCP node appears on the canvas and the footer shows a credential required. Screenshot each step.
+- [ ] **Step 3: Browser dogfood** — open `http://127.0.0.1:4173`, click **Custom / import…** under STACK (MCP), paste a real `mcpServers` blob with a fake `sk-…` key, click **Preview** (see the server + "needs …\_api_key"), click **Add**, confirm the MCP node appears on the canvas and the footer shows a credential required. Screenshot each step.
 
 - [ ] **Step 4: Final commit (if any tweaks)** and open PR.
 

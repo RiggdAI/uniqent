@@ -38,7 +38,11 @@ function credFor(ref: string, label: string, id: string): CredentialRequirement 
   return { ref, label, type: 'apiKey', consumedBy: [`mcp:${id}`], required: true };
 }
 
-function pushValidated(server: unknown, creds: CredentialRequirement[], out: NormalizeResult): void {
+function pushValidated(
+  server: unknown,
+  creds: CredentialRequirement[],
+  out: NormalizeResult,
+): void {
   const parsed = McpServerSchema.safeParse(server);
   if (!parsed.success) {
     out.lossiness.push(`skipped a server: ${parsed.error.issues[0]?.message ?? 'invalid'}`);

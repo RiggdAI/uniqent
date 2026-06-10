@@ -1,9 +1,9 @@
 # Add any MCP — paste, search, surface
 
 **Date:** 2026-06-10
-**Goal:** Let a user add *any* MCP server they can find — not just the 5 curated catalog
+**Goal:** Let a user add _any_ MCP server they can find — not just the 5 curated catalog
 quick-picks — and package it into a brain, with secrets always lifted to credential
-*requirements* so the fail-closed secret gate stays intact. No new command, no new runtime:
+_requirements_ so the fail-closed secret gate stays intact. No new command, no new runtime:
 this is purely the **builder** primitive + **Studio** UI.
 
 ## Background — what already exists
@@ -27,6 +27,7 @@ paths are backend-only and not surfaced for non-technical Studio users.
 New pure function: `packages/builder/src/mcp/normalize.ts`. Reused by Parts 2 and 3.
 
 **Input (auto-detected):**
+
 - The universal `{ "mcpServers": { "<name>": { command, args, env } | { url, headers } } }` blob.
 - A single server object `{ command, args, env }` or `{ url, headers }`.
 - An already-canonical `McpServer` (pass-through).
@@ -34,6 +35,7 @@ New pure function: `packages/builder/src/mcp/normalize.ts`. Reused by Parts 2 an
 **Output:** `{ servers: McpServer[]; credentials: CredentialRequirement[]; lossiness: string[] }`
 
 **Logic:**
+
 - `id = slugifyId(name)` (reuse `hubs/types.ts`).
 - `command` + `args` → `transport: 'stdio'`. `url` (+ `headers`) → `transport: 'streamable-http'`
   (`'sse'` if the url path hints sse).
