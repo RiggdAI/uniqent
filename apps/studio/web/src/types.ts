@@ -129,6 +129,12 @@ export interface SkillHubResult {
   stars?: number;
 }
 
+export interface McpNormalizePreview {
+  servers: Array<{ id: string; transport: string; command?: string; url?: string }>;
+  credentials: CredentialRequirement[];
+  lossiness: string[];
+}
+
 export interface HubSearch<T> {
   results: T[];
   errors: Array<{ source: string; message: string }>;

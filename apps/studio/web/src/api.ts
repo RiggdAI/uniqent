@@ -7,6 +7,7 @@ import type {
   InstallResult,
   HubSearch,
   McpHubResult,
+  McpNormalizePreview,
   SkillHubResult,
   MemoryGraph,
   ImportedMemoryItem,
@@ -76,6 +77,8 @@ export const api = {
   importSkillFromUrl: (url: string) => post<StudioState>('/api/skill/url', { url }),
   addCustomMcp: (server: Record<string, unknown>) => post<StudioState>('/api/mcp/custom', server),
   importMcpServers: (servers: unknown[]) => post<StudioState>('/api/mcp/import', { servers }),
+  pasteMcpPreview: (text: string) => post<McpNormalizePreview>('/api/mcp/paste', { text }),
+  addPastedMcp: (text: string) => post<StudioState>('/api/mcp/paste/add', { text }),
   removeMcp: (id: string) => post<StudioState>('/api/mcp/remove', { id }),
   removeSkill: (name: string) => post<StudioState>('/api/skill/remove', { name }),
   addChannel: (id: string) =>
