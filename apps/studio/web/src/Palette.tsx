@@ -32,7 +32,7 @@ interface PaletteProps {
 // stay in the expanded view). Each jumps straight to its inspector panel.
 const RAIL: Array<{ icon: ComponentType<{ className?: string }>; key: string; label: string }> = [
   { icon: Brain, key: 'persona', label: 'Persona' },
-  { icon: Boxes, key: 'new-mcp', label: 'Stack (MCP)' },
+  { icon: Boxes, key: 'new-mcp', label: 'Tools & data (MCP)' },
   { icon: Sparkles, key: 'new-skill', label: 'Skills' },
   { icon: Database, key: 'memory', label: 'Memory' },
   { icon: UserRound, key: 'profile', label: 'Profile' },
@@ -143,7 +143,6 @@ export function Palette({
   collapsed,
   onToggleCollapse,
 }: PaletteProps) {
-  const mcpAdded = new Set(state.manifest.components.mcp);
   const skillAdded = new Set(state.manifest.components.skills);
   const channelAdded = new Set(state.manifest.components.channels);
 
@@ -192,19 +191,10 @@ export function Palette({
         />
       </Section>
 
-      <Section title="Stack (MCP)">
-        {catalog.mcp.map((m) => (
-          <AddRow
-            key={m.id}
-            label={m.name}
-            added={mcpAdded.has(m.id)}
-            onAdd={() => apply(api.addMcp(m.id))}
-            testid={`add-mcp-${m.id}`}
-          />
-        ))}
+      <Section title="Tools & data (MCP)">
         <SelectRow
           icon={Boxes}
-          label="Custom / import…"
+          label="Add or import…"
           active={selection === 'new-mcp'}
           onClick={() => onSelect('new-mcp')}
         />
