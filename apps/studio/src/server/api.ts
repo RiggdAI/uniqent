@@ -197,6 +197,21 @@ export async function handleApi(
     }
   }
 
+  if (method === 'POST' && path === '/api/mcp/paste') {
+    if (typeof b.text !== 'string') return fail(400, 'text is required');
+    return ok(session.previewPastedMcp(b.text));
+  }
+
+  if (method === 'POST' && path === '/api/mcp/paste/add') {
+    if (typeof b.text !== 'string') return fail(400, 'text is required');
+    try {
+      session.addPastedMcp(b.text);
+      return ok(session.state());
+    } catch (e) {
+      return fail(400, (e as Error).message);
+    }
+  }
+
   if (method === 'POST' && path === '/api/mcp/remove') {
     if (typeof b.id === 'string') session.removeMcp(b.id);
     return ok(session.state());
