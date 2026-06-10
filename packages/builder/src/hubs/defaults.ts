@@ -2,6 +2,7 @@ import type { CatalogSource } from './types.js';
 import { mcpRegistrySource } from './mcp-registry.js';
 import { smitherySource } from './smithery.js';
 import { githubSkillsSource } from './github-skills.js';
+import { githubMcpSource } from './github-mcp.js';
 import { jsonIndexSource } from './json-index.js';
 
 export interface DefaultHubOptions {
@@ -16,6 +17,7 @@ export function defaultMcpSources(opts: DefaultHubOptions = {}): CatalogSource[]
   return [
     mcpRegistrySource(),
     smitherySource(),
+    githubMcpSource(opts.githubToken ? { token: opts.githubToken } : {}),
     ...(opts.jsonIndexUrls ?? []).map((u) => jsonIndexSource(u)),
   ];
 }

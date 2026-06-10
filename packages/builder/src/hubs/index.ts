@@ -3,6 +3,7 @@ export * from './aggregate.js';
 export * from './mcp-registry.js';
 export * from './smithery.js';
 export * from './github-skills.js';
+export * from './github-mcp.js';
 export * from './json-index.js';
 export * from './memory-hub.js';
 export * from './defaults.js';
