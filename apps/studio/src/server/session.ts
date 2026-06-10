@@ -14,9 +14,11 @@ import {
   fetchMemoryPack,
   publishMemoryPack,
   importVault,
+  normalizeMcpConfig,
 } from '@uniqent/builder';
 import type {
   BrainMeta,
+  NormalizeResult,
   McpHubResult,
   SkillHubResult,
   HubSearch,
@@ -451,15 +453,37 @@ export class StudioSession {
     this.ensureMcpCredential((input.auth ?? {}) as { type?: string; credentialRef?: string });
   }
 
-  /** Bulk-import MCP servers (e.g. an existing mcp/servers.json). Throws on invalid input. */
+  /** Bulk-import MCP servers from any shape (a canonical list OR a pasted config blob). */
   importMcpServers(servers: Array<Record<string, unknown>>): number {
     let n = 0;
     for (const raw of servers) {
-      this.brain.addMcpServer({ tools: { include: 'all' }, ...raw });
-      this.ensureMcpCredential((raw.auth ?? {}) as { type?: string; credentialRef?: string });
-      n++;
+      const r = normalizeMcpConfig(raw);
+      for (const s of r.servers) {
+        this.brain.addMcpServer(s);
+        n++;
+      }
+      for (const c of r.credentials) this.brain.addCredential(c);
     }
     return n;
+  }
+
+  /** Preview a pasted MCP config without mutating the brain. */
+  previewPastedMcp(text: string): NormalizeResult {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      return { servers: [], credentials: [], lossiness: ['not valid JSON'] };
+    }
+    return normalizeMcpConfig(parsed);
+  }
+
+  /** Add a pasted MCP config (re-normalized server-side; secrets become refs). */
+  addPastedMcp(text: string): number {
+    const r = this.previewPastedMcp(text);
+    for (const s of r.servers) this.brain.addMcpServer(s);
+    for (const c of r.credentials) this.brain.addCredential(c);
+    return r.servers.length;
   }
 
   /** Extra "a hub is just a hosted index.json" URLs included in every hub search. */

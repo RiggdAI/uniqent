@@ -6,6 +6,7 @@ import type {
   InstallPlan,
   InstallResult,
   McpHubResult,
+  McpNormalizePreview,
   SkillHubResult,
   MemoryPackResult,
   VaultImport,
@@ -811,6 +812,8 @@ function CustomMcpEditor({ apply }: { apply: (p: Promise<StudioState>) => void }
   const [authType, setAuthType] = useState('none');
   const [credentialRef, setCredentialRef] = useState('');
   const [headerName, setHeaderName] = useState('');
+  const [paste, setPaste] = useState('');
+  const [preview, setPreview] = useState<McpNormalizePreview | null>(null);
   const stdio = transport === 'stdio';
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>): Promise<void> {
@@ -849,6 +852,69 @@ function CustomMcpEditor({ apply }: { apply: (p: Promise<StudioState>) => void }
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">Add an MCP server, or import a servers.json.</p>
+
+      <div className="space-y-2 rounded-md border border-border p-3">
+        <Label>Paste an MCP config</Label>
+        <p className="text-xs text-muted-foreground">
+          Drop the <code>mcpServers</code> block from any README. Secrets become credential
+          requirements automatically.
+        </p>
+        <Textarea
+          data-testid="paste-mcp"
+          className="min-h-[120px] font-mono text-xs"
+          placeholder={
+            '{ "mcpServers": { "brave": { "command": "npx", "args": ["-y", "..."], "env": { "BRAVE_API_KEY": "..." } } } }'
+          }
+          value={paste}
+          onChange={(e) => setPaste(e.target.value)}
+        />
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            data-testid="paste-mcp-preview"
+            disabled={!paste.trim()}
+            onClick={async () => setPreview(await api.pasteMcpPreview(paste))}
+          >
+            Preview
+          </Button>
+          <Button
+            size="sm"
+            data-testid="paste-mcp-add"
+            disabled={!preview || preview.servers.length === 0}
+            onClick={() => {
+              apply(api.addPastedMcp(paste));
+              setPaste('');
+              setPreview(null);
+            }}
+          >
+            Add{preview?.servers.length ? ` (${preview.servers.length})` : ''}
+          </Button>
+        </div>
+        {preview && (
+          <div className="space-y-0.5 text-xs">
+            {preview.servers.map((s) => (
+              <div key={s.id}>
+                ✓ {s.id} <span className="text-muted-foreground">({s.transport})</span>
+              </div>
+            ))}
+            {preview.credentials.map((c) => (
+              <div key={c.ref} className="text-amber-500">
+                needs {c.ref}
+              </div>
+            ))}
+            {preview.lossiness.map((l, i) => (
+              <div key={i} className="text-muted-foreground">
+                ⚠ {l}
+              </div>
+            ))}
+            {preview.servers.length === 0 && (
+              <div className="text-destructive">No MCP servers found in that config.</div>
+            )}
+          </div>
+        )}
+      </div>
+
       <div className="space-y-1.5">
         <Label>Server id</Label>
         <Input

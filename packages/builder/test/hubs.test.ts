@@ -118,7 +118,7 @@ describe('GitHub skills mapper', () => {
 describe('default sources', () => {
   it('assembles MCP + skill source sets including any JSON indexes', () => {
     const mcp = defaultMcpSources({ jsonIndexUrls: ['https://hub/index.json'] });
-    expect(mcp.map((s) => s.id)).toEqual(['mcp-registry', 'smithery', 'json-index']);
+    expect(mcp.map((s) => s.id)).toEqual(['mcp-registry', 'smithery', 'github', 'json-index']);
     const skills = defaultSkillSources();
     expect(skills.map((s) => s.id)).toEqual(['github']);
   });
