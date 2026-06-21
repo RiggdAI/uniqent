@@ -25,6 +25,7 @@ import {
   importVault,
   parseMemoryMarkdown,
   publishMemoryPack,
+  publishBundle,
   findFeatured,
   featuredBrains,
   detectTarget,
@@ -800,6 +801,56 @@ async function publishMemoryCmd(args: string[], io: CliIo): Promise<number> {
   }
 }
 
+/** Publish a packed .uniqent (or a dir, packed on the fly) to a hosted registry. */
+async function publishCmd(args: string[], io: CliIo): Promise<number> {
+  const { positionals, flags } = parseArgs(args);
+  const target = positionals[0];
+  if (!target) {
+    io.error('publish: missing <file.uniqent|dir>');
+    return 1;
+  }
+  const registry = typeof flags.registry === 'string' ? flags.registry : DEFAULT_HUB;
+  const token = await resolveToken({ flag: flags.token, registry });
+  if (!token) {
+    io.error('publish: not logged in — run `uniqent login` (or pass --token <t>)');
+    return 1;
+  }
+
+  let bytes: Uint8Array;
+  try {
+    const isDir = await stat(target).then((s) => s.isDirectory()).catch(() => false);
+    if (isDir) {
+      const bundle = await maybeSign(await readDir(target), flags, io);
+      bytes = await packBundle(bundle); // validates + secret-scans
+    } else {
+      bytes = new Uint8Array(await readFile(target));
+    }
+  } catch (e) {
+    io.error(`publish: cannot read ${target}: ${(e as Error).message}`);
+    return 1;
+  }
+
+  try {
+    const r = await publishBundle(registry, token, bytes);
+    io.log(
+      `published ${r.name}@${r.version}${r.signed ? ' (signed)' : ''}${r.persisted === false ? ' (stored, not indexed)' : ''}${r.url ? ` → ${r.url}` : ''}`,
+    );
+    return 0;
+  } catch (e) {
+    const msg = (e as Error).message;
+    if (/unauthorized|\b401\b/i.test(msg)) {
+      io.error('publish: not logged in — run `uniqent login` (or pass --token <t>)');
+    } else if (/owned by another publisher/i.test(msg)) {
+      io.error(`publish: ${msg}`);
+    } else if (/sign|unsigned|signature|secret|trust|verif/i.test(msg)) {
+      io.error(`publish: ${msg} — pack and sign it: \`uniqent pack <dir> --sign\``);
+    } else {
+      io.error(`publish: ${msg}`);
+    }
+    return 1;
+  }
+}
+
 async function loginCmd(args: string[], io: CliIo): Promise<number> {
   const { flags } = parseArgs(args);
   const registry = typeof flags.registry === 'string' ? flags.registry : DEFAULT_HUB;
@@ -846,13 +897,14 @@ export async function run(argv: string[], io: CliIo): Promise<number> {
   if (cmd === 'hub') return hub(rest, io);
   if (cmd === 'export') return exportCmd(rest, io);
   if (cmd === 'import-vault') return importVaultCmd(rest, io);
+  if (cmd === 'publish') return publishCmd(rest, io);
   if (cmd === 'login') return loginCmd(rest, io);
   if (cmd === 'logout') return logoutCmd(rest, io);
   if (cmd === 'publish-memory') return publishMemoryCmd(rest, io);
   if (cmd === 'keygen') return keygen(rest, io);
   if (cmd === 'sign') return signCmd(rest, io);
   io.error(
-    'usage: uniqent <try|inspect|install|validate|pack|search|hub|export|import-vault|publish-memory|keygen|sign> <file|dir|url|slug|query> [options]',
+    'usage: uniqent <try|inspect|install|validate|pack|publish|search|hub|export|import-vault|login|logout|publish-memory|keygen|sign> <file|dir|url|slug|query> [options]',
   );
   io.error(
     '  try <brain> [--target <id>] [--root <dir>] [--yes] [--list]   (one-command install of a featured brain)',
@@ -871,6 +923,7 @@ export async function run(argv: string[], io: CliIo): Promise<number> {
   io.error(
     '  publish-memory <pack.json|notes.md> --slug <s> --name <n> [--registry <site>] [--token <t>] [--tags a,b]',
   );
+  io.error('  publish <file.uniqent|dir> [--registry <site>] [--token <t>] [--sign|--key <k>]');
   io.error('  login [--registry <site>] [--token <t>]    logout [--registry <site>]');
   io.error('  keygen [-o <keyfile>]    sign <file> --key <keyfile> [-o]    install … --dry-run');
   return cmd ? 1 : 0;
