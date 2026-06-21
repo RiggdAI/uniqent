@@ -745,12 +745,12 @@ async function publishMemoryCmd(args: string[], io: CliIo): Promise<number> {
     io.error('publish-memory: missing <pack.json|notes.md>');
     return 1;
   }
-  const token = typeof flags.token === 'string' ? flags.token : process.env.UNIQENT_PUBLISH_TOKEN;
+  const registry = typeof flags.registry === 'string' ? flags.registry : DEFAULT_HUB;
+  const token = await resolveToken({ flag: flags.token, registry });
   if (!token) {
-    io.error('publish-memory: missing --token <value> (or set UNIQENT_PUBLISH_TOKEN)');
+    io.error('publish-memory: not logged in — run `uniqent login` (or pass --token <t>)');
     return 1;
   }
-  const registry = typeof flags.registry === 'string' ? flags.registry : DEFAULT_HUB;
 
   let pack: MemoryPackUpload;
   try {
