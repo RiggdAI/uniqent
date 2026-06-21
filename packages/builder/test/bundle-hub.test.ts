@@ -31,6 +31,11 @@ describe('publishBundle', () => {
     );
   });
 
+  it('throws the server error message on 200 {ok: false}', async () => {
+    stubFetch(200, { ok: false, error: 'rejected' });
+    await expect(publishBundle('https://uniqent.ai', 't', new Uint8Array())).rejects.toThrow(/rejected/);
+  });
+
   it('requires a token', async () => {
     await expect(publishBundle('https://uniqent.ai', '', new Uint8Array())).rejects.toThrow(/token/);
   });

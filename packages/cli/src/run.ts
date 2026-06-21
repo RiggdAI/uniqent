@@ -838,7 +838,7 @@ async function publishCmd(args: string[], io: CliIo): Promise<number> {
     return 0;
   } catch (e) {
     const msg = (e as Error).message;
-    if (/unauthorized|\b401\b/i.test(msg)) {
+    if (/unauthorized/i.test(msg)) {
       io.error('publish: not logged in — run `uniqent login` (or pass --token <t>)');
     } else if (/owned by another publisher/i.test(msg)) {
       io.error(`publish: ${msg}`);
