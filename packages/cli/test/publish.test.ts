@@ -75,4 +75,25 @@ describe('publish', () => {
     expect(code).toBe(1);
     expect(err.join('\n')).toMatch(/missing/);
   });
+
+  it('packs a directory on the fly and uploads the bytes with a Bearer token', async () => {
+    const dirPath = join(__dirname, '..', '..', '..', 'examples', 'research-analyst');
+    const fetchFn = stubFetch(200, {
+      ok: true,
+      name: 'research-analyst',
+      version: '0.1.0',
+      signed: false,
+      persisted: true,
+    });
+
+    const code = await run(['publish', dirPath], io());
+
+    expect(code).toBe(0);
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchFn.mock.calls[0];
+    expect(url).toBe('https://uniqent.ai/api/v1/bundles');
+    expect((init.headers as Record<string, string>).authorization).toBe('Bearer unq_live_env');
+    expect((init.body as Uint8Array).byteLength).toBeGreaterThan(0);
+    expect(out.join('\n')).toMatch(/published research-analyst@0\.1\.0/);
+  });
 });
