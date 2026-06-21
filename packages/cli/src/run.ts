@@ -30,6 +30,7 @@ import {
   detectTarget,
 } from '@uniqent/builder';
 import type { VaultFile, MemoryPackUpload } from '@uniqent/builder';
+import { saveToken, clearToken, resolveToken } from './credentials.js';
 import { fetchIndex, findEntry, looksLikeSlug, registryUrl } from './registry.js';
 import { loadFeaturedBundle } from './featured.js';
 
@@ -799,6 +800,34 @@ async function publishMemoryCmd(args: string[], io: CliIo): Promise<number> {
   }
 }
 
+async function loginCmd(args: string[], io: CliIo): Promise<number> {
+  const { flags } = parseArgs(args);
+  const registry = typeof flags.registry === 'string' ? flags.registry : DEFAULT_HUB;
+  let token = typeof flags.token === 'string' ? flags.token : undefined;
+  if (!token) {
+    if (!io.prompt) {
+      io.error('login: provide --token <value> (non-interactive)');
+      return 1;
+    }
+    token = (await io.prompt(`Paste a publish token (create one at ${registry}/account/tokens): `)).trim();
+  }
+  if (!token) {
+    io.error('login: no token provided');
+    return 1;
+  }
+  await saveToken(registry, token);
+  io.log(`Saved token for ${registry}.`);
+  return 0;
+}
+
+async function logoutCmd(args: string[], io: CliIo): Promise<number> {
+  const { flags } = parseArgs(args);
+  const registry = typeof flags.registry === 'string' ? flags.registry : DEFAULT_HUB;
+  const had = await clearToken(registry);
+  io.log(had ? `Logged out of ${registry}.` : `No token stored for ${registry}.`);
+  return 0;
+}
+
 function splitCsv(s: string): string[] {
   return s
     .split(',')
@@ -817,6 +846,8 @@ export async function run(argv: string[], io: CliIo): Promise<number> {
   if (cmd === 'hub') return hub(rest, io);
   if (cmd === 'export') return exportCmd(rest, io);
   if (cmd === 'import-vault') return importVaultCmd(rest, io);
+  if (cmd === 'login') return loginCmd(rest, io);
+  if (cmd === 'logout') return logoutCmd(rest, io);
   if (cmd === 'publish-memory') return publishMemoryCmd(rest, io);
   if (cmd === 'keygen') return keygen(rest, io);
   if (cmd === 'sign') return signCmd(rest, io);
@@ -840,6 +871,7 @@ export async function run(argv: string[], io: CliIo): Promise<number> {
   io.error(
     '  publish-memory <pack.json|notes.md> --slug <s> --name <n> [--registry <site>] [--token <t>] [--tags a,b]',
   );
+  io.error('  login [--registry <site>] [--token <t>]    logout [--registry <site>]');
   io.error('  keygen [-o <keyfile>]    sign <file> --key <keyfile> [-o]    install … --dry-run');
   return cmd ? 1 : 0;
 }
