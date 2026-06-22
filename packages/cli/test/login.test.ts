@@ -43,6 +43,8 @@ describe('login', () => {
 
 describe('login (device flow)', () => {
   it('runs the browser device flow when no --token and stores the returned token', async () => {
+    const origTTY = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY');
+    Object.defineProperty(process.stdout, 'isTTY', { value: true, configurable: true });
     const fetchFn = vi
       .fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ device_code: 'dc', user_code: 'AAAA-BBBB', verify_url: 'https://uniqent.ai/device?code=AAAA-BBBB', interval: 0, expires_in: 600 }), { status: 200 }))
@@ -54,6 +56,23 @@ describe('login (device flow)', () => {
       expect(await loadToken('https://uniqent.ai')).toBe('unq_live_device');
     } finally {
       vi.unstubAllGlobals();
+      if (origTTY) Object.defineProperty(process.stdout, 'isTTY', origTTY);
+    }
+  });
+
+  it('errors (no hang) when headless with no --token', async () => {
+    const origTTY = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY');
+    Object.defineProperty(process.stdout, 'isTTY', { value: false, configurable: true });
+    const fetchFn = vi.fn();
+    vi.stubGlobal('fetch', fetchFn);
+    try {
+      const code = await run(['login'], io());
+      expect(code).toBe(1);
+      expect(fetchFn).not.toHaveBeenCalled();
+      expect(err.join('\n')).toMatch(/--token/);
+    } finally {
+      vi.unstubAllGlobals();
+      if (origTTY) Object.defineProperty(process.stdout, 'isTTY', origTTY);
     }
   });
 });

@@ -56,4 +56,15 @@ describe('runDeviceLogin', () => {
     expect(token).toBeNull();
     expect(t.err.join('\n')).toMatch(/start failed|503/);
   });
+
+  it('returns null immediately (no poll) when expires_in is 0', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(res(200, { device_code: 'dc', user_code: 'T', verify_url: 'u', interval: 0, expires_in: 0 }));
+    const t = io();
+    const token = await runDeviceLogin({ registry: 'https://uniqent.ai', io: t.io, fetchImpl: fetchImpl as unknown as typeof fetch, open: () => {}, sleep: async () => {} });
+    expect(token).toBeNull();
+    expect(fetchImpl).toHaveBeenCalledTimes(1); // only the start call; no poll
+    expect(t.err.join('\n')).toMatch(/timed out/i);
+  });
 });
