@@ -39,11 +39,13 @@
 ## Task 1: `publishBundle` in @uniqent/builder
 
 **Files:**
+
 - Create: `packages/builder/src/hubs/bundle-hub.ts`
 - Modify: `packages/builder/src/hubs/index.ts`
 - Test: `packages/builder/test/bundle-hub.test.ts`
 
 **Interfaces:**
+
 - Produces: `publishBundle(registry: string, token: string, bytes: Uint8Array, signal?: AbortSignal): Promise<BundlePublishResult>` where `BundlePublishResult = { ok: boolean; name: string; version: string; url?: string; signed?: boolean; persisted?: boolean }`. Throws `Error(json.error ?? '<status> <statusText>')` on non-ok.
 
 - [ ] **Step 1: Write the failing test**
@@ -64,16 +66,32 @@ function stubFetch(status: number, body: unknown) {
 
 describe('publishBundle', () => {
   it('POSTs raw bytes with a Bearer token to /api/v1/bundles and returns the parsed result', async () => {
-    const fetchFn = stubFetch(200, { ok: true, name: 'demo', version: '1.0.0', url: 'https://cdn/x', signed: true, persisted: true });
+    const fetchFn = stubFetch(200, {
+      ok: true,
+      name: 'demo',
+      version: '1.0.0',
+      url: 'https://cdn/x',
+      signed: true,
+      persisted: true,
+    });
     const bytes = new Uint8Array([1, 2, 3]);
     const res = await publishBundle('https://uniqent.ai/', 'unq_live_abc', bytes);
 
-    expect(res).toEqual({ ok: true, name: 'demo', version: '1.0.0', url: 'https://cdn/x', signed: true, persisted: true });
+    expect(res).toEqual({
+      ok: true,
+      name: 'demo',
+      version: '1.0.0',
+      url: 'https://cdn/x',
+      signed: true,
+      persisted: true,
+    });
     const [url, init] = fetchFn.mock.calls[0];
     expect(url).toBe('https://uniqent.ai/api/v1/bundles'); // trailing slash normalized
     expect(init.method).toBe('POST');
     expect((init.headers as Record<string, string>).authorization).toBe('Bearer unq_live_abc');
-    expect((init.headers as Record<string, string>)['content-type']).toBe('application/octet-stream');
+    expect((init.headers as Record<string, string>)['content-type']).toBe(
+      'application/octet-stream',
+    );
     expect(init.body).toBe(bytes);
   });
 
@@ -85,7 +103,9 @@ describe('publishBundle', () => {
   });
 
   it('requires a token', async () => {
-    await expect(publishBundle('https://uniqent.ai', '', new Uint8Array())).rejects.toThrow(/token/);
+    await expect(publishBundle('https://uniqent.ai', '', new Uint8Array())).rejects.toThrow(
+      /token/,
+    );
   });
 });
 ```
@@ -130,7 +150,9 @@ export async function publishBundle(
     body: bytes,
     ...(signal ? { signal } : {}),
   });
-  const json = (await res.json().catch(() => ({}))) as Partial<BundlePublishResult> & { error?: string };
+  const json = (await res.json().catch(() => ({}))) as Partial<BundlePublishResult> & {
+    error?: string;
+  };
   if (!res.ok) throw new Error(json.error ?? `${res.status} ${res.statusText}`);
   return {
     ok: json.ok ?? true,
@@ -168,10 +190,12 @@ git commit -m "feat(builder): publishBundle for POST /api/v1/bundles"
 ## Task 2: Credential store + `resolveToken`
 
 **Files:**
+
 - Create: `packages/cli/src/credentials.ts`
 - Test: `packages/cli/test/credentials.test.ts`
 
 **Interfaces:**
+
 - Produces:
   - `loadToken(registry: string): Promise<string | undefined>`
   - `saveToken(registry: string, token: string): Promise<void>`
@@ -306,7 +330,10 @@ export async function clearToken(registry: string): Promise<boolean> {
 }
 
 /** Token precedence: explicit flag → UNIQENT_PUBLISH_TOKEN → stored login. */
-export async function resolveToken(opts: { flag?: string | true; registry: string }): Promise<string | undefined> {
+export async function resolveToken(opts: {
+  flag?: string | true;
+  registry: string;
+}): Promise<string | undefined> {
   if (typeof opts.flag === 'string' && opts.flag) return opts.flag;
   const env = process.env.UNIQENT_PUBLISH_TOKEN;
   if (env && env.length > 0) return env;
@@ -331,10 +358,12 @@ git commit -m "feat(cli): per-registry credential store + resolveToken"
 ## Task 3: `login` / `logout` commands
 
 **Files:**
+
 - Modify: `packages/cli/src/run.ts`
 - Test: `packages/cli/test/login.test.ts`
 
 **Interfaces:**
+
 - Consumes: `saveToken`, `clearToken` (Task 2); `CliIo` (existing: `{ log, error, prompt? }`); `DEFAULT_HUB` (existing const in run.ts).
 - Produces: `loginCmd(args: string[], io: CliIo): Promise<number>`, `logoutCmd(args: string[], io: CliIo): Promise<number>`; `run()` routes `login`/`logout`.
 
@@ -378,7 +407,10 @@ describe('login', () => {
   });
 
   it('prompts for the token when interactive and none is passed', async () => {
-    const code = await run(['login'], io(async () => 'unq_live_prompted'));
+    const code = await run(
+      ['login'],
+      io(async () => 'unq_live_prompted'),
+    );
     expect(code).toBe(0);
     expect(await loadToken('https://uniqent.ai')).toBe('unq_live_prompted');
   });
@@ -423,7 +455,9 @@ async function loginCmd(args: string[], io: CliIo): Promise<number> {
       io.error('login: provide --token <value> (non-interactive)');
       return 1;
     }
-    token = (await io.prompt(`Paste a publish token (create one at ${registry}/account/tokens): `)).trim();
+    token = (
+      await io.prompt(`Paste a publish token (create one at ${registry}/account/tokens): `)
+    ).trim();
   }
   if (!token) {
     io.error('login: no token provided');
@@ -448,14 +482,14 @@ async function logoutCmd(args: string[], io: CliIo): Promise<number> {
 In the `run()` dispatcher in `run.ts`, add these lines before the `publish-memory` line:
 
 ```typescript
-  if (cmd === 'login') return loginCmd(rest, io);
-  if (cmd === 'logout') return logoutCmd(rest, io);
+if (cmd === 'login') return loginCmd(rest, io);
+if (cmd === 'logout') return logoutCmd(rest, io);
 ```
 
 Also add a usage line (after the `publish-memory` usage `io.error(...)` block):
 
 ```typescript
-  io.error('  login [--registry <site>] [--token <t>]    logout [--registry <site>]');
+io.error('  login [--registry <site>] [--token <t>]    logout [--registry <site>]');
 ```
 
 - [ ] **Step 5: Run tests + typecheck**
@@ -477,10 +511,12 @@ git commit -m "feat(cli): uniqent login/logout commands"
 ## Task 4: `publish` command (brain bundles)
 
 **Files:**
+
 - Modify: `packages/cli/src/run.ts`
 - Test: `packages/cli/test/publish.test.ts`
 
 **Interfaces:**
+
 - Consumes: `publishBundle` (Task 1, from `@uniqent/builder`); `resolveToken` (Task 2); existing run.ts helpers `maybeSign`, `readDir`, `packBundle` (the `pack` import alias), `DEFAULT_HUB`, `parseArgs`.
 - Produces: `publishCmd(args: string[], io: CliIo): Promise<number>`; `run()` routes `publish`.
 
@@ -529,7 +565,13 @@ async function makeBundleFile(): Promise<string> {
 
 describe('publish', () => {
   it('sends the bytes with a Bearer token and logs success on 200', async () => {
-    const fetchFn = stubFetch(200, { ok: true, name: 'demo', version: '1.2.3', signed: true, persisted: true });
+    const fetchFn = stubFetch(200, {
+      ok: true,
+      name: 'demo',
+      version: '1.2.3',
+      signed: true,
+      persisted: true,
+    });
     const file = await makeBundleFile();
     const code = await run(['publish', file], io());
 
@@ -603,7 +645,9 @@ async function publishCmd(args: string[], io: CliIo): Promise<number> {
 
   let bytes: Uint8Array;
   try {
-    const isDir = await stat(target).then((s) => s.isDirectory()).catch(() => false);
+    const isDir = await stat(target)
+      .then((s) => s.isDirectory())
+      .catch(() => false);
     if (isDir) {
       const bundle = await maybeSign(await readDir(target), flags, io);
       bytes = await packBundle(bundle); // validates + secret-scans
@@ -642,13 +686,13 @@ async function publishCmd(args: string[], io: CliIo): Promise<number> {
 In the `run()` dispatcher, add before the `publish-memory` line:
 
 ```typescript
-  if (cmd === 'publish') return publishCmd(rest, io);
+if (cmd === 'publish') return publishCmd(rest, io);
 ```
 
 Add a usage line after the `publish-memory` usage line:
 
 ```typescript
-  io.error('  publish <file.uniqent|dir> [--registry <site>] [--token <t>] [--sign|--key <k>]');
+io.error('  publish <file.uniqent|dir> [--registry <site>] [--token <t>] [--sign|--key <k>]');
 ```
 
 Also add `publish`, `login`, `logout` into the top-level usage summary string (the first `io.error('usage: uniqent <…>')`): change the command list to
@@ -671,11 +715,13 @@ git commit -m "feat(cli): uniqent publish for brain bundles"
 ## Task 5: `publish-memory` uses the stored token + README
 
 **Files:**
+
 - Modify: `packages/cli/src/run.ts` (publish-memory token lookup)
 - Modify: `packages/cli/README.md`
 - Test: `packages/cli/test/login.test.ts` (add one case)
 
 **Interfaces:**
+
 - Consumes: `resolveToken` (Task 2), already imported in run.ts by Task 3.
 
 - [ ] **Step 1: Write the failing test**
@@ -683,6 +729,7 @@ git commit -m "feat(cli): uniqent publish for brain bundles"
 `publish-memory` requires a pack **file** positional (it does not accept inline `--text`), so the test writes a temp `.json` pack and points at it.
 
 First, extend the existing imports at the top of `packages/cli/test/login.test.ts`:
+
 - add `writeFile` to the `node:fs/promises` import (currently `import { mkdtemp, rm } from 'node:fs/promises';` → `import { mkdtemp, rm, writeFile } from 'node:fs/promises';`),
 - add a vitest import line: `import { vi } from 'vitest';`.
 
@@ -691,12 +738,18 @@ Then append this new `describe` block to the file (it reuses the file's existing
 ```typescript
 describe('publish-memory uses the stored token', () => {
   it('does not require --token once logged in', async () => {
-    const fetchFn = vi.fn(async () => new Response(JSON.stringify({ ok: true, slug: 'p', factCount: 1 }), { status: 200 }));
+    const fetchFn = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ ok: true, slug: 'p', factCount: 1 }), { status: 200 }),
+    );
     vi.stubGlobal('fetch', fetchFn);
     try {
       await run(['login', '--token', 'unq_live_stored'], io());
       const pack = join(dir, 'p.json');
-      await writeFile(pack, JSON.stringify({ slug: 'p', name: 'P', facts: [{ kind: 'fact', text: 'hi' }] }));
+      await writeFile(
+        pack,
+        JSON.stringify({ slug: 'p', name: 'P', facts: [{ kind: 'fact', text: 'hi' }] }),
+      );
       const code = await run(['publish-memory', pack], io()); // no --token; stored token must be used
       expect(code).toBe(0);
       const [, init] = fetchFn.mock.calls[0];
@@ -718,23 +771,23 @@ Expected: FAIL — `publish-memory` currently reads only `flags.token`/`UNIQENT_
 In `packages/cli/src/run.ts`, inside `publishMemoryCmd`, replace:
 
 ```typescript
-  const token = typeof flags.token === 'string' ? flags.token : process.env.UNIQENT_PUBLISH_TOKEN;
-  if (!token) {
-    io.error('publish-memory: missing --token <value> (or set UNIQENT_PUBLISH_TOKEN)');
-    return 1;
-  }
-  const registry = typeof flags.registry === 'string' ? flags.registry : DEFAULT_HUB;
+const token = typeof flags.token === 'string' ? flags.token : process.env.UNIQENT_PUBLISH_TOKEN;
+if (!token) {
+  io.error('publish-memory: missing --token <value> (or set UNIQENT_PUBLISH_TOKEN)');
+  return 1;
+}
+const registry = typeof flags.registry === 'string' ? flags.registry : DEFAULT_HUB;
 ```
 
 with (resolve the registry first, then the token via the shared precedence):
 
 ```typescript
-  const registry = typeof flags.registry === 'string' ? flags.registry : DEFAULT_HUB;
-  const token = await resolveToken({ flag: flags.token, registry });
-  if (!token) {
-    io.error('publish-memory: not logged in — run `uniqent login` (or pass --token <t>)');
-    return 1;
-  }
+const registry = typeof flags.registry === 'string' ? flags.registry : DEFAULT_HUB;
+const token = await resolveToken({ flag: flags.token, registry });
+if (!token) {
+  io.error('publish-memory: not logged in — run `uniqent login` (or pass --token <t>)');
+  return 1;
+}
 ```
 
 - [ ] **Step 4: Run tests + typecheck**
@@ -746,7 +799,7 @@ Expected: PASS (all cli tests including the new publish-memory case), typecheck 
 
 In `packages/cli/README.md`, find the publish/memory section and add (or update) a short "Authentication" subsection. Insert this Markdown near the publish docs:
 
-```markdown
+````markdown
 ## Publishing (requires login)
 
 Publishing is per-user. Create a token at <https://uniqent.ai/account/tokens>, then:
@@ -757,12 +810,14 @@ uniqent publish ./my-brain    # packs (optionally --sign) and uploads the .uniqe
 uniqent publish-memory notes.md --slug team-playbook --name "Team playbook"
 uniqent logout
 ```
+````
 
 Token resolution order: `--token` flag → `UNIQENT_PUBLISH_TOKEN` env → stored login.
 `uniqent publish` accepts a packed `.uniqent` file or a directory (packed on the fly;
 add `--sign` or `--key <file>` to sign). The registry rejects unsigned/secret-bearing
 bundles, and a name owned by another publisher returns a conflict.
-```
+
+````
 
 (Adjust surrounding prose if the README already has a publish section — keep it consistent, don't duplicate.)
 
@@ -771,7 +826,7 @@ bundles, and a name owned by another publisher returns a conflict.
 ```bash
 git add packages/cli/src/run.ts packages/cli/README.md packages/cli/test/login.test.ts
 git commit -m "feat(cli): publish-memory uses stored token; document login/publish"
-```
+````
 
 ---
 
@@ -782,4 +837,7 @@ git commit -m "feat(cli): publish-memory uses stored token; document login/publi
 - **Don't touch** install/search/inspect/pack internals beyond calling `maybeSign`/`packBundle`/`readDir` from `publishCmd`.
 - **No release:** publishing the bumped CLI to npm is a separate manual step, out of scope here.
 - The server side (token mint + `authPublisher`) lives in the `uniqent-ai` repo and is already done; this plan only consumes its HTTP contract.
+
+```
+
 ```

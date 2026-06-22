@@ -38,7 +38,13 @@ async function makeBundleFile(): Promise<string> {
 
 describe('publish', () => {
   it('sends the bytes with a Bearer token and logs success on 200', async () => {
-    const fetchFn = stubFetch(200, { ok: true, name: 'demo', version: '1.2.3', signed: true, persisted: true });
+    const fetchFn = stubFetch(200, {
+      ok: true,
+      name: 'demo',
+      version: '1.2.3',
+      signed: true,
+      persisted: true,
+    });
     const file = await makeBundleFile();
     const code = await run(['publish', file], io());
 

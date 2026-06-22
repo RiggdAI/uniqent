@@ -48,7 +48,10 @@ export async function clearToken(registry: string): Promise<boolean> {
 }
 
 /** Token precedence: explicit flag → UNIQENT_PUBLISH_TOKEN → stored login. */
-export async function resolveToken(opts: { flag?: string | true; registry: string }): Promise<string | undefined> {
+export async function resolveToken(opts: {
+  flag?: string | true;
+  registry: string;
+}): Promise<string | undefined> {
   if (typeof opts.flag === 'string' && opts.flag) return opts.flag;
   const env = process.env.UNIQENT_PUBLISH_TOKEN;
   if (env && env.length > 0) return env;

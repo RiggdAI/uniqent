@@ -28,8 +28,11 @@ export async function publishBundle(
     body: bytes,
     ...(signal ? { signal } : {}),
   });
-  const json = (await res.json().catch(() => ({}))) as Partial<BundlePublishResult> & { error?: string };
-  if (!res.ok || json.ok === false) throw new Error(json.error ?? `${res.status} ${res.statusText}`);
+  const json = (await res.json().catch(() => ({}))) as Partial<BundlePublishResult> & {
+    error?: string;
+  };
+  if (!res.ok || json.ok === false)
+    throw new Error(json.error ?? `${res.status} ${res.statusText}`);
   return {
     ok: json.ok ?? true,
     name: json.name ?? '',

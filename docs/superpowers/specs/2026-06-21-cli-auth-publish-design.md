@@ -32,6 +32,7 @@ npm-style ergonomics (`login` once, then publish) and the missing brain publish.
 ## Architecture
 
 ### 1. Credential store — `packages/cli/src/credentials.ts` (new)
+
 - File: `join(homedir(), '.uniqent', 'credentials.json')`, written with mode `0600`,
   directory created if absent. Shape:
   ```json
@@ -49,6 +50,7 @@ npm-style ergonomics (`login` once, then publish) and the missing brain publish.
 - All reads degrade: a missing/corrupt file yields `undefined`, never throws.
 
 ### 2. `uniqent login` / `uniqent logout` — in `packages/cli/src/run.ts`
+
 - `loginCmd(args, io)`:
   - registry = `--registry` or `DEFAULT_HUB` (`https://uniqent.ai`).
   - token = `--token` if a string; else if `io.prompt` is available, prompt
@@ -59,6 +61,7 @@ npm-style ergonomics (`login` once, then publish) and the missing brain publish.
   - `clearToken(registry)`; log `Logged out of <registry>.` or `No token stored for <registry>.` → exit 0.
 
 ### 3. `uniqent publish <file.uniqent|dir>` — `run.ts` + builder helper
+
 - New `publishBundle(registry, token, bytes, signal?)` in
   `packages/builder/src/hubs/bundle-hub.ts` (sibling of `publishMemoryPack`),
   exported from the builder barrel:
@@ -81,6 +84,7 @@ npm-style ergonomics (`login` once, then publish) and the missing brain publish.
       `pack and sign it: \`uniqent pack <dir> --sign\``.
 
 ### 4. `publish-memory` update + polish
+
 - Replace its token lookup with
   `await resolveToken({ flag: flags.token, registry })`; on none, error
   `publish-memory: not logged in — run \`uniqent login\` or pass --token`.
@@ -90,6 +94,7 @@ npm-style ergonomics (`login` once, then publish) and the missing brain publish.
   `uniqent publish <dir|file>`, and that tokens come from `/account/tokens`.
 
 ### 5. Command dispatch
+
 - In the dispatcher in `run.ts`, add: `login → loginCmd`, `logout → logoutCmd`,
   `publish → publishCmd`. Keep all existing commands unchanged.
 
@@ -101,12 +106,14 @@ npm-style ergonomics (`login` once, then publish) and the missing brain publish.
 `{ name, version, … }` or error → mapped CLI message.
 
 ## Error handling
+
 - No token on publish/publish-memory → exit 1 with a "run `uniqent login`" hint.
 - Server 401 → same hint; 409 → ownership message; 422 → trust-gate reason + sign hint.
 - Corrupt/missing credentials file → treated as "no stored token", never a crash.
 - Non-interactive `login` without `--token` → clear error, exit 1.
 
 ## Testing (TDD — Vitest is configured: `test/**/*.test.ts`)
+
 - `test/credentials.test.ts`: `saveToken`→`loadToken` round-trip and `clearToken`,
   using a temp `HOME`/dir; `resolveToken` precedence (flag > env > stored > none);
   corrupt-file → `undefined`.
@@ -121,6 +128,7 @@ npm-style ergonomics (`login` once, then publish) and the missing brain publish.
   `pnpm --filter @uniqent/cli --filter @uniqent/builder test` green.
 
 ## Out of scope
+
 - OAuth / device-flow login (paste-token only).
 - A server `whoami`/token-verify endpoint (login stores without verifying; a future
   server addition can let `login` confirm the token).

@@ -34,7 +34,10 @@ describe('login', () => {
   });
 
   it('prompts for the token when interactive and none is passed', async () => {
-    const code = await run(['login'], io(async () => 'unq_live_prompted'));
+    const code = await run(
+      ['login'],
+      io(async () => 'unq_live_prompted'),
+    );
     expect(code).toBe(0);
     expect(await loadToken('https://uniqent.ai')).toBe('unq_live_prompted');
   });
@@ -55,12 +58,18 @@ describe('login', () => {
 
 describe('publish-memory uses the stored token', () => {
   it('does not require --token once logged in', async () => {
-    const fetchFn = vi.fn(async () => new Response(JSON.stringify({ ok: true, slug: 'p', factCount: 1 }), { status: 200 }));
+    const fetchFn = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ ok: true, slug: 'p', factCount: 1 }), { status: 200 }),
+    );
     vi.stubGlobal('fetch', fetchFn);
     try {
       await run(['login', '--token', 'unq_live_stored'], io());
       const pack = join(dir, 'p.json');
-      await writeFile(pack, JSON.stringify({ slug: 'p', name: 'P', facts: [{ kind: 'fact', text: 'hi' }] }));
+      await writeFile(
+        pack,
+        JSON.stringify({ slug: 'p', name: 'P', facts: [{ kind: 'fact', text: 'hi' }] }),
+      );
       const code = await run(['publish-memory', pack], io()); // no --token; stored token must be used
       expect(code).toBe(0);
       const [, init] = fetchFn.mock.calls[0];

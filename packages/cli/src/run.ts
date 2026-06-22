@@ -818,7 +818,9 @@ async function publishCmd(args: string[], io: CliIo): Promise<number> {
 
   let bytes: Uint8Array;
   try {
-    const isDir = await stat(target).then((s) => s.isDirectory()).catch(() => false);
+    const isDir = await stat(target)
+      .then((s) => s.isDirectory())
+      .catch(() => false);
     if (isDir) {
       const bundle = await maybeSign(await readDir(target), flags, io);
       bytes = await packBundle(bundle); // validates + secret-scans
@@ -860,7 +862,9 @@ async function loginCmd(args: string[], io: CliIo): Promise<number> {
       io.error('login: provide --token <value> (non-interactive)');
       return 1;
     }
-    token = (await io.prompt(`Paste a publish token (create one at ${registry}/account/tokens): `)).trim();
+    token = (
+      await io.prompt(`Paste a publish token (create one at ${registry}/account/tokens): `)
+    ).trim();
   }
   if (!token) {
     io.error('login: no token provided');
