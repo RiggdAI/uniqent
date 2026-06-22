@@ -35,6 +35,22 @@ npm i -g @uniqent/cli      # or use: npx @uniqent/cli <command>
 | `keygen`                               | Generate an Ed25519 keypair for signing bundles. Writes a `uniqent.key.json` file — keep it out of git.                                                   |
 | `sign <file.uniqent>`                  | Sign a packed bundle with a keypair written by `keygen`.                                                                                                  |
 
+## Publishing (requires login)
+
+Publishing is per-user. Create a token at <https://uniqent.ai/account/tokens>, then:
+
+```bash
+uniqent login                 # paste your token (stored in ~/.uniqent/credentials.json)
+uniqent publish ./my-brain    # packs (optionally --sign) and uploads the .uniqent
+uniqent publish-memory notes.md --slug team-playbook --name "Team playbook"
+uniqent logout
+```
+
+Token resolution order: `--token` flag → `UNIQENT_PUBLISH_TOKEN` env → stored login.
+`uniqent publish` accepts a packed `.uniqent` file or a directory (packed on the fly;
+add `--sign` or `--key <file>` to sign). The registry rejects unsigned/secret-bearing
+bundles, and a name owned by another publisher returns a conflict.
+
 ## A few flows
 
 **Try a featured brain (zero config):**
