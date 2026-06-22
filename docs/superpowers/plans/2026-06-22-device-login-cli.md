@@ -35,10 +35,12 @@
 ## Task 1: `runDeviceLogin` device-flow module
 
 **Files:**
+
 - Create: `packages/cli/src/device.ts`
 - Test: `packages/cli/test/device.test.ts`
 
 **Interfaces:**
+
 - Produces:
   - `interface DeviceLoginDeps { registry: string; io: { log: (m: string) => void; error: (m: string) => void }; fetchImpl?: typeof fetch; open?: (url: string) => void; sleep?: (ms: number) => Promise<void> }`
   - `runDeviceLogin(deps: DeviceLoginDeps): Promise<string | null>` — returns the token, or `null` on failure/expiry/timeout.
@@ -66,7 +68,15 @@ describe('runDeviceLogin', () => {
   it('starts, opens the browser, polls until approved, and returns the token', async () => {
     const fetchImpl = vi
       .fn()
-      .mockResolvedValueOnce(res(200, { device_code: 'dc', user_code: 'WXYZ-1234', verify_url: 'https://uniqent.ai/device?code=WXYZ-1234', interval: 0, expires_in: 600 }))
+      .mockResolvedValueOnce(
+        res(200, {
+          device_code: 'dc',
+          user_code: 'WXYZ-1234',
+          verify_url: 'https://uniqent.ai/device?code=WXYZ-1234',
+          interval: 0,
+          expires_in: 600,
+        }),
+      )
       .mockResolvedValueOnce(res(200, { status: 'pending' }))
       .mockResolvedValueOnce(res(200, { status: 'approved', token: 'unq_live_dev' }));
     const opened: string[] = [];
@@ -83,18 +93,34 @@ describe('runDeviceLogin', () => {
     expect(token).toBe('unq_live_dev');
     expect(opened).toEqual(['https://uniqent.ai/device?code=WXYZ-1234']);
     // start URL normalized (no double slash), poll body carries the device_code
-    expect((fetchImpl.mock.calls[0][0] as string)).toBe('https://uniqent.ai/api/v1/device/start');
-    expect(JSON.parse((fetchImpl.mock.calls[2][1] as RequestInit).body as string)).toEqual({ device_code: 'dc' });
+    expect(fetchImpl.mock.calls[0][0] as string).toBe('https://uniqent.ai/api/v1/device/start');
+    expect(JSON.parse((fetchImpl.mock.calls[2][1] as RequestInit).body as string)).toEqual({
+      device_code: 'dc',
+    });
     expect(t.log.join('\n')).toMatch(/WXYZ-1234/); // user_code shown
   });
 
   it('returns null when the code expires', async () => {
     const fetchImpl = vi
       .fn()
-      .mockResolvedValueOnce(res(200, { device_code: 'dc', user_code: 'C', verify_url: 'u', interval: 0, expires_in: 600 }))
+      .mockResolvedValueOnce(
+        res(200, {
+          device_code: 'dc',
+          user_code: 'C',
+          verify_url: 'u',
+          interval: 0,
+          expires_in: 600,
+        }),
+      )
       .mockResolvedValueOnce(res(200, { status: 'expired' }));
     const t = io();
-    const token = await runDeviceLogin({ registry: 'https://uniqent.ai', io: t.io, fetchImpl: fetchImpl as unknown as typeof fetch, open: () => {}, sleep: async () => {} });
+    const token = await runDeviceLogin({
+      registry: 'https://uniqent.ai',
+      io: t.io,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      open: () => {},
+      sleep: async () => {},
+    });
     expect(token).toBeNull();
     expect(t.err.join('\n')).toMatch(/expired|not approved/i);
   });
@@ -102,7 +128,13 @@ describe('runDeviceLogin', () => {
   it('returns null when device start fails', async () => {
     const fetchImpl = vi.fn().mockResolvedValueOnce(res(503, { error: 'no database configured' }));
     const t = io();
-    const token = await runDeviceLogin({ registry: 'https://uniqent.ai', io: t.io, fetchImpl: fetchImpl as unknown as typeof fetch, open: () => {}, sleep: async () => {} });
+    const token = await runDeviceLogin({
+      registry: 'https://uniqent.ai',
+      io: t.io,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      open: () => {},
+      sleep: async () => {},
+    });
     expect(token).toBeNull();
     expect(t.err.join('\n')).toMatch(/start failed|503/);
   });
@@ -173,7 +205,9 @@ export async function runDeviceLogin(deps: DeviceLoginDeps): Promise<string | nu
   }
   const start = (await startRes.json()) as StartResponse;
 
-  deps.io.log(`\nTo authorize this device, visit:\n  ${start.verify_url}\nand confirm the code:  ${start.user_code}\n`);
+  deps.io.log(
+    `\nTo authorize this device, visit:\n  ${start.verify_url}\nand confirm the code:  ${start.user_code}\n`,
+  );
   open(start.verify_url);
 
   const deadline = Date.now() + (start.expires_in ?? 600) * 1000;
@@ -215,16 +249,19 @@ git commit -m "feat(cli): runDeviceLogin browser device-authorization flow"
 ## Task 2: wire `loginCmd` to the device flow + docs
 
 **Files:**
+
 - Modify: `packages/cli/src/run.ts`
 - Modify: `packages/cli/test/login.test.ts`
 - Modify: `packages/cli/README.md`
 
 **Interfaces:**
+
 - Consumes: `runDeviceLogin` (Task 1); `saveToken` (already imported in run.ts); `DEFAULT_HUB`, `parseArgs`, `CliIo`.
 
 - [ ] **Step 1: Update the existing tests, then write the failing device test**
 
 First, the behavior of `login` with no `--token` changes (it now runs the device flow instead of prompting/erroring), so **remove two now-obsolete cases** from `packages/cli/test/login.test.ts`:
+
 - the test titled **"prompts for the token when interactive and none is passed"** (there is no more paste prompt), and
 - the test titled **"errors when non-interactive with no --token"** (no-token no longer errors).
 
@@ -235,8 +272,23 @@ describe('login (device flow)', () => {
   it('runs the browser device flow when no --token and stores the returned token', async () => {
     const fetchFn = vi
       .fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ device_code: 'dc', user_code: 'AAAA-BBBB', verify_url: 'https://uniqent.ai/device?code=AAAA-BBBB', interval: 0, expires_in: 600 }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ status: 'approved', token: 'unq_live_device' }), { status: 200 }));
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            device_code: 'dc',
+            user_code: 'AAAA-BBBB',
+            verify_url: 'https://uniqent.ai/device?code=AAAA-BBBB',
+            interval: 0,
+            expires_in: 600,
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ status: 'approved', token: 'unq_live_device' }), {
+          status: 200,
+        }),
+      );
     vi.stubGlobal('fetch', fetchFn);
     try {
       const code = await run(['login'], io()); // no --token, no prompt → device flow

@@ -54,7 +54,9 @@ export async function runDeviceLogin(deps: DeviceLoginDeps): Promise<string | nu
   }
   const start = (await startRes.json()) as StartResponse;
 
-  deps.io.log(`\nTo authorize this device, visit:\n  ${start.verify_url}\nand confirm the code:  ${start.user_code}\n`);
+  deps.io.log(
+    `\nTo authorize this device, visit:\n  ${start.verify_url}\nand confirm the code:  ${start.user_code}\n`,
+  );
   open(start.verify_url);
 
   const deadline = Date.now() + (start.expires_in ?? 600) * 1000;

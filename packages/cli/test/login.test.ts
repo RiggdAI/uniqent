@@ -47,8 +47,23 @@ describe('login (device flow)', () => {
     Object.defineProperty(process.stdout, 'isTTY', { value: true, configurable: true });
     const fetchFn = vi
       .fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ device_code: 'dc', user_code: 'AAAA-BBBB', verify_url: 'https://uniqent.ai/device?code=AAAA-BBBB', interval: 0, expires_in: 600 }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ status: 'approved', token: 'unq_live_device' }), { status: 200 }));
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            device_code: 'dc',
+            user_code: 'AAAA-BBBB',
+            verify_url: 'https://uniqent.ai/device?code=AAAA-BBBB',
+            interval: 0,
+            expires_in: 600,
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ status: 'approved', token: 'unq_live_device' }), {
+          status: 200,
+        }),
+      );
     vi.stubGlobal('fetch', fetchFn);
     try {
       const code = await run(['login'], io()); // no --token, no prompt → device flow

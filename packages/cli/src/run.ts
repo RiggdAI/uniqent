@@ -871,7 +871,9 @@ async function loginCmd(args: string[], io: CliIo): Promise<number> {
 
   // Headless guard: no TTY means no browser to open.
   if (!process.stdout.isTTY) {
-    io.error(`login: no browser available — pass --token <unq_live_…> (create one at ${registry}/account/tokens)`);
+    io.error(
+      `login: no browser available — pass --token <unq_live_…> (create one at ${registry}/account/tokens)`,
+    );
     return 1;
   }
 
