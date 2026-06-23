@@ -6,6 +6,8 @@
 [![Spec: CC0](https://img.shields.io/badge/spec-CC0-green)](LICENSE-SPEC)
 [![Spec docs](https://img.shields.io/badge/docs-SPEC.md-informational)](docs/SPEC.md)
 
+<img width="1254" height="1254" alt="generated-image-Create-a-simple-graph-with---A-2026-06-23T06-35-41-906Z (1)" src="https://github.com/user-attachments/assets/31fbd282-3586-4712-906b-48cb8f76177f" />
+
 **Any brain, any agent.** Package an AI agent's whole brain once — persona, MCP stack, skills,
 memory, config — into one open, signed `.uniqent` file, and install it into whatever framework you
 run (Claude Code, Hermes, OpenClaw) in **one command**.
