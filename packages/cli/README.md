@@ -37,10 +37,15 @@ npm i -g @uniqent/cli      # or use: npx @uniqent/cli <command>
 
 ## Publishing (requires login)
 
-Publishing is per-user. Create a token at <https://uniqent.ai/account/tokens>, then:
+Publishing is per-user. Log in with:
 
 ```bash
-uniqent login                 # paste your token (stored in ~/.uniqent/credentials.json)
+uniqent login                 # opens your browser to approve the device (sign in with your
+                              # uniqent.ai account), then stores the returned token in
+                              # ~/.uniqent/credentials.json. On a headless machine it prints
+                              # the URL + code to open elsewhere. You can still pass a token
+                              # directly with `uniqent login --token <unq_live_…>` (create one
+                              # at https://uniqent.ai/account/tokens).
 uniqent publish ./my-brain    # packs (optionally --sign) and uploads the .uniqent
 uniqent publish-memory notes.md --slug team-playbook --name "Team playbook"
 uniqent logout

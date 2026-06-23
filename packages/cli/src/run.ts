@@ -32,6 +32,7 @@ import {
 } from '@uniqent/builder';
 import type { VaultFile, MemoryPackUpload } from '@uniqent/builder';
 import { saveToken, clearToken, resolveToken } from './credentials.js';
+import { runDeviceLogin } from './device.js';
 import { fetchIndex, findEntry, looksLikeSlug, registryUrl } from './registry.js';
 import { loadFeaturedBundle } from './featured.js';
 
@@ -856,22 +857,31 @@ async function publishCmd(args: string[], io: CliIo): Promise<number> {
 async function loginCmd(args: string[], io: CliIo): Promise<number> {
   const { flags } = parseArgs(args);
   const registry = typeof flags.registry === 'string' ? flags.registry : DEFAULT_HUB;
-  let token = typeof flags.token === 'string' ? flags.token : undefined;
-  if (!token) {
-    if (!io.prompt) {
-      io.error('login: provide --token <value> (non-interactive)');
+
+  // Explicit paste/store path.
+  if (typeof flags.token === 'string') {
+    if (!flags.token) {
+      io.error('login: empty --token');
       return 1;
     }
-    token = (
-      await io.prompt(`Paste a publish token (create one at ${registry}/account/tokens): `)
-    ).trim();
+    await saveToken(registry, flags.token);
+    io.log(`Saved token for ${registry}.`);
+    return 0;
   }
-  if (!token) {
-    io.error('login: no token provided');
+
+  // Headless guard: no TTY means no browser to open.
+  if (!process.stdout.isTTY) {
+    io.error(
+      `login: no browser available — pass --token <unq_live_…> (create one at ${registry}/account/tokens)`,
+    );
     return 1;
   }
+
+  // Default: browser device-authorization flow.
+  const token = await runDeviceLogin({ registry, io });
+  if (!token) return 1; // runDeviceLogin already printed the reason
   await saveToken(registry, token);
-  io.log(`Saved token for ${registry}.`);
+  io.log(`Logged in to ${registry}.`);
   return 0;
 }
 
