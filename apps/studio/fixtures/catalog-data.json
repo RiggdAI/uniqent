@@ -116,13 +116,7 @@
       }
     }
   ],
-  "skills": [
-    {
-      "name": "summarizer",
-      "description": "Summarize long texts into concise bullets.",
-      "skillMd": "# summarizer\n\nSummarize the provided text into concise bullet points.\n"
-    }
-  ],
+  "skills": [],
   "channels": [
     {
       "id": "telegram",

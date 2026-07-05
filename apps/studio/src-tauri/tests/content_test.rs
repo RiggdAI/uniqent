@@ -1,5 +1,5 @@
 use serde_json::{json, Value};
-use uniqent_studio::session::Session;
+use uniqent_studio::session::{skill_from_catalog, Session};
 
 fn fixture(name: &str) -> Value {
     let p = concat!(env!("CARGO_MANIFEST_DIR"), "/../fixtures/");
@@ -68,15 +68,34 @@ fn readd_mcp_deduplicates() {
     assert_eq!(mcp[1].as_str(), Some("github"));
 }
 
+/// skill_from_catalog: happy path — looks up a skill in a synthetic inline catalog.
+/// This tests the lookup logic without depending on the shared SKILL_CATALOG contents.
 #[test]
-fn add_skill_catalog_known_name_adds_skill() {
-    let mut s = Session::new();
-    s.add_skill_catalog("summarizer").expect("summarizer is in catalog");
-    let state = s.state();
-    let skills = state["manifest"]["components"]["skills"].as_array().unwrap();
-    assert!(skills.iter().any(|v| v.as_str() == Some("summarizer")));
+fn skill_from_catalog_finds_known_skill() {
+    let catalog = json!({
+        "skills": [
+            {
+                "name": "test-skill",
+                "description": "A synthetic skill for unit testing.",
+                "skillMd": "# test-skill\n\nDoes test things.\n"
+            }
+        ]
+    });
+    let result = skill_from_catalog(&catalog, "test-skill");
+    assert!(result.is_some());
+    let (name, md) = result.unwrap();
+    assert_eq!(name, "test-skill");
+    assert_eq!(md, "# test-skill\n\nDoes test things.\n");
 }
 
+/// skill_from_catalog: returns None for an unknown name.
+#[test]
+fn skill_from_catalog_returns_none_for_unknown() {
+    let catalog = json!({ "skills": [{ "name": "other", "description": "x", "skillMd": "y" }] });
+    assert!(skill_from_catalog(&catalog, "nonexistent").is_none());
+}
+
+/// add_skill_catalog on the real embedded catalog rejects names not in it.
 #[test]
 fn add_skill_catalog_unknown_name_errors() {
     let mut s = Session::new();

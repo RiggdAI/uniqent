@@ -33,12 +33,7 @@
       "credential": "gbrain_token"
     }
   ],
-  "skills": [
-    {
-      "name": "summarizer",
-      "description": "Summarize long texts into concise bullets."
-    }
-  ],
+  "skills": [],
   "channels": [
     {
       "id": "telegram",

@@ -105,6 +105,16 @@ fn channel_catalog_entry(id: &str) -> Option<ChannelCatalogEntry> {
     })
 }
 
+/// Look up a skill by name in a catalog JSON value.
+/// Returns `(name, skill_md)` if found, `None` otherwise.
+/// The catalog must have a `"skills"` array whose entries have `"name"` and `"skillMd"` fields.
+pub fn skill_from_catalog(catalog: &Value, name: &str) -> Option<(String, String)> {
+    let entries = catalog["skills"].as_array()?;
+    let entry = entries.iter().find(|e| e["name"].as_str() == Some(name))?;
+    let skill_md = entry["skillMd"].as_str()?;
+    Some((name.to_string(), skill_md.to_string()))
+}
+
 pub struct Session {
     name: String,
     display_name: String,
@@ -233,19 +243,11 @@ impl Session {
 
     /// Add skill from catalog by name. Returns Err if name not found.
     pub fn add_skill_catalog(&mut self, name: &str) -> Result<(), String> {
-        let entries = catalog_data()["skills"]
-            .as_array()
-            .ok_or_else(|| "catalog skills missing".to_string())?;
-        let entry = entries
-            .iter()
-            .find(|e| e["name"].as_str() == Some(name))
+        let (skill_name, skill_md) = skill_from_catalog(catalog_data(), name)
             .ok_or_else(|| format!("skill catalog name not found: {name}"))?;
-        let skill_md = entry["skillMd"]
-            .as_str()
-            .ok_or_else(|| format!("skill catalog entry missing skillMd: {name}"))?;
         // Dedup by name: remove old, append new (same as add_custom_skill)
-        self.skills.retain(|(n, _)| n != name);
-        self.skills.push((name.to_string(), skill_md.to_string()));
+        self.skills.retain(|(n, _)| n != &skill_name);
+        self.skills.push((skill_name, skill_md));
         Ok(())
     }
 
