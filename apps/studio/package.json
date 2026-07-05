@@ -13,7 +13,12 @@
     "test": "vitest run",
     "start": "node dist/server/index.js",
     "dev:web": "vite --config web/vite.config.ts",
-    "dev:server": "tsx watch src/server/index.ts"
+    "dev:server": "tsx watch src/server/index.ts",
+    "native:dev": "tauri dev",
+    "native:build": "tauri build",
+    "fixtures": "tsx scripts/emit-fixtures.ts && prettier --write fixtures",
+    "fixtures:core": "tsx scripts/emit-core-fixtures.ts && prettier --write fixtures/core",
+    "fixtures:ports": "tsx scripts/emit-port-fixtures.ts && prettier --write fixtures/ports"
   },
   "dependencies": {
     "@radix-ui/react-label": "^2.1.1",
@@ -39,6 +44,8 @@
     "tiptap-markdown": "^0.8.10"
   },
   "devDependencies": {
+    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/cli": "^2.11.4",
     "@types/node": "^22.10.2",
     "@types/react": "^19.2.15",
     "@types/react-dom": "^19.2.3",

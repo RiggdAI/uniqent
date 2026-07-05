@@ -1,0 +1,47 @@
+{
+  "manifest": {
+    "specVersion": "0.1",
+    "name": "my-brain",
+    "displayName": "My Brain",
+    "version": "0.1.0",
+    "description": "A portable agent brain.",
+    "author": {
+      "name": "Anonymous"
+    },
+    "license": "CC0-1.0",
+    "tags": [],
+    "components": {
+      "identity": false,
+      "memory": {
+        "facts": 0,
+        "episodic": 0,
+        "hasProfile": false
+      },
+      "skills": [],
+      "mcp": [],
+      "tools": [],
+      "tasks": [],
+      "channels": []
+    },
+    "credentials": [],
+    "permissions": {
+      "filesystem": {
+        "read": [],
+        "write": []
+      },
+      "network": {
+        "endpoints": []
+      },
+      "autonomy": "suggest",
+      "spawnsProcesses": false
+    },
+    "compatibility": {
+      "targets": []
+    }
+  },
+  "validation": {
+    "ok": true,
+    "errors": [],
+    "warnings": []
+  }
+}

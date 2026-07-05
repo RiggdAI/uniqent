@@ -1,0 +1,29 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Uniqent Studio",
+  "version": "0.1.0",
+  "identifier": "ai.uniqent.studio",
+  "build": {
+    "beforeDevCommand": "pnpm dev:web",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "pnpm build:web",
+    "frontendDist": "../dist-web"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Uniqent Studio",
+        "width": 1280,
+        "height": 840,
+        "minWidth": 960,
+        "minHeight": 640
+      }
+    ],
+    "security": { "csp": null }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app", "dmg"],
+    "icon": ["icons/icon.icns", "icons/icon.png"]
+  }
+}

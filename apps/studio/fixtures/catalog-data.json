@@ -1,0 +1,246 @@
+{
+  "mcp": [
+    {
+      "id": "github",
+      "name": "GitHub",
+      "description": "Repositories, issues, and pull requests via the GitHub MCP server.",
+      "server": {
+        "id": "github",
+        "transport": "streamable-http",
+        "url": "https://api.githubcopilot.com/mcp/",
+        "auth": {
+          "type": "bearer",
+          "credentialRef": "github_pat"
+        },
+        "tools": {
+          "include": "all"
+        },
+        "description": "GitHub MCP server"
+      },
+      "credential": {
+        "ref": "github_pat",
+        "label": "GitHub Personal Access Token",
+        "type": "apiKey",
+        "consumedBy": [],
+        "required": true,
+        "help": "Create at https://github.com/settings/tokens with the scopes you need."
+      }
+    },
+    {
+      "id": "filesystem",
+      "name": "Filesystem",
+      "description": "Read and write files in a local directory.",
+      "server": {
+        "id": "filesystem",
+        "transport": "stdio",
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-filesystem", "${HOME}"],
+        "auth": {
+          "type": "none"
+        },
+        "tools": {
+          "include": "all"
+        },
+        "description": "Local filesystem MCP server"
+      }
+    },
+    {
+      "id": "fetch",
+      "name": "Web Fetch",
+      "description": "Fetch and read web pages.",
+      "server": {
+        "id": "fetch",
+        "transport": "stdio",
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-fetch"],
+        "auth": {
+          "type": "none"
+        },
+        "tools": {
+          "include": "all"
+        },
+        "description": "Web fetch MCP server"
+      }
+    },
+    {
+      "id": "gbrain",
+      "name": "GBrain (memory)",
+      "description": "Persistent, queryable memory — search/think over a local gbrain (by Garry Tan). Requires gbrain installed.",
+      "server": {
+        "id": "gbrain",
+        "transport": "stdio",
+        "command": "gbrain",
+        "args": ["serve"],
+        "auth": {
+          "type": "none"
+        },
+        "tools": {
+          "include": "all"
+        },
+        "description": "GBrain memory MCP server (local). Install once: `bun install -g github:garrytan/gbrain`, then `gbrain init`."
+      }
+    },
+    {
+      "id": "gbrain-remote",
+      "name": "GBrain (remote)",
+      "description": "Connect to a hosted gbrain over HTTP with a bearer token.",
+      "server": {
+        "id": "gbrain-remote",
+        "transport": "streamable-http",
+        "url": "https://your-gbrain.example.com/mcp",
+        "auth": {
+          "type": "bearer",
+          "credentialRef": "gbrain_token"
+        },
+        "tools": {
+          "include": "all"
+        },
+        "description": "Hosted GBrain memory MCP server."
+      },
+      "credential": {
+        "ref": "gbrain_token",
+        "label": "GBrain access token",
+        "type": "bearer",
+        "consumedBy": [],
+        "required": true,
+        "help": "From your gbrain server: gbrain connect <url> --token <tok>."
+      }
+    }
+  ],
+  "skills": [],
+  "channels": [
+    {
+      "id": "telegram",
+      "name": "Telegram",
+      "description": "Reach the agent through a Telegram bot.",
+      "channel": {
+        "id": "telegram",
+        "kind": "telegram",
+        "credentialRef": "telegram_bot_token"
+      },
+      "credential": {
+        "ref": "telegram_bot_token",
+        "label": "Telegram Bot Token",
+        "type": "bearer",
+        "consumedBy": [],
+        "required": true,
+        "help": "Create a bot with @BotFather and copy its token."
+      }
+    },
+    {
+      "id": "slack",
+      "name": "Slack",
+      "description": "Talk to the agent from a Slack workspace.",
+      "channel": {
+        "id": "slack",
+        "kind": "slack",
+        "credentialRef": "slack_bot_token"
+      },
+      "credential": {
+        "ref": "slack_bot_token",
+        "label": "Slack Bot Token",
+        "type": "bearer",
+        "consumedBy": [],
+        "required": true,
+        "help": "Create a Slack app, add a bot user, and install it to your workspace."
+      }
+    },
+    {
+      "id": "discord",
+      "name": "Discord",
+      "description": "Run the agent as a Discord bot.",
+      "channel": {
+        "id": "discord",
+        "kind": "discord",
+        "credentialRef": "discord_bot_token"
+      },
+      "credential": {
+        "ref": "discord_bot_token",
+        "label": "Discord Bot Token",
+        "type": "bearer",
+        "consumedBy": [],
+        "required": true,
+        "help": "Create an application in the Discord developer portal and add a bot."
+      }
+    },
+    {
+      "id": "whatsapp",
+      "name": "WhatsApp",
+      "description": "Reach the agent on WhatsApp via the WhatsApp Business Cloud API.",
+      "channel": {
+        "id": "whatsapp",
+        "kind": "whatsapp",
+        "credentialRef": "whatsapp_token",
+        "config": {
+          "phone_number_id": ""
+        }
+      },
+      "credential": {
+        "ref": "whatsapp_token",
+        "label": "WhatsApp Business Token",
+        "type": "bearer",
+        "consumedBy": [],
+        "required": true,
+        "help": "From Meta → WhatsApp (Business Cloud API): a permanent access token. Also set the channel config phone_number_id."
+      }
+    },
+    {
+      "id": "sms",
+      "name": "SMS",
+      "description": "Two-way SMS, e.g. via Twilio.",
+      "channel": {
+        "id": "sms",
+        "kind": "sms",
+        "credentialRef": "twilio_auth_token",
+        "config": {
+          "account_sid": "",
+          "from_number": ""
+        }
+      },
+      "credential": {
+        "ref": "twilio_auth_token",
+        "label": "Twilio Auth Token",
+        "type": "apiKey",
+        "consumedBy": [],
+        "required": true,
+        "help": "From the Twilio console. Also set the channel config account_sid and from_number."
+      }
+    },
+    {
+      "id": "email",
+      "name": "Email",
+      "description": "Reach the agent over email via an email provider API.",
+      "channel": {
+        "id": "email",
+        "kind": "email",
+        "credentialRef": "email_api_key"
+      },
+      "credential": {
+        "ref": "email_api_key",
+        "label": "Email API Key",
+        "type": "apiKey",
+        "consumedBy": [],
+        "required": true,
+        "help": "An API key from your email provider (e.g. Postmark, Resend, or SendGrid)."
+      }
+    },
+    {
+      "id": "webhook",
+      "name": "Webhook",
+      "description": "Receive events through an inbound HTTP webhook.",
+      "channel": {
+        "id": "webhook",
+        "kind": "webhook",
+        "credentialRef": "webhook_secret"
+      },
+      "credential": {
+        "ref": "webhook_secret",
+        "label": "Webhook Signing Secret",
+        "type": "apiKey",
+        "consumedBy": [],
+        "required": false,
+        "help": "Optional shared secret used to verify inbound webhook signatures."
+      }
+    }
+  ]
+}

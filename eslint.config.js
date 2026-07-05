@@ -9,6 +9,7 @@ export default tseslint.config(
       '**/node_modules/**',
       '**/coverage/**',
       '**/*.schema.json',
+      '**/target/**', // Cargo build artifacts (apps/studio/src-tauri)
     ],
   },
   js.configs.recommended,

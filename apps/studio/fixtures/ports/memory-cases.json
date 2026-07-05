@@ -1,0 +1,693 @@
+[
+  {
+    "name": "headings-and-bullets",
+    "markdown": "# Project Context\n- We decided to use Postgres for the main DB\n- The API uses REST not GraphQL\n## Technical Notes\n* TypeScript is the primary language",
+    "parsed": [
+      {
+        "text": "We decided to use Postgres for the main DB",
+        "kind": "fact",
+        "entities": [],
+        "tags": []
+      },
+      {
+        "text": "The API uses REST not GraphQL",
+        "kind": "fact",
+        "entities": [],
+        "tags": []
+      },
+      {
+        "text": "TypeScript is the primary language",
+        "kind": "fact",
+        "entities": [],
+        "tags": []
+      }
+    ],
+    "graph": {
+      "nodes": [
+        {
+          "id": "mem:m0",
+          "label": "We decided to use Postgres for the main DB",
+          "type": "memory",
+          "degree": 0,
+          "kind": "fact"
+        },
+        {
+          "id": "mem:m1",
+          "label": "The API uses REST not GraphQL",
+          "type": "memory",
+          "degree": 0,
+          "kind": "fact"
+        },
+        {
+          "id": "mem:m2",
+          "label": "TypeScript is the primary language",
+          "type": "memory",
+          "degree": 0,
+          "kind": "fact"
+        }
+      ],
+      "edges": []
+    }
+  },
+  {
+    "name": "kind-prefixes",
+    "markdown": "Decision: use [[Postgres]] over [[MySQL]] #db\nPreference: the user likes dark mode\nMilestone: shipped v1.0 to production\n[!episodic] fixed the auth bug on 2024-01-15\nFact: the API rate limit is 1000 req/hr",
+    "parsed": [
+      {
+        "text": "use [[Postgres]] over [[MySQL]] #db",
+        "kind": "decision",
+        "entities": ["Postgres", "MySQL"],
+        "tags": ["db"]
+      },
+      {
+        "text": "the user likes dark mode",
+        "kind": "preference",
+        "entities": [],
+        "tags": []
+      },
+      {
+        "text": "shipped v1.0 to production",
+        "kind": "milestone",
+        "entities": [],
+        "tags": []
+      },
+      {
+        "text": "fixed the auth bug on 2024-01-15",
+        "kind": "episodic",
+        "entities": [],
+        "tags": []
+      },
+      {
+        "text": "the API rate limit is 1000 req/hr",
+        "kind": "fact",
+        "entities": [],
+        "tags": []
+      }
+    ],
+    "graph": {
+      "nodes": [
+        {
+          "id": "mem:m0",
+          "label": "use Postgres over MySQL",
+          "type": "memory",
+          "degree": 3,
+          "kind": "decision"
+        },
+        {
+          "id": "ent:postgres",
+          "label": "Postgres",
+          "type": "entity",
+          "degree": 1
+        },
+        {
+          "id": "ent:mysql",
+          "label": "MySQL",
+          "type": "entity",
+          "degree": 1
+        },
+        {
+          "id": "tag:db",
+          "label": "#db",
+          "type": "tag",
+          "degree": 1
+        },
+        {
+          "id": "mem:m1",
+          "label": "the user likes dark mode",
+          "type": "memory",
+          "degree": 0,
+          "kind": "preference"
+        },
+        {
+          "id": "mem:m2",
+          "label": "shipped v1.0 to production",
+          "type": "memory",
+          "degree": 0,
+          "kind": "milestone"
+        },
+        {
+          "id": "mem:m3",
+          "label": "fixed the auth bug on 2024-01-15",
+          "type": "memory",
+          "degree": 0,
+          "kind": "episodic"
+        },
+        {
+          "id": "mem:m4",
+          "label": "the API rate limit is 1000 req/hr",
+          "type": "memory",
+          "degree": 0,
+          "kind": "fact"
+        }
+      ],
+      "edges": [
+        {
+          "source": "mem:m0",
+          "target": "ent:postgres"
+        },
+        {
+          "source": "mem:m0",
+          "target": "ent:mysql"
+        },
+        {
+          "source": "mem:m0",
+          "target": "tag:db"
+        }
+      ]
+    }
+  },
+  {
+    "name": "wikilink-entities",
+    "markdown": "chose [[Postgres]] over [[MySQL]] for the main DB\n[[Postgres]] tuning notes: set max_connections to 200\nintegrated [[Auth-Service|auth]] with [[Postgres]]",
+    "parsed": [
+      {
+        "text": "chose [[Postgres]] over [[MySQL]] for the main DB",
+        "kind": "fact",
+        "entities": ["Postgres", "MySQL"],
+        "tags": []
+      },
+      {
+        "text": "[[Postgres]] tuning notes: set max_connections to 200",
+        "kind": "fact",
+        "entities": ["Postgres"],
+        "tags": []
+      },
+      {
+        "text": "integrated [[Auth-Service|auth]] with [[Postgres]]",
+        "kind": "fact",
+        "entities": ["Auth-Service", "Postgres"],
+        "tags": []
+      }
+    ],
+    "graph": {
+      "nodes": [
+        {
+          "id": "mem:m0",
+          "label": "chose Postgres over MySQL for the main DB",
+          "type": "memory",
+          "degree": 2,
+          "kind": "fact"
+        },
+        {
+          "id": "ent:postgres",
+          "label": "Postgres",
+          "type": "entity",
+          "degree": 3
+        },
+        {
+          "id": "ent:mysql",
+          "label": "MySQL",
+          "type": "entity",
+          "degree": 1
+        },
+        {
+          "id": "mem:m1",
+          "label": "Postgres tuning notes: set max_connections to 2…",
+          "type": "memory",
+          "degree": 1,
+          "kind": "fact"
+        },
+        {
+          "id": "mem:m2",
+          "label": "integrated auth with Postgres",
+          "type": "memory",
+          "degree": 2,
+          "kind": "fact"
+        },
+        {
+          "id": "ent:auth-service",
+          "label": "Auth-Service",
+          "type": "entity",
+          "degree": 1
+        }
+      ],
+      "edges": [
+        {
+          "source": "mem:m0",
+          "target": "ent:postgres"
+        },
+        {
+          "source": "mem:m0",
+          "target": "ent:mysql"
+        },
+        {
+          "source": "mem:m1",
+          "target": "ent:postgres"
+        },
+        {
+          "source": "mem:m2",
+          "target": "ent:auth-service"
+        },
+        {
+          "source": "mem:m2",
+          "target": "ent:postgres"
+        }
+      ]
+    }
+  },
+  {
+    "name": "hashtags",
+    "markdown": "uses REST API #api #backend\nfrontend is React #frontend #react\nCI runs on GitHub Actions #ci #backend",
+    "parsed": [
+      {
+        "text": "uses REST API #api #backend",
+        "kind": "fact",
+        "entities": [],
+        "tags": ["api", "backend"]
+      },
+      {
+        "text": "frontend is React #frontend #react",
+        "kind": "fact",
+        "entities": [],
+        "tags": ["frontend", "react"]
+      },
+      {
+        "text": "CI runs on GitHub Actions #ci #backend",
+        "kind": "fact",
+        "entities": [],
+        "tags": ["ci", "backend"]
+      }
+    ],
+    "graph": {
+      "nodes": [
+        {
+          "id": "mem:m0",
+          "label": "uses REST API",
+          "type": "memory",
+          "degree": 2,
+          "kind": "fact"
+        },
+        {
+          "id": "tag:api",
+          "label": "#api",
+          "type": "tag",
+          "degree": 1
+        },
+        {
+          "id": "tag:backend",
+          "label": "#backend",
+          "type": "tag",
+          "degree": 2
+        },
+        {
+          "id": "mem:m1",
+          "label": "frontend is React",
+          "type": "memory",
+          "degree": 2,
+          "kind": "fact"
+        },
+        {
+          "id": "tag:frontend",
+          "label": "#frontend",
+          "type": "tag",
+          "degree": 1
+        },
+        {
+          "id": "tag:react",
+          "label": "#react",
+          "type": "tag",
+          "degree": 1
+        },
+        {
+          "id": "mem:m2",
+          "label": "CI runs on GitHub Actions",
+          "type": "memory",
+          "degree": 2,
+          "kind": "fact"
+        },
+        {
+          "id": "tag:ci",
+          "label": "#ci",
+          "type": "tag",
+          "degree": 1
+        }
+      ],
+      "edges": [
+        {
+          "source": "mem:m0",
+          "target": "tag:api"
+        },
+        {
+          "source": "mem:m0",
+          "target": "tag:backend"
+        },
+        {
+          "source": "mem:m1",
+          "target": "tag:frontend"
+        },
+        {
+          "source": "mem:m1",
+          "target": "tag:react"
+        },
+        {
+          "source": "mem:m2",
+          "target": "tag:ci"
+        },
+        {
+          "source": "mem:m2",
+          "target": "tag:backend"
+        }
+      ]
+    }
+  },
+  {
+    "name": "blank-input",
+    "markdown": "",
+    "parsed": [],
+    "graph": {
+      "nodes": [],
+      "edges": []
+    }
+  },
+  {
+    "name": "whitespace-only",
+    "markdown": "   \n\n   \n",
+    "parsed": [],
+    "graph": {
+      "nodes": [],
+      "edges": []
+    }
+  },
+  {
+    "name": "mixed-doc",
+    "markdown": "# Context\n- Decision: we will use [[Postgres]] #db\n* [!preference] the user likes [[TypeScript]]\nThe API hit a rate limit yesterday\n   ",
+    "parsed": [
+      {
+        "text": "we will use [[Postgres]] #db",
+        "kind": "decision",
+        "entities": ["Postgres"],
+        "tags": ["db"]
+      },
+      {
+        "text": "the user likes [[TypeScript]]",
+        "kind": "preference",
+        "entities": ["TypeScript"],
+        "tags": []
+      },
+      {
+        "text": "The API hit a rate limit yesterday",
+        "kind": "fact",
+        "entities": [],
+        "tags": []
+      }
+    ],
+    "graph": {
+      "nodes": [
+        {
+          "id": "mem:m0",
+          "label": "we will use Postgres",
+          "type": "memory",
+          "degree": 2,
+          "kind": "decision"
+        },
+        {
+          "id": "ent:postgres",
+          "label": "Postgres",
+          "type": "entity",
+          "degree": 1
+        },
+        {
+          "id": "tag:db",
+          "label": "#db",
+          "type": "tag",
+          "degree": 1
+        },
+        {
+          "id": "mem:m1",
+          "label": "the user likes TypeScript",
+          "type": "memory",
+          "degree": 1,
+          "kind": "preference"
+        },
+        {
+          "id": "ent:typescript",
+          "label": "TypeScript",
+          "type": "entity",
+          "degree": 1
+        },
+        {
+          "id": "mem:m2",
+          "label": "The API hit a rate limit yesterday",
+          "type": "memory",
+          "degree": 0,
+          "kind": "fact"
+        }
+      ],
+      "edges": [
+        {
+          "source": "mem:m0",
+          "target": "ent:postgres"
+        },
+        {
+          "source": "mem:m0",
+          "target": "tag:db"
+        },
+        {
+          "source": "mem:m1",
+          "target": "ent:typescript"
+        }
+      ]
+    }
+  },
+  {
+    "name": "dedup-entities-and-tags",
+    "markdown": "[[Acme]] chose [[Postgres]] over [[Acme]] preferences #db #infra",
+    "parsed": [
+      {
+        "text": "[[Acme]] chose [[Postgres]] over [[Acme]] preferences #db #infra",
+        "kind": "fact",
+        "entities": ["Acme", "Postgres"],
+        "tags": ["db", "infra"]
+      }
+    ],
+    "graph": {
+      "nodes": [
+        {
+          "id": "mem:m0",
+          "label": "Acme chose Postgres over Acme preferences",
+          "type": "memory",
+          "degree": 4,
+          "kind": "fact"
+        },
+        {
+          "id": "ent:acme",
+          "label": "Acme",
+          "type": "entity",
+          "degree": 1
+        },
+        {
+          "id": "ent:postgres",
+          "label": "Postgres",
+          "type": "entity",
+          "degree": 1
+        },
+        {
+          "id": "tag:db",
+          "label": "#db",
+          "type": "tag",
+          "degree": 1
+        },
+        {
+          "id": "tag:infra",
+          "label": "#infra",
+          "type": "tag",
+          "degree": 1
+        }
+      ],
+      "edges": [
+        {
+          "source": "mem:m0",
+          "target": "ent:acme"
+        },
+        {
+          "source": "mem:m0",
+          "target": "ent:postgres"
+        },
+        {
+          "source": "mem:m0",
+          "target": "tag:db"
+        },
+        {
+          "source": "mem:m0",
+          "target": "tag:infra"
+        }
+      ]
+    }
+  },
+  {
+    "name": "numbered-list",
+    "markdown": "1. First we set up [[Postgres]]\n2. Then we configured the ORM\n3. Milestone: DB migrations running",
+    "parsed": [
+      {
+        "text": "First we set up [[Postgres]]",
+        "kind": "fact",
+        "entities": ["Postgres"],
+        "tags": []
+      },
+      {
+        "text": "Then we configured the ORM",
+        "kind": "fact",
+        "entities": [],
+        "tags": []
+      },
+      {
+        "text": "DB migrations running",
+        "kind": "milestone",
+        "entities": [],
+        "tags": []
+      }
+    ],
+    "graph": {
+      "nodes": [
+        {
+          "id": "mem:m0",
+          "label": "First we set up Postgres",
+          "type": "memory",
+          "degree": 1,
+          "kind": "fact"
+        },
+        {
+          "id": "ent:postgres",
+          "label": "Postgres",
+          "type": "entity",
+          "degree": 1
+        },
+        {
+          "id": "mem:m1",
+          "label": "Then we configured the ORM",
+          "type": "memory",
+          "degree": 0,
+          "kind": "fact"
+        },
+        {
+          "id": "mem:m2",
+          "label": "DB migrations running",
+          "type": "memory",
+          "degree": 0,
+          "kind": "milestone"
+        }
+      ],
+      "edges": [
+        {
+          "source": "mem:m0",
+          "target": "ent:postgres"
+        }
+      ]
+    }
+  },
+  {
+    "name": "alias-wikilinks",
+    "markdown": "see [[Auth-Service|the auth service]] for [[Postgres|our database]] #security #db",
+    "parsed": [
+      {
+        "text": "see [[Auth-Service|the auth service]] for [[Postgres|our database]] #security #db",
+        "kind": "fact",
+        "entities": ["Auth-Service", "Postgres"],
+        "tags": ["security", "db"]
+      }
+    ],
+    "graph": {
+      "nodes": [
+        {
+          "id": "mem:m0",
+          "label": "see the auth service for our database",
+          "type": "memory",
+          "degree": 4,
+          "kind": "fact"
+        },
+        {
+          "id": "ent:auth-service",
+          "label": "Auth-Service",
+          "type": "entity",
+          "degree": 1
+        },
+        {
+          "id": "ent:postgres",
+          "label": "Postgres",
+          "type": "entity",
+          "degree": 1
+        },
+        {
+          "id": "tag:security",
+          "label": "#security",
+          "type": "tag",
+          "degree": 1
+        },
+        {
+          "id": "tag:db",
+          "label": "#db",
+          "type": "tag",
+          "degree": 1
+        }
+      ],
+      "edges": [
+        {
+          "source": "mem:m0",
+          "target": "ent:auth-service"
+        },
+        {
+          "source": "mem:m0",
+          "target": "ent:postgres"
+        },
+        {
+          "source": "mem:m0",
+          "target": "tag:security"
+        },
+        {
+          "source": "mem:m0",
+          "target": "tag:db"
+        }
+      ]
+    }
+  },
+  {
+    "name": "callout-prefix",
+    "markdown": "[!decision] use microservices architecture\n[!preference] prefer async patterns\n[!milestone] first beta released",
+    "parsed": [
+      {
+        "text": "use microservices architecture",
+        "kind": "decision",
+        "entities": [],
+        "tags": []
+      },
+      {
+        "text": "prefer async patterns",
+        "kind": "preference",
+        "entities": [],
+        "tags": []
+      },
+      {
+        "text": "first beta released",
+        "kind": "milestone",
+        "entities": [],
+        "tags": []
+      }
+    ],
+    "graph": {
+      "nodes": [
+        {
+          "id": "mem:m0",
+          "label": "use microservices architecture",
+          "type": "memory",
+          "degree": 0,
+          "kind": "decision"
+        },
+        {
+          "id": "mem:m1",
+          "label": "prefer async patterns",
+          "type": "memory",
+          "degree": 0,
+          "kind": "preference"
+        },
+        {
+          "id": "mem:m2",
+          "label": "first beta released",
+          "type": "memory",
+          "degree": 0,
+          "kind": "milestone"
+        }
+      ],
+      "edges": []
+    }
+  }
+]
