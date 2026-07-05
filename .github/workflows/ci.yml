@@ -53,3 +53,29 @@ jobs:
       - run: pnpm format:check
 
       - run: pnpm test
+
+  studio-rust:
+    runs-on: macos-latest
+    name: studio (cargo test + clippy)
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/studio/src-tauri
+
+      - name: cargo test
+        run: |
+          source "$HOME/.cargo/env"
+          cargo test
+        working-directory: apps/studio/src-tauri
+
+      - name: cargo clippy
+        run: |
+          source "$HOME/.cargo/env"
+          cargo clippy --all-targets -- -D warnings
+        working-directory: apps/studio/src-tauri
