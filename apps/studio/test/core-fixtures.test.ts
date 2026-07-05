@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Bundle, canonicalDigest, unpack, verify } from '@uniqent/core';
 
-const dir = join(fileURLToPath(new URL('../fixtures/core', import.meta.url)));
+const dir = fileURLToPath(new URL('../fixtures/core', import.meta.url));
 
 describe('core fixtures stay in sync with @uniqent/core', () => {
   it('the packed fixture unpacks to the committed digest', async () => {

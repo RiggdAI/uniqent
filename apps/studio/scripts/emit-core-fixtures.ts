@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Bundle, canonicalDigest, pack, sign, generateKeypair, writeDir } from '@uniqent/core';
@@ -41,9 +41,18 @@ await writeFile(join(out, 'expected-digest.txt'), canonicalDigest(bundle) + '\n'
 await writeFile(join(out, 'fixture.uniqent'), await pack(bundle, { skipValidation: true }));
 
 // Fixed throwaway keypair, committed so both impls can use it in tests.
-const kp = await generateKeypair();
-await writeFile(join(out, 'keypair.json'), JSON.stringify(kp, null, 2) + '\n');
+// Reuse committed keypair when available so re-runs are deterministic.
+let kp: { privateKey: string; publicKey: string };
+try {
+  kp = JSON.parse(await readFile(join(out, 'keypair.json'), 'utf8'));
+  console.log('reusing committed keypair');
+} catch {
+  kp = await generateKeypair();
+  await writeFile(join(out, 'keypair.json'), JSON.stringify(kp, null, 2) + '\n');
+  console.log('generated new keypair');
+}
 const signed = await sign(bundle, kp.privateKey);
+// Note: signedAt inside fixture-signed.uniqent will still vary on each run.
 await writeFile(join(out, 'fixture-signed.uniqent'), await pack(signed, { skipValidation: true }));
 
 console.log('core fixtures written to', out);
