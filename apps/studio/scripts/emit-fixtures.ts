@@ -1,36 +1,13 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { MCP_CATALOG, SKILL_CATALOG, CHANNEL_CATALOG } from '@uniqent/builder';
 import { StudioSession } from '../src/server/session.js';
 
 const out = join(dirname(fileURLToPath(import.meta.url)), '..', 'fixtures');
-await mkdir(out, { recursive: true });
 
 const write = (name: string, data: unknown) =>
   writeFile(join(out, name), JSON.stringify(data, null, 2) + '\n');
-
-const s = new StudioSession();
-await write('state-default.json', s.state());
-await write('catalog.json', s.catalog());
-
-// ── Canonical meta script (Phase 1) ─────────────────────────────────────────
-// Keep in lockstep with src-tauri/tests/fixtures_test.rs.
-s.setMeta({
-  name: 'fixture-brain',
-  description: 'A fixture brain for cross-impl tests',
-  version: '1.2.3',
-});
-s.setTargets(['claude-code', 'hermes']);
-s.setPersona('# Persona\n\nYou are the fixture.');
-s.setReadme('# Readme\n\nFixture readme.');
-await write('state-mutated.json', s.state());
-
-// Cleared fixture: apply canonical mutations then clear persona (to '') and readme (whitespace-only).
-// persona '' stays present with identity: true; readme whitespace-only drops the key.
-s.setPersona('');
-s.setReadme('  ');
-await write('state-cleared.json', s.state());
 
 // ── Canonical content script (Phase 3a) ──────────────────────────────────────
 // Applied AFTER the canonical meta mutations on a fresh session.
@@ -110,12 +87,43 @@ export async function buildFixtureBundle(): Promise<void> {
   await write('state-content.json', sc.state());
 }
 
-await buildFixtureBundle();
+export async function main(): Promise<void> {
+  await mkdir(out, { recursive: true });
 
-await write('catalog-data.json', {
-  mcp: MCP_CATALOG,
-  skills: SKILL_CATALOG,
-  channels: CHANNEL_CATALOG,
-});
+  const s = new StudioSession();
+  await write('state-default.json', s.state());
+  await write('catalog.json', s.catalog());
 
-console.log('fixtures written to', out);
+  // ── Canonical meta script (Phase 1) ─────────────────────────────────────────
+  // Keep in lockstep with src-tauri/tests/fixtures_test.rs.
+  s.setMeta({
+    name: 'fixture-brain',
+    description: 'A fixture brain for cross-impl tests',
+    version: '1.2.3',
+  });
+  s.setTargets(['claude-code', 'hermes']);
+  s.setPersona('# Persona\n\nYou are the fixture.');
+  s.setReadme('# Readme\n\nFixture readme.');
+  await write('state-mutated.json', s.state());
+
+  // Cleared fixture: apply canonical mutations then clear persona (to '') and readme (whitespace-only).
+  // persona '' stays present with identity: true; readme whitespace-only drops the key.
+  s.setPersona('');
+  s.setReadme('  ');
+  await write('state-cleared.json', s.state());
+
+  await buildFixtureBundle();
+
+  await write('catalog-data.json', {
+    mcp: MCP_CATALOG,
+    skills: SKILL_CATALOG,
+    channels: CHANNEL_CATALOG,
+  });
+
+  console.log('fixtures written to', out);
+}
+
+// Only run when executed directly (not when imported by tests).
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await main();
+}

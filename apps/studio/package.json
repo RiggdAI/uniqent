@@ -16,9 +16,9 @@
     "dev:server": "tsx watch src/server/index.ts",
     "native:dev": "tauri dev",
     "native:build": "tauri build",
-    "fixtures": "tsx scripts/emit-fixtures.ts",
-    "fixtures:core": "tsx scripts/emit-core-fixtures.ts",
-    "fixtures:ports": "tsx scripts/emit-port-fixtures.ts"
+    "fixtures": "tsx scripts/emit-fixtures.ts && prettier --write fixtures",
+    "fixtures:core": "tsx scripts/emit-core-fixtures.ts && prettier --write fixtures/core",
+    "fixtures:ports": "tsx scripts/emit-port-fixtures.ts && prettier --write fixtures/ports"
   },
   "dependencies": {
     "@radix-ui/react-label": "^2.1.1",
