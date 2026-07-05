@@ -16,7 +16,8 @@
     "dev:server": "tsx watch src/server/index.ts",
     "native:dev": "tauri dev",
     "native:build": "tauri build",
-    "fixtures": "tsx scripts/emit-fixtures.ts"
+    "fixtures": "tsx scripts/emit-fixtures.ts",
+    "fixtures:core": "tsx scripts/emit-core-fixtures.ts"
   },
   "dependencies": {
     "@radix-ui/react-label": "^2.1.1",

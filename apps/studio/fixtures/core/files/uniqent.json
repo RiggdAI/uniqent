@@ -1,0 +1,19 @@
+{
+  "spec": "0.1",
+  "name": "core-fixture",
+  "displayName": "Core Fixture",
+  "version": "1.0.0",
+  "description": "Cross-impl core fixture brain",
+  "components": {
+    "identity": true,
+    "skills": [],
+    "mcp": [],
+    "memory": {
+      "facts": 1,
+      "episodic": 0,
+      "hasProfile": false
+    },
+    "tasks": [],
+    "channels": []
+  }
+}
