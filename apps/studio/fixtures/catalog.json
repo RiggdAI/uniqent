@@ -1,0 +1,89 @@
+{
+  "mcp": [
+    {
+      "id": "github",
+      "name": "GitHub",
+      "description": "Repositories, issues, and pull requests via the GitHub MCP server.",
+      "transport": "streamable-http",
+      "credential": "github_pat"
+    },
+    {
+      "id": "filesystem",
+      "name": "Filesystem",
+      "description": "Read and write files in a local directory.",
+      "transport": "stdio"
+    },
+    {
+      "id": "fetch",
+      "name": "Web Fetch",
+      "description": "Fetch and read web pages.",
+      "transport": "stdio"
+    },
+    {
+      "id": "gbrain",
+      "name": "GBrain (memory)",
+      "description": "Persistent, queryable memory — search/think over a local gbrain (by Garry Tan). Requires gbrain installed.",
+      "transport": "stdio"
+    },
+    {
+      "id": "gbrain-remote",
+      "name": "GBrain (remote)",
+      "description": "Connect to a hosted gbrain over HTTP with a bearer token.",
+      "transport": "streamable-http",
+      "credential": "gbrain_token"
+    }
+  ],
+  "skills": [],
+  "channels": [
+    {
+      "id": "telegram",
+      "name": "Telegram",
+      "description": "Reach the agent through a Telegram bot.",
+      "kind": "telegram",
+      "credential": "telegram_bot_token"
+    },
+    {
+      "id": "slack",
+      "name": "Slack",
+      "description": "Talk to the agent from a Slack workspace.",
+      "kind": "slack",
+      "credential": "slack_bot_token"
+    },
+    {
+      "id": "discord",
+      "name": "Discord",
+      "description": "Run the agent as a Discord bot.",
+      "kind": "discord",
+      "credential": "discord_bot_token"
+    },
+    {
+      "id": "whatsapp",
+      "name": "WhatsApp",
+      "description": "Reach the agent on WhatsApp via the WhatsApp Business Cloud API.",
+      "kind": "whatsapp",
+      "credential": "whatsapp_token"
+    },
+    {
+      "id": "sms",
+      "name": "SMS",
+      "description": "Two-way SMS, e.g. via Twilio.",
+      "kind": "sms",
+      "credential": "twilio_auth_token"
+    },
+    {
+      "id": "email",
+      "name": "Email",
+      "description": "Reach the agent over email via an email provider API.",
+      "kind": "email",
+      "credential": "email_api_key"
+    },
+    {
+      "id": "webhook",
+      "name": "Webhook",
+      "description": "Receive events through an inbound HTTP webhook.",
+      "kind": "webhook",
+      "credential": "webhook_secret"
+    }
+  ],
+  "targets": ["claude-code", "hermes", "openclaw"]
+}

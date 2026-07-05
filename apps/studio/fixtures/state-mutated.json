@@ -1,0 +1,49 @@
+{
+  "manifest": {
+    "specVersion": "0.1",
+    "name": "fixture-brain",
+    "displayName": "My Brain",
+    "version": "1.2.3",
+    "description": "A fixture brain for cross-impl tests",
+    "author": {
+      "name": "Anonymous"
+    },
+    "license": "CC0-1.0",
+    "tags": [],
+    "components": {
+      "identity": true,
+      "memory": {
+        "facts": 0,
+        "episodic": 0,
+        "hasProfile": false
+      },
+      "skills": [],
+      "mcp": [],
+      "tools": [],
+      "tasks": [],
+      "channels": []
+    },
+    "credentials": [],
+    "permissions": {
+      "filesystem": {
+        "read": [],
+        "write": []
+      },
+      "network": {
+        "endpoints": []
+      },
+      "autonomy": "suggest",
+      "spawnsProcesses": false
+    },
+    "compatibility": {
+      "targets": ["claude-code", "hermes"]
+    }
+  },
+  "validation": {
+    "ok": true,
+    "errors": [],
+    "warnings": []
+  },
+  "persona": "# Persona\n\nYou are the fixture.",
+  "readme": "# Readme\n\nFixture readme."
+}
