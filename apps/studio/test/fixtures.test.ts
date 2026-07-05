@@ -27,4 +27,18 @@ describe('golden fixtures stay in sync with the TS session', () => {
     s.setReadme('# Readme\n\nFixture readme.');
     expect(JSON.parse(JSON.stringify(s.state()))).toEqual(fx('state-mutated.json'));
   });
+  it('empty-string persona keeps key present (identity: true); whitespace readme drops key — matches state-cleared.json', () => {
+    const s = new StudioSession();
+    s.setMeta({
+      name: 'fixture-brain',
+      description: 'A fixture brain for cross-impl tests',
+      version: '1.2.3',
+    });
+    s.setTargets(['claude-code', 'hermes']);
+    s.setPersona('# Persona\n\nYou are the fixture.');
+    s.setReadme('# Readme\n\nFixture readme.');
+    s.setPersona('');
+    s.setReadme('  ');
+    expect(JSON.parse(JSON.stringify(s.state()))).toEqual(fx('state-cleared.json'));
+  });
 });

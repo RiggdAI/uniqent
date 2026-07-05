@@ -53,3 +53,20 @@ fn reset_returns_to_default() {
     s.reset();
     assert_eq!(s.state(), fixture("state-default.json"));
 }
+
+#[test]
+fn cleared_state_matches_fixture() {
+    let mut s = Session::new();
+    s.set_meta(serde_json::json!({
+        "name": "fixture-brain",
+        "description": "A fixture brain for cross-impl tests",
+        "version": "1.2.3"
+    }));
+    s.set_targets(vec!["claude-code".into(), "hermes".into()]);
+    s.set_persona("# Persona\n\nYou are the fixture.".into());
+    s.set_readme("# Readme\n\nFixture readme.".into());
+    // empty-string persona keeps key present with identity: true; whitespace readme drops the key
+    s.set_persona("".into());
+    s.set_readme("  ".into());
+    assert_eq!(s.state(), fixture("state-cleared.json"));
+}

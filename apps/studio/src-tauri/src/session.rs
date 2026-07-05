@@ -118,15 +118,14 @@ impl Session {
     }
 
     pub fn set_persona(&mut self, md: String) {
-        if md.is_empty() {
-            self.persona = None;
-        } else {
-            self.persona = Some(md);
-        }
+        // Mirror TS Brain.setPersona: stores verbatim (including ""), key stays present.
+        // identity = persona.is_some(), so set_persona("") → identity: true.
+        self.persona = Some(md);
     }
 
     pub fn set_readme(&mut self, md: String) {
-        if md.is_empty() {
+        // Mirror TS Brain.setReadme: trim-empty clears (whitespace-only drops the key).
+        if md.trim().is_empty() {
             self.readme = None;
         } else {
             self.readme = Some(md);
@@ -134,6 +133,7 @@ impl Session {
     }
 
     pub fn set_avatar(&mut self, data_url: String) -> Result<(), String> {
+        // Phase 1 intentionally accepts only png/jpeg/webp (TS also allows gif/svg; parity deferred to a later phase).
         let trimmed = data_url.trim();
 
         // Check supported prefixes

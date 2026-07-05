@@ -24,4 +24,10 @@ s.setPersona('# Persona\n\nYou are the fixture.');
 s.setReadme('# Readme\n\nFixture readme.');
 await write('state-mutated.json', s.state());
 
+// Cleared fixture: apply canonical mutations then clear persona (to '') and readme (whitespace-only).
+// persona '' stays present with identity: true; readme whitespace-only drops the key.
+s.setPersona('');
+s.setReadme('  ');
+await write('state-cleared.json', s.state());
+
 console.log('fixtures written to', out);
