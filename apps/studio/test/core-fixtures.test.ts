@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Bundle, canonicalDigest, pack, sign, unpack, verify } from '@uniqent/core';
+import { canonicalDigest, pack, sign, unpack, verify } from '@uniqent/core';
 import { buildFixtureBundle } from '../scripts/emit-core-fixtures.ts';
 
 const dir = fileURLToPath(new URL('../fixtures/core', import.meta.url));
