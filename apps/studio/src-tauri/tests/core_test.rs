@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use uniqent_studio::core::archive::{pack, unpack};
 use uniqent_studio::core::bundle::Bundle;
 use uniqent_studio::core::digest::canonical_digest;
 
@@ -51,4 +52,19 @@ fn digest_changes_when_content_changes() {
     let mut b = fixture_bundle();
     b.set("README.md", b"tampered".to_vec());
     assert_ne!(canonical_digest(&b), expected_digest());
+}
+
+#[test]
+fn unpacks_the_ts_packed_fixture_to_the_same_digest() {
+    let bytes = fs::read(core_fixtures().join("fixture.uniqent")).expect("fixture.uniqent");
+    let b = unpack(&bytes).expect("TS-packed archive is readable");
+    assert_eq!(canonical_digest(&b), expected_digest());
+}
+
+#[test]
+fn rust_pack_roundtrips_and_preserves_digest() {
+    let b = fixture_bundle();
+    let packed = pack(&b).expect("packs");
+    let back = unpack(&packed).expect("unpacks own output");
+    assert_eq!(canonical_digest(&back), expected_digest());
 }
