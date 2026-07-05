@@ -11,6 +11,8 @@ const files = new Map<string, Uint8Array>();
 const put = (p: string, s: string) => files.set(p, new TextEncoder().encode(s));
 put(
   'uniqent.json',
+  // Trailing newline matches Prettier's enforced style so the on-disk file
+  // and the in-memory bundle agree on byte-for-byte content.
   JSON.stringify(
     {
       spec: '0.1',
@@ -29,7 +31,7 @@ put(
     },
     null,
     2,
-  ),
+  ) + '\n',
 );
 put('README.md', '# Core fixture\n');
 put('identity/persona.md', '# Persona\n\nFixture persona.\n');
