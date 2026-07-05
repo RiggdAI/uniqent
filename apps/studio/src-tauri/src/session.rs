@@ -1,9 +1,52 @@
 use base64::Engine;
+use regex::Regex;
 use serde_json::{json, Map, Value};
 
 use crate::core::archive::pack_checked;
 use crate::core::bundle::Bundle;
 use crate::core::signing::{generate_keypair, sign, verify, Keypair};
+
+/// Validate `name` against the Slug pattern: `^[a-z0-9][a-z0-9-]*$`
+fn is_valid_slug(s: &str) -> bool {
+    let re = Regex::new(r"^[a-z0-9][a-z0-9-]*$").expect("slug regex");
+    re.is_match(s)
+}
+
+/// Validate `version` against the semver 2.0.0 pattern.
+fn is_valid_semver(s: &str) -> bool {
+    let re = Regex::new(
+        r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$",
+    )
+    .expect("semver regex");
+    re.is_match(s)
+}
+
+/// Build the validation object from the current name and version.
+pub fn validate_manifest(name: &str, version: &str) -> Value {
+    let mut errors: Vec<Value> = Vec::new();
+
+    if !is_valid_slug(name) {
+        errors.push(json!({
+            "path": "uniqent.json",
+            "code": "manifest",
+            "message": "name must be a lowercase slug (a-z, 0-9, hyphens)"
+        }));
+    }
+
+    if !is_valid_semver(version) {
+        errors.push(json!({
+            "path": "uniqent.json",
+            "code": "manifest",
+            "message": "version must be a valid semver (e.g. 1.2.3)"
+        }));
+    }
+
+    json!({
+        "ok": errors.is_empty(),
+        "errors": errors,
+        "warnings": []
+    })
+}
 
 pub struct Session {
     name: String,
@@ -80,11 +123,7 @@ impl Session {
             }
         });
 
-        let validation = json!({
-            "ok": true,
-            "errors": [],
-            "warnings": []
-        });
+        let validation = validate_manifest(&self.name, &self.version);
 
         let mut map = Map::new();
         map.insert("manifest".into(), manifest);
