@@ -10,7 +10,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             commands::state, commands::catalog, commands::set_meta, commands::set_targets,
             commands::set_persona, commands::set_readme, commands::set_avatar,
-            commands::remove_avatar, commands::reset
+            commands::remove_avatar, commands::reset, commands::export
         ])
         .run(tauri::generate_context!())
         .expect("error while running uniqent studio");

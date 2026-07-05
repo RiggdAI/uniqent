@@ -129,7 +129,10 @@ export const api = {
   addTask: (payload: TaskInput) =>
     isNative ? soon() : post<StudioState>('/api/task/add', payload),
   removeTask: (id: string) => (isNative ? soon() : post<StudioState>('/api/task/remove', { id })),
-  export: (sign: boolean) => (isNative ? soon() : post<ExportResult>('/api/export', { sign })),
+  export: (sign: boolean) =>
+    isNative
+      ? invoke<ExportResult>('export', { sign })
+      : post<ExportResult>('/api/export', { sign }),
   installPlan: (target: string, root: string) =>
     isNative ? soon() : post<InstallPlan>('/api/install/plan', { target, root }),
   install: (target: string, root: string, creds: Record<string, string>) =>

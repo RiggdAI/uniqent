@@ -27,6 +27,19 @@ describe('api shim (native)', () => {
     expect(invokeMock).not.toHaveBeenCalled();
   });
 
+  it('routes export through invoke with sign arg', async () => {
+    invokeMock.mockResolvedValue({
+      filename: 'my-brain.uniqent',
+      bytesBase64: 'abc=',
+      signed: true,
+      verified: true,
+      validation: { ok: true, errors: [], warnings: [] },
+    });
+    const { api } = await import('./api');
+    await api.export(true);
+    expect(invokeMock).toHaveBeenCalledWith('export', { sign: true });
+  });
+
   it('falls back to fetch when not running under Tauri', async () => {
     delete (globalThis as Record<string, unknown>).__TAURI_INTERNALS__;
     vi.resetModules();

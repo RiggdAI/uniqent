@@ -45,3 +45,8 @@ pub fn remove_avatar(s: State<AppState>) -> Value {
 pub fn reset(s: State<AppState>) -> Value {
     let mut g = s.0.lock().unwrap(); g.reset(); g.state()
 }
+
+#[tauri::command]
+pub fn export(s: State<AppState>, sign: bool) -> Result<Value, String> {
+    s.0.lock().unwrap().export(sign)
+}
