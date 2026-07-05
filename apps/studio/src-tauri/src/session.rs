@@ -12,6 +12,12 @@ pub struct Session {
     avatar: Option<String>, // data: URL, validated on set
 }
 
+impl Default for Session {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Session {
     pub fn new() -> Self {
         Session {
@@ -131,15 +137,10 @@ impl Session {
         let trimmed = data_url.trim();
 
         // Check supported prefixes
-        let prefix_and_b64 = if let Some(rest) = trimmed.strip_prefix("data:image/png;base64,") {
-            Some(rest)
-        } else if let Some(rest) = trimmed.strip_prefix("data:image/jpeg;base64,") {
-            Some(rest)
-        } else if let Some(rest) = trimmed.strip_prefix("data:image/webp;base64,") {
-            Some(rest)
-        } else {
-            None
-        };
+        let prefix_and_b64 = trimmed
+            .strip_prefix("data:image/png;base64,")
+            .or_else(|| trimmed.strip_prefix("data:image/jpeg;base64,"))
+            .or_else(|| trimmed.strip_prefix("data:image/webp;base64,"));
 
         match prefix_and_b64 {
             None => Err("unsupported avatar format".into()),

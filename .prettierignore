@@ -3,6 +3,7 @@ dist
 coverage
 **/*.schema.json
 pnpm-lock.yaml
+**/target/**
 
 # generated from packages/spec
 docs/SPEC.md
