@@ -226,13 +226,16 @@ pub fn scan_for_secrets(bundle: &Bundle) -> Vec<Finding> {
                 match serde_json::from_str::<serde_json::Value>(trimmed) {
                     Ok(node) => {
                         // TS: walkJson(JSON.parse(trimmed), undefined, s => record(detect(s)))
-                        let mut hit: Option<(String, String)> = None;
+                        // Record EVERY hit — a JSON file with two secrets yields two findings.
+                        let mut hits: Vec<(String, String)> = Vec::new();
                         walk_json(&node, None, &mut |s| {
-                            if hit.is_none() {
-                                hit = detect(s);
+                            if let Some(hit) = detect(s) {
+                                hits.push(hit);
                             }
                         });
-                        record(hit);
+                        for hit in hits {
+                            record(Some(hit));
+                        }
                     }
                     Err(_) => {
                         // TS: malformed JSON — fall back to raw text scan

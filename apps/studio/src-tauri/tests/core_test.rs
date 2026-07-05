@@ -224,6 +224,30 @@ fn allows_credential_ref_placeholders() {
 }
 
 #[test]
+fn json_file_with_two_secrets_yields_two_findings() {
+    // TS parity: walkJson calls record(detect(s)) for EVERY string node,
+    // so a JSON file with two distinct secrets produces two findings.
+    let mut b = Bundle::from_files(BTreeMap::new());
+    b.set(
+        "config.json",
+        serde_json::to_vec(&serde_json::json!({
+            "openai_key":  "sk-abcdefghijklmnopqrstuvwxyz0123456789",
+            "github_token": "ghp_0123456789abcdefghijklmnopqrstuvwx",
+        }))
+        .unwrap(),
+    );
+    let findings = scan_for_secrets(&b);
+    assert_eq!(
+        findings.len(),
+        2,
+        "expected 2 findings for a JSON file with two secrets, got: {findings:?}"
+    );
+    let hints: Vec<&str> = findings.iter().map(|f| f.hint.as_str()).collect();
+    assert!(hints.iter().any(|h| h.starts_with("openai:")), "missing openai finding");
+    assert!(hints.iter().any(|h| h.starts_with("github-pat:")), "missing github-pat finding");
+}
+
+#[test]
 fn skips_signature_json_and_allowlists_pubkey() {
     // TS test: signature.json with long base64 strings; uniqent.json pubkey
     let mut b = Bundle::from_files(BTreeMap::new());
