@@ -19,8 +19,10 @@ fn apply_content(s: &mut Session) {
     s.add_custom_mcp(json!({"id":"custom-api","name":"Custom API","transport":"streamable-http","url":"https://api.example.com/mcp","auth":{"type":"none"}})).unwrap();
     s.add_custom_skill("fixture-skill", "# fixture-skill\n\nDoes fixture things.\n");
     s.add_channel_catalog("telegram").unwrap();
-    s.add_task(json!({"name":"Nightly digest","cron":"0 9 * * *","prompt":"Summarize."})).unwrap();
-    s.add_fact(json!({"text":"Fixture prefers [[Rust]] #perf","importance":0.8})).unwrap();
+    s.add_task(json!({"name":"Nightly digest","cron":"0 9 * * *","prompt":"Summarize."}))
+        .unwrap();
+    s.add_fact(json!({"text":"Fixture prefers [[Rust]] #perf","importance":0.8}))
+        .unwrap();
     s.add_fact(json!({"text":"plain fact"})).unwrap();
     s.set_profile(json!({"name":"Fixture User","role":"Tester"}));
     s.remove_mcp("custom-api");
@@ -47,7 +49,9 @@ fn remove_skill_clears_it() {
     s.add_custom_skill("my-skill", "# test");
     s.remove_skill("my-skill");
     let state = s.state();
-    let skills = state["manifest"]["components"]["skills"].as_array().unwrap();
+    let skills = state["manifest"]["components"]["skills"]
+        .as_array()
+        .unwrap();
     assert!(skills.is_empty());
 }
 

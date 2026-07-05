@@ -98,6 +98,13 @@ pub fn paste_mcp_preview(s: State<AppState>, text: String) -> Value {
 }
 
 #[tauri::command]
+pub fn add_pasted_mcp(s: State<AppState>, text: String) -> Result<Value, String> {
+    let mut g = s.0.lock().unwrap();
+    g.add_pasted_mcp(&text)?;
+    Ok(g.state())
+}
+
+#[tauri::command]
 pub fn remove_mcp(s: State<AppState>, id: String) -> Value {
     let mut g = s.0.lock().unwrap();
     g.remove_mcp(&id);

@@ -157,7 +157,10 @@ fn cred_for(r: &str, label: &str, id: &str) -> Value {
 
 fn validate_mcp_server(server: &Value) -> Result<Value, String> {
     // id: string, min 1
-    let id = server["id"].as_str().filter(|s| !s.is_empty()).ok_or("id required")?;
+    let id = server["id"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .ok_or("id required")?;
 
     // transport: enum
     let transport = server["transport"].as_str().ok_or("transport required")?;

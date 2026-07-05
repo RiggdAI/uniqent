@@ -37,7 +37,10 @@ fn avatar_roundtrip_and_size_limit() {
     // 1x1 png data url
     let ok = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
     s.set_avatar(ok.to_string()).expect("small avatar accepted");
-    assert!(s.state()["avatar"].as_str().unwrap().starts_with("data:image/png;base64,"));
+    assert!(s.state()["avatar"]
+        .as_str()
+        .unwrap()
+        .starts_with("data:image/png;base64,"));
     s.remove_avatar();
     assert!(s.state().get("avatar").is_none() || s.state()["avatar"].is_null());
 

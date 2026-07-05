@@ -109,16 +109,16 @@ pub fn verify(bundle: &Bundle) -> VerifyResult {
         };
     }
     let ok = (|| -> Option<bool> {
-        let pk_bytes: [u8; 32] = hex::decode(public_key.as_deref()?)
-            .ok()?
-            .try_into()
-            .ok()?;
+        let pk_bytes: [u8; 32] = hex::decode(public_key.as_deref()?).ok()?.try_into().ok()?;
         let vk = VerifyingKey::from_bytes(&pk_bytes).ok()?;
         let sig_bytes: [u8; 64] = hex::decode(sig_json["signature"].as_str()?)
             .ok()?
             .try_into()
             .ok()?;
-        Some(vk.verify(recomputed.as_bytes(), &Signature::from_bytes(&sig_bytes)).is_ok())
+        Some(
+            vk.verify(recomputed.as_bytes(), &Signature::from_bytes(&sig_bytes))
+                .is_ok(),
+        )
     })()
     .unwrap_or(false);
     VerifyResult {

@@ -19,7 +19,11 @@ fn fixture_bundle() -> Bundle {
             if p.is_dir() {
                 walk(&p, root, files);
             } else {
-                let rel = p.strip_prefix(root).unwrap().to_string_lossy().replace('\\', "/");
+                let rel = p
+                    .strip_prefix(root)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/");
                 files.insert(rel, fs::read(&p).expect("file"));
             }
         }
@@ -76,9 +80,14 @@ fn verifies_the_ts_signed_fixture() {
     let bytes = fs::read(core_fixtures().join("fixture-signed.uniqent")).expect("signed fixture");
     let b = unpack(&bytes).expect("unpacks");
     let kp: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string(core_fixtures().join("keypair.json")).unwrap()).unwrap();
+        serde_json::from_str(&fs::read_to_string(core_fixtures().join("keypair.json")).unwrap())
+            .unwrap();
     let v = verify(&b);
-    assert!(v.signed && v.valid, "TS-signed bundle must verify in Rust: {:?}", v.reason);
+    assert!(
+        v.signed && v.valid,
+        "TS-signed bundle must verify in Rust: {:?}",
+        v.reason
+    );
     assert_eq!(v.public_key.as_deref(), kp["publicKey"].as_str());
 }
 
@@ -86,7 +95,8 @@ fn verifies_the_ts_signed_fixture() {
 fn rust_sign_self_verifies_and_ts_keypair_signs() {
     // With the committed TS keypair: Rust-signed bundle verifies (same key derivation).
     let kp: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string(core_fixtures().join("keypair.json")).unwrap()).unwrap();
+        serde_json::from_str(&fs::read_to_string(core_fixtures().join("keypair.json")).unwrap())
+            .unwrap();
     let signed = sign(&fixture_bundle(), kp["privateKey"].as_str().unwrap()).expect("signs");
     let v = verify(&signed);
     assert!(v.signed && v.valid);
@@ -104,7 +114,10 @@ fn tampered_content_fails_verification_with_exact_reason() {
     b.set("README.md", b"tampered".to_vec());
     let v = verify(&b);
     assert!(v.signed && !v.valid);
-    assert_eq!(v.reason.as_deref(), Some("digest mismatch (content changed)"));
+    assert_eq!(
+        v.reason.as_deref(),
+        Some("digest mismatch (content changed)")
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -126,10 +139,19 @@ fn a_planted_secret_blocks_pack_and_sign() {
         "mcp/servers.json",
         br#"{"env": {"AWS_SECRET_ACCESS_KEY": "AKIAIOSFODNN7EXAMPLE"}}"#.to_vec(),
     );
-    assert!(!scan_for_secrets(&b).is_empty(), "planted AWS key must be found");
-    assert!(pack_checked(&b).is_err(), "pack_checked must block when secret found");
+    assert!(
+        !scan_for_secrets(&b).is_empty(),
+        "planted AWS key must be found"
+    );
+    assert!(
+        pack_checked(&b).is_err(),
+        "pack_checked must block when secret found"
+    );
     let kp = generate_keypair();
-    assert!(sign(&b, &kp.private_key).is_err(), "sign must gate on the scan");
+    assert!(
+        sign(&b, &kp.private_key).is_err(),
+        "sign must gate on the scan"
+    );
 }
 
 // Additional planted-secret cases mirroring the TS test suite (secret-scan.test.ts)
@@ -138,10 +160,17 @@ fn a_planted_secret_blocks_pack_and_sign() {
 fn detects_openai_key() {
     // TS test: 'token: sk-abcdefghijklmnopqrstuvwxyz0123456789'
     let mut b = Bundle::from_files(BTreeMap::new());
-    b.set("notes.md", b"token: sk-abcdefghijklmnopqrstuvwxyz0123456789".to_vec());
+    b.set(
+        "notes.md",
+        b"token: sk-abcdefghijklmnopqrstuvwxyz0123456789".to_vec(),
+    );
     let findings = scan_for_secrets(&b);
     assert!(!findings.is_empty());
-    assert!(findings[0].hint.starts_with("openai:"), "expected openai hint, got: {}", findings[0].hint);
+    assert!(
+        findings[0].hint.starts_with("openai:"),
+        "expected openai hint, got: {}",
+        findings[0].hint
+    );
 }
 
 #[test]
@@ -191,9 +220,15 @@ fn detects_private_key_pem_block() {
 fn detects_high_entropy_token() {
     // TS test: 'value=Zk9Q2hVx7Lm4Tp8Rb1Nc6Yd3Wf0Gj5Hs2Aq8Eu4Iv'
     let mut b = Bundle::from_files(BTreeMap::new());
-    b.set("a.md", b"value=Zk9Q2hVx7Lm4Tp8Rb1Nc6Yd3Wf0Gj5Hs2Aq8Eu4Iv".to_vec());
+    b.set(
+        "a.md",
+        b"value=Zk9Q2hVx7Lm4Tp8Rb1Nc6Yd3Wf0Gj5Hs2Aq8Eu4Iv".to_vec(),
+    );
     let findings = scan_for_secrets(&b);
-    assert!(findings.iter().any(|f| f.hint.starts_with("high-entropy:")), "expected high-entropy finding");
+    assert!(
+        findings.iter().any(|f| f.hint.starts_with("high-entropy:")),
+        "expected high-entropy finding"
+    );
 }
 
 #[test]
@@ -209,7 +244,10 @@ fn does_not_flag_natural_identifiers_and_paths() {
     .join("\n");
     let mut b = Bundle::from_files(BTreeMap::new());
     b.set("skills/seo/SKILL.md", text.into_bytes());
-    assert!(scan_for_secrets(&b).is_empty(), "natural identifiers must not be flagged");
+    assert!(
+        scan_for_secrets(&b).is_empty(),
+        "natural identifiers must not be flagged"
+    );
 }
 
 #[test]
@@ -220,7 +258,10 @@ fn allows_credential_ref_placeholders() {
         "mcp/servers.json",
         serde_json::to_vec(&serde_json::json!({"token": "${credentialRef:github_pat}"})).unwrap(),
     );
-    assert!(scan_for_secrets(&b).is_empty(), "credentialRef placeholders must be allowed");
+    assert!(
+        scan_for_secrets(&b).is_empty(),
+        "credentialRef placeholders must be allowed"
+    );
 }
 
 #[test]
@@ -243,8 +284,14 @@ fn json_file_with_two_secrets_yields_two_findings() {
         "expected 2 findings for a JSON file with two secrets, got: {findings:?}"
     );
     let hints: Vec<&str> = findings.iter().map(|f| f.hint.as_str()).collect();
-    assert!(hints.iter().any(|h| h.starts_with("openai:")), "missing openai finding");
-    assert!(hints.iter().any(|h| h.starts_with("github-pat:")), "missing github-pat finding");
+    assert!(
+        hints.iter().any(|h| h.starts_with("openai:")),
+        "missing openai finding"
+    );
+    assert!(
+        hints.iter().any(|h| h.starts_with("github-pat:")),
+        "missing github-pat finding"
+    );
 }
 
 #[test]
@@ -266,5 +313,8 @@ fn skips_signature_json_and_allowlists_pubkey() {
         }))
         .unwrap(),
     );
-    assert!(scan_for_secrets(&b).is_empty(), "signature.json and pubkey values must be skipped");
+    assert!(
+        scan_for_secrets(&b).is_empty(),
+        "signature.json and pubkey values must be skipped"
+    );
 }

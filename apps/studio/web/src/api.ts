@@ -171,7 +171,9 @@ export const api = {
   importSkillFromUrl: (url: string) =>
     isNative ? soon() : post<StudioState>('/api/skill/url', { url }),
   addPastedMcp: (text: string) =>
-    isNative ? soon() : post<StudioState>('/api/mcp/paste/add', { text }),
+    isNative
+      ? invoke<StudioState>('add_pasted_mcp', { text })
+      : post<StudioState>('/api/mcp/paste/add', { text }),
   installPlan: (target: string, root: string) =>
     isNative ? soon() : post<InstallPlan>('/api/install/plan', { target, root }),
   install: (target: string, root: string, creds: Record<string, string>) =>

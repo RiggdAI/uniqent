@@ -27,7 +27,9 @@ fn invalid_name_with_uppercase_fails() {
     let v = validate_manifest("MyBrain", "1.0.0");
     assert_eq!(v["ok"], false);
     let errors = v["errors"].as_array().unwrap();
-    assert!(errors.iter().any(|e| e["code"] == "manifest" && e["path"] == "uniqent.json"));
+    assert!(errors
+        .iter()
+        .any(|e| e["code"] == "manifest" && e["path"] == "uniqent.json"));
 }
 
 #[test]
@@ -41,8 +43,7 @@ fn valid_slug_names_pass() {
     for name in &["my-brain", "brain123", "a", "core-fixture", "my-brain-v2"] {
         let v = validate_manifest(name, "1.0.0");
         assert_eq!(
-            v["ok"],
-            true,
+            v["ok"], true,
             "expected ok=true for valid slug '{name}', got: {v}"
         );
     }
@@ -55,7 +56,10 @@ fn valid_slug_names_pass() {
 #[test]
 fn invalid_version_abc_returns_ok_false_with_version_error() {
     let v = validate_manifest("my-brain", "abc");
-    assert_eq!(v["ok"], false, "expected ok=false for invalid version 'abc'");
+    assert_eq!(
+        v["ok"], false,
+        "expected ok=false for invalid version 'abc'"
+    );
     let errors = v["errors"].as_array().expect("errors is array");
     assert!(!errors.is_empty(), "expected at least one error");
     let has_version_error = errors.iter().any(|e| {
@@ -66,7 +70,10 @@ fn invalid_version_abc_returns_ok_false_with_version_error() {
                 .map(|m| m.contains("version"))
                 .unwrap_or(false)
     });
-    assert!(has_version_error, "expected a version error, got: {errors:?}");
+    assert!(
+        has_version_error,
+        "expected a version error, got: {errors:?}"
+    );
 }
 
 #[test]
@@ -77,11 +84,16 @@ fn invalid_version_with_leading_v_fails() {
 
 #[test]
 fn valid_semver_versions_pass() {
-    for ver in &["0.1.0", "1.2.3", "10.20.30", "1.0.0-alpha.1", "1.0.0+build.1"] {
+    for ver in &[
+        "0.1.0",
+        "1.2.3",
+        "10.20.30",
+        "1.0.0-alpha.1",
+        "1.0.0+build.1",
+    ] {
         let v = validate_manifest("my-brain", ver);
         assert_eq!(
-            v["ok"],
-            true,
+            v["ok"], true,
             "expected ok=true for valid semver '{ver}', got: {v}"
         );
     }
@@ -109,11 +121,13 @@ fn default_session_state_validation_ok_true() {
     let s = Session::new();
     let state = s.state();
     assert_eq!(
-        state["validation"]["ok"],
-        true,
+        state["validation"]["ok"], true,
         "default session must have ok=true, got: {}",
         state["validation"]
     );
     let errors = state["validation"]["errors"].as_array().unwrap();
-    assert!(errors.is_empty(), "default session must have no errors, got: {errors:?}");
+    assert!(
+        errors.is_empty(),
+        "default session must have no errors, got: {errors:?}"
+    );
 }

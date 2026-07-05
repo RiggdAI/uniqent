@@ -35,7 +35,10 @@ fn prefix_patterns() -> &'static [PrefixPattern] {
     PATTERNS.get_or_init(|| {
         vec![
             // TS: /\bsk-[A-Za-z0-9]{20,}\b/
-            PrefixPattern { kind: "openai", re: Regex::new(r"\bsk-[A-Za-z0-9]{20,}\b").unwrap() },
+            PrefixPattern {
+                kind: "openai",
+                re: Regex::new(r"\bsk-[A-Za-z0-9]{20,}\b").unwrap(),
+            },
             // TS: /\bgh[posru]_[A-Za-z0-9]{30,}\b/
             PrefixPattern {
                 kind: "github-pat",
@@ -106,7 +109,11 @@ fn shannon_entropy(s: &str) -> f64 {
 
 /// TS `longestUnbrokenRun`: split on `[/_+=.-]`, return max segment length.
 fn longest_unbroken_run(token: &str) -> usize {
-    token.split(['/', '_', '+', '=', '.', '-']).map(|s| s.len()).max().unwrap_or(0)
+    token
+        .split(['/', '_', '+', '=', '.', '-'])
+        .map(|s| s.len())
+        .max()
+        .unwrap_or(0)
 }
 
 /// TS `snippet`: truncate to "XXXXXX…XXXX" if > 12 chars.
@@ -115,7 +122,14 @@ fn make_snippet(m: &str) -> String {
         m.to_string()
     } else {
         let start: String = m.chars().take(6).collect();
-        let end: String = m.chars().rev().take(4).collect::<Vec<_>>().into_iter().rev().collect();
+        let end: String = m
+            .chars()
+            .rev()
+            .take(4)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
         format!("{start}\u{2026}{end}")
     }
 }
@@ -208,7 +222,10 @@ pub fn scan_for_secrets(bundle: &Bundle) -> Vec<Finding> {
 
         let mut record = |hit: Option<(String, String)>| {
             if let Some((kind, snip)) = hit {
-                findings.push(Finding { path: path.clone(), hint: format!("{kind}: {snip}") });
+                findings.push(Finding {
+                    path: path.clone(),
+                    hint: format!("{kind}: {snip}"),
+                });
             }
         };
 
@@ -254,7 +271,9 @@ pub fn scan_for_secrets(bundle: &Bundle) -> Vec<Finding> {
 /// Format a Vec<Finding> into the canonical error string.
 /// Format: `secret scan failed: <path>: <hint>[; …]`
 pub fn format_scan_error(findings: &[Finding]) -> String {
-    let parts: Vec<String> =
-        findings.iter().map(|f| format!("{}: {}", f.path, f.hint)).collect();
+    let parts: Vec<String> = findings
+        .iter()
+        .map(|f| format!("{}: {}", f.path, f.hint))
+        .collect();
     format!("secret scan failed: {}", parts.join("; "))
 }

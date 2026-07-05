@@ -23,6 +23,7 @@ fn main() {
             commands::add_custom_mcp,
             commands::import_mcp_servers,
             commands::paste_mcp_preview,
+            commands::add_pasted_mcp,
             commands::remove_mcp,
             // Skill
             commands::add_skill_catalog,

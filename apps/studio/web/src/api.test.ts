@@ -45,6 +45,15 @@ describe('api shim (native)', () => {
     });
   });
 
+  it('routes addPastedMcp through invoke', async () => {
+    invokeMock.mockResolvedValue({ manifest: {}, validation: { ok: true } });
+    const { api } = await import('./api');
+    await api.addPastedMcp('{"mcpServers":{}}');
+    expect(invokeMock).toHaveBeenCalledWith('add_pasted_mcp', {
+      text: '{"mcpServers":{}}',
+    });
+  });
+
   it('routes skill mutators through invoke', async () => {
     invokeMock.mockResolvedValue({ manifest: {}, validation: { ok: true } });
     const { api } = await import('./api');
@@ -126,7 +135,6 @@ describe('api shim (native)', () => {
     await expect(api.previewVault('/path')).rejects.toThrow(SOON);
     await expect(api.importVault('/path')).rejects.toThrow(SOON);
     await expect(api.importSkillFromUrl('https://example.com/skill.md')).rejects.toThrow(SOON);
-    await expect(api.addPastedMcp('text')).rejects.toThrow(SOON);
     await expect(api.installPlan('target', '/root')).rejects.toThrow(SOON);
     await expect(api.install('target', '/root', {})).rejects.toThrow(SOON);
     await expect(api.hubMcp('query')).rejects.toThrow(SOON);

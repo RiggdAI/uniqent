@@ -22,7 +22,9 @@ fn export_produces_verifiable_signed_bundle() {
 #[test]
 fn export_unsigned_does_not_verify() {
     let mut s = Session::new();
-    s.set_meta(serde_json::json!({"name": "unsigned-test", "description": "d", "version": "0.0.1"}));
+    s.set_meta(
+        serde_json::json!({"name": "unsigned-test", "description": "d", "version": "0.0.1"}),
+    );
     let out = s.export(false).expect("export ok");
     assert_eq!(out["filename"], "unsigned-test.uniqent");
     assert_eq!(out["signed"], false);
@@ -50,8 +52,10 @@ fn write_exchange_artifact() {
     s.add_mcp_catalog("github").unwrap();
     s.add_custom_skill("test-skill", "# Test Skill\n\nA test skill for exchange.\n");
     s.add_channel_catalog("telegram").unwrap();
-    s.add_task(serde_json::json!({"name":"Daily update","cron":"0 8 * * *","prompt":"Update me."})).unwrap();
-    s.add_fact(serde_json::json!({"text":"Exchange test fact"})).unwrap();
+    s.add_task(serde_json::json!({"name":"Daily update","cron":"0 8 * * *","prompt":"Update me."}))
+        .unwrap();
+    s.add_fact(serde_json::json!({"text":"Exchange test fact"}))
+        .unwrap();
     s.set_profile(serde_json::json!({"name":"Exchange User"}));
 
     let out = s.export(true).expect("export must succeed");
@@ -68,5 +72,8 @@ fn write_exchange_artifact() {
     std::fs::write(target_dir.join("exchange-test.uniqent"), &bytes)
         .expect("write exchange artifact");
 
-    println!("Wrote {} bytes to target/exchange-test.uniqent", bytes.len());
+    println!(
+        "Wrote {} bytes to target/exchange-test.uniqent",
+        bytes.len()
+    );
 }
