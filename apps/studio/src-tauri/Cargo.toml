@@ -3,6 +3,10 @@ name = "uniqent-studio"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "uniqent_studio"
+crate-type = ["lib"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
