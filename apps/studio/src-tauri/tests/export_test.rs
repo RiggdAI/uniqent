@@ -44,8 +44,15 @@ fn write_exchange_artifact() {
         "description": "Cross-language exchange test brain",
         "version": "0.1.0"
     }));
+    s.set_targets(vec!["claude-code".into(), "hermes".into()]);
     s.set_persona("# Exchange Test Persona\nThis brain was signed by the Rust core.".into());
     s.set_readme("A brain exported from Rust and verified by the TS core.".into());
+    s.add_mcp_catalog("github").unwrap();
+    s.add_custom_skill("test-skill", "# Test Skill\n\nA test skill for exchange.\n");
+    s.add_channel_catalog("telegram").unwrap();
+    s.add_task(serde_json::json!({"name":"Daily update","cron":"0 8 * * *","prompt":"Update me."})).unwrap();
+    s.add_fact(serde_json::json!({"text":"Exchange test fact"})).unwrap();
+    s.set_profile(serde_json::json!({"name":"Exchange User"}));
 
     let out = s.export(true).expect("export must succeed");
     assert_eq!(out["signed"], true);
@@ -56,7 +63,6 @@ fn write_exchange_artifact() {
         .decode(out["bytesBase64"].as_str().unwrap())
         .expect("valid base64");
 
-    // Write to target/ so the TS verify-file script can read it
     let target_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("target");
     std::fs::create_dir_all(&target_dir).ok();
     std::fs::write(target_dir.join("exchange-test.uniqent"), &bytes)

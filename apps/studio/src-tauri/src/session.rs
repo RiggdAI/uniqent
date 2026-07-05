@@ -48,6 +48,192 @@ pub fn validate_manifest(name: &str, version: &str) -> Value {
     })
 }
 
+/// Extract host from a URL string (handles https:// and http://).
+fn extract_host(url: &str) -> Option<String> {
+    let without_scheme = url
+        .strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"))?;
+    let host = without_scheme.split('/').next()?;
+    if host.is_empty() {
+        None
+    } else {
+        Some(host.to_string())
+    }
+}
+
+/// MCP catalog entry: server + optional credential
+struct McpCatalogEntry {
+    server: Value,
+    credential: Option<Value>,
+}
+
+fn mcp_catalog_entry(id: &str) -> Option<McpCatalogEntry> {
+    match id {
+        "github" => Some(McpCatalogEntry {
+            server: json!({
+                "id": "github",
+                "transport": "streamable-http",
+                "url": "https://api.githubcopilot.com/mcp/",
+                "auth": {"type": "bearer", "credentialRef": "github_pat"},
+                "tools": {"include": "all"},
+                "description": "GitHub MCP server"
+            }),
+            credential: Some(json!({
+                "ref": "github_pat",
+                "label": "GitHub Personal Access Token",
+                "type": "apiKey",
+                "consumedBy": [],
+                "required": true,
+                "help": "Create at https://github.com/settings/tokens with the scopes you need."
+            })),
+        }),
+        "filesystem" => Some(McpCatalogEntry {
+            server: json!({
+                "id": "filesystem",
+                "transport": "stdio",
+                "command": "npx",
+                "args": ["-y", "@modelcontextprotocol/server-filesystem", "${HOME}"],
+                "auth": {"type": "none"},
+                "tools": {"include": "all"},
+                "description": "Local filesystem MCP server"
+            }),
+            credential: None,
+        }),
+        "fetch" => Some(McpCatalogEntry {
+            server: json!({
+                "id": "fetch",
+                "transport": "stdio",
+                "command": "npx",
+                "args": ["-y", "@modelcontextprotocol/server-fetch"],
+                "auth": {"type": "none"},
+                "tools": {"include": "all"},
+                "description": "Web fetch MCP server"
+            }),
+            credential: None,
+        }),
+        "gbrain" => Some(McpCatalogEntry {
+            server: json!({
+                "id": "gbrain",
+                "transport": "stdio",
+                "command": "gbrain",
+                "args": ["serve"],
+                "auth": {"type": "none"},
+                "tools": {"include": "all"},
+                "description": "GBrain memory MCP server (local). Install once: `bun install -g github:garrytan/gbrain`, then `gbrain init`."
+            }),
+            credential: None,
+        }),
+        "gbrain-remote" => Some(McpCatalogEntry {
+            server: json!({
+                "id": "gbrain-remote",
+                "transport": "streamable-http",
+                "url": "https://your-gbrain.example.com/mcp",
+                "auth": {"type": "bearer", "credentialRef": "gbrain_token"},
+                "tools": {"include": "all"},
+                "description": "Hosted GBrain memory MCP server."
+            }),
+            credential: Some(json!({
+                "ref": "gbrain_token",
+                "label": "GBrain access token",
+                "type": "bearer",
+                "consumedBy": [],
+                "required": true,
+                "help": "From your gbrain server: gbrain connect <url> --token <tok>."
+            })),
+        }),
+        _ => None,
+    }
+}
+
+/// Channel catalog entry: channel + credential
+struct ChannelCatalogEntry {
+    channel: Value,
+    credential: Value,
+}
+
+fn channel_catalog_entry(id: &str) -> Option<ChannelCatalogEntry> {
+    match id {
+        "telegram" => Some(ChannelCatalogEntry {
+            channel: json!({"id": "telegram", "kind": "telegram", "credentialRef": "telegram_bot_token"}),
+            credential: json!({
+                "ref": "telegram_bot_token",
+                "label": "Telegram Bot Token",
+                "type": "bearer",
+                "consumedBy": [],
+                "required": true,
+                "help": "Create a bot with @BotFather and copy its token."
+            }),
+        }),
+        "slack" => Some(ChannelCatalogEntry {
+            channel: json!({"id": "slack", "kind": "slack", "credentialRef": "slack_bot_token"}),
+            credential: json!({
+                "ref": "slack_bot_token",
+                "label": "Slack Bot Token",
+                "type": "bearer",
+                "consumedBy": [],
+                "required": true,
+                "help": "Create a Slack app at api.slack.com/apps and install it to your workspace."
+            }),
+        }),
+        "discord" => Some(ChannelCatalogEntry {
+            channel: json!({"id": "discord", "kind": "discord", "credentialRef": "discord_bot_token"}),
+            credential: json!({
+                "ref": "discord_bot_token",
+                "label": "Discord Bot Token",
+                "type": "bearer",
+                "consumedBy": [],
+                "required": true,
+                "help": "Create a bot application at discord.com/developers/applications."
+            }),
+        }),
+        "email" => Some(ChannelCatalogEntry {
+            channel: json!({"id": "email", "kind": "email", "credentialRef": "smtp_password"}),
+            credential: json!({
+                "ref": "smtp_password",
+                "label": "SMTP Password",
+                "type": "apiKey",
+                "consumedBy": [],
+                "required": true,
+                "help": "Set SMTP_HOST, SMTP_USER, SMTP_PORT in your environment too."
+            }),
+        }),
+        "webhook" => Some(ChannelCatalogEntry {
+            channel: json!({"id": "webhook", "kind": "webhook", "credentialRef": "webhook_secret"}),
+            credential: json!({
+                "ref": "webhook_secret",
+                "label": "Webhook Secret",
+                "type": "apiKey",
+                "consumedBy": [],
+                "required": true,
+                "help": "A secret token to validate inbound webhook payloads."
+            }),
+        }),
+        "whatsapp" => Some(ChannelCatalogEntry {
+            channel: json!({"id": "whatsapp", "kind": "whatsapp", "credentialRef": "whatsapp_token"}),
+            credential: json!({
+                "ref": "whatsapp_token",
+                "label": "WhatsApp Cloud API Token",
+                "type": "bearer",
+                "consumedBy": [],
+                "required": true,
+                "help": "Get from Meta for Developers → WhatsApp → API Setup."
+            }),
+        }),
+        "sms" => Some(ChannelCatalogEntry {
+            channel: json!({"id": "sms", "kind": "sms", "credentialRef": "twilio_auth_token"}),
+            credential: json!({
+                "ref": "twilio_auth_token",
+                "label": "Twilio Auth Token",
+                "type": "apiKey",
+                "consumedBy": [],
+                "required": true,
+                "help": "Find your Account SID and Auth Token in the Twilio Console."
+            }),
+        }),
+        _ => None,
+    }
+}
+
 pub struct Session {
     name: String,
     display_name: String,
@@ -58,6 +244,16 @@ pub struct Session {
     readme: Option<String>,
     avatar: Option<String>, // data: URL, validated on set
     keypair: Option<Keypair>,
+    // Content collections
+    mcp: Vec<Value>,                 // MCP server objects stored verbatim
+    credentials: Vec<Value>,         // credentials, deduped by ref
+    skills: Vec<(String, String)>,   // (name, markdown) ordered
+    channels: Vec<Value>,            // channel objects
+    tasks: Vec<Value>,               // task objects
+    facts: Vec<Value>,               // fact objects (with createdAt for bundle)
+    profile: Option<Value>,          // profile object or None
+    fact_counter: u32,
+    task_counter: u32,
 }
 
 impl Default for Session {
@@ -78,11 +274,272 @@ impl Session {
             readme: None,
             avatar: None,
             keypair: None,
+            mcp: vec![],
+            credentials: vec![],
+            skills: vec![],
+            channels: vec![],
+            tasks: vec![],
+            facts: vec![],
+            profile: None,
+            fact_counter: 0,
+            task_counter: 0,
         }
+    }
+
+    /// Add a credential, deduped by ref (remove old, append new).
+    fn add_credential(&mut self, cred: Value) {
+        let cred_ref = cred["ref"].as_str().unwrap_or("").to_string();
+        self.credentials.retain(|c| c["ref"].as_str().unwrap_or("") != cred_ref);
+        self.credentials.push(cred);
+    }
+
+    /// Add MCP server from catalog by id. Returns Err if id not found.
+    pub fn add_mcp_catalog(&mut self, id: &str) -> Result<(), String> {
+        let entry = mcp_catalog_entry(id).ok_or_else(|| format!("MCP catalog id not found: {id}"))?;
+        // Dedup by id: remove old, append new
+        self.mcp.retain(|s| s["id"].as_str().unwrap_or("") != id);
+        self.mcp.push(entry.server);
+        if let Some(cred) = entry.credential {
+            self.add_credential(cred);
+        }
+        Ok(())
+    }
+
+    /// Add custom MCP server. Merges tools:{include:'all'} as default.
+    pub fn add_custom_mcp(&mut self, input: Value) -> Result<(), String> {
+        let id = input["id"]
+            .as_str()
+            .ok_or("custom MCP must have an id")?
+            .to_string();
+
+        // Build server: start with tools default, then overlay input fields
+        let mut server = json!({"tools": {"include": "all"}});
+        if let (Value::Object(base), Value::Object(extra)) = (&mut server, input.clone()) {
+            for (k, v) in extra {
+                base.insert(k, v);
+            }
+        }
+
+        // Dedup by id: remove old, append new
+        self.mcp.retain(|s| s["id"].as_str().unwrap_or("") != id);
+        self.mcp.push(server.clone());
+
+        // Add credential if auth has a credentialRef
+        if let Some(cred_ref) = server["auth"]["credentialRef"].as_str() {
+            if !cred_ref.is_empty() {
+                let cred = json!({
+                    "ref": cred_ref,
+                    "label": cred_ref,
+                    "type": "apiKey",
+                    "consumedBy": [],
+                    "required": true,
+                    "help": ""
+                });
+                self.add_credential(cred);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Remove MCP server by id.
+    pub fn remove_mcp(&mut self, id: &str) {
+        self.mcp.retain(|s| s["id"].as_str().unwrap_or("") != id);
+        // Note: credentials are NOT removed when mcp is removed (consumedBy is recomputed dynamically)
+    }
+
+    /// Add custom skill by name + markdown content.
+    pub fn add_custom_skill(&mut self, name: &str, skill_md: &str) {
+        // Dedup by name: remove old, append new
+        self.skills.retain(|(n, _)| n != name);
+        self.skills.push((name.to_string(), skill_md.to_string()));
+    }
+
+    /// Remove skill by name.
+    pub fn remove_skill(&mut self, name: &str) {
+        self.skills.retain(|(n, _)| n != name);
+    }
+
+    /// Add channel from catalog by id. Returns Err if id not found.
+    pub fn add_channel_catalog(&mut self, id: &str) -> Result<(), String> {
+        let entry = channel_catalog_entry(id)
+            .ok_or_else(|| format!("channel catalog id not found: {id}"))?;
+        // Dedup by id: remove old, append new
+        self.channels.retain(|c| c["id"].as_str().unwrap_or("") != id);
+        self.channels.push(entry.channel);
+        self.add_credential(entry.credential);
+        Ok(())
+    }
+
+    /// Remove channel by id.
+    pub fn remove_channel(&mut self, id: &str) {
+        self.channels.retain(|c| c["id"].as_str().unwrap_or("") != id);
+    }
+
+    /// Add a task. Input may have: name, cron, event, prompt, enabled.
+    pub fn add_task(&mut self, input: Value) -> Result<(), String> {
+        self.task_counter += 1;
+        let id = format!("task-{}", self.task_counter);
+        let name = input["name"]
+            .as_str()
+            .unwrap_or(&id)
+            .to_string();
+
+        let trigger = if let Some(cron) = input["cron"].as_str() {
+            json!({"type": "schedule", "cron": cron})
+        } else if let Some(event) = input["event"].as_str() {
+            json!({"type": "event", "event": event})
+        } else {
+            json!({"type": "manual"})
+        };
+
+        let enabled = input["enabled"].as_bool().unwrap_or(true);
+
+        let mut task = json!({
+            "id": id,
+            "name": name,
+            "trigger": trigger,
+            "action": {
+                "kind": "prompt"
+            },
+            "enabled": enabled
+        });
+
+        if let Some(prompt) = input["prompt"].as_str() {
+            task["action"]["prompt"] = json!(prompt);
+        }
+
+        self.tasks.push(task);
+        Ok(())
+    }
+
+    /// Remove task by id.
+    pub fn remove_task(&mut self, id: &str) {
+        self.tasks.retain(|t| t["id"].as_str().unwrap_or("") != id);
+    }
+
+    /// Add a fact.
+    pub fn add_fact(&mut self, input: Value) -> Result<(), String> {
+        self.fact_counter += 1;
+        let id = format!("fact-{}", self.fact_counter);
+
+        let mut fact = json!({
+            "id": id,
+            "kind": "fact",
+            "text": input["text"],
+            "createdAt": "1970-01-01T00:00:00.000Z"
+        });
+
+        if let Some(importance) = input.get("importance") {
+            fact["importance"] = importance.clone();
+        }
+        if let Some(visibility) = input.get("visibility") {
+            fact["visibility"] = visibility.clone();
+        }
+
+        self.facts.push(fact);
+        Ok(())
+    }
+
+    /// Set profile. Cleans empty string values, stores if non-empty.
+    pub fn set_profile(&mut self, profile: Value) {
+        if let Value::Object(map) = profile {
+            let cleaned: Map<String, Value> = map
+                .into_iter()
+                .filter(|(_, v)| v.as_str() != Some(""))
+                .collect();
+            if cleaned.is_empty() {
+                self.profile = None;
+            } else {
+                self.profile = Some(Value::Object(cleaned));
+            }
+        } else {
+            self.profile = None;
+        }
+    }
+
+    /// Get profile. Returns {} if none set.
+    pub fn get_profile(&self) -> Value {
+        self.profile.clone().unwrap_or_else(|| json!({}))
     }
 
     pub fn state(&self) -> Value {
         let identity = self.persona.is_some();
+
+        // Build sorted skill names
+        let mut skill_names: Vec<String> = self.skills.iter().map(|(n, _)| n.clone()).collect();
+        skill_names.sort();
+
+        // Build sorted mcp ids
+        let mut mcp_ids: Vec<String> = self
+            .mcp
+            .iter()
+            .filter_map(|s| s["id"].as_str().map(|s| s.to_string()))
+            .collect();
+        mcp_ids.sort();
+
+        // Build sorted task ids
+        let mut task_ids: Vec<String> = self
+            .tasks
+            .iter()
+            .filter_map(|t| t["id"].as_str().map(|s| s.to_string()))
+            .collect();
+        task_ids.sort();
+
+        // Build sorted channel ids
+        let mut channel_ids: Vec<String> = self
+            .channels
+            .iter()
+            .filter_map(|c| c["id"].as_str().map(|s| s.to_string()))
+            .collect();
+        channel_ids.sort();
+
+        // Compute consumedBy for each credential (synced dynamically)
+        let credentials_state: Vec<Value> = self.credentials.iter().map(|cred| {
+            let cred_ref = cred["ref"].as_str().unwrap_or("");
+            let mut consumed_by: Vec<String> = Vec::new();
+
+            // Check mcp servers
+            for server in &self.mcp {
+                if server["auth"]["credentialRef"].as_str() == Some(cred_ref) {
+                    if let Some(sid) = server["id"].as_str() {
+                        consumed_by.push(format!("mcp:{sid}"));
+                    }
+                }
+            }
+
+            // Check channels
+            for channel in &self.channels {
+                if channel["credentialRef"].as_str() == Some(cred_ref) {
+                    if let Some(cid) = channel["id"].as_str() {
+                        consumed_by.push(format!("channel:{cid}"));
+                    }
+                }
+            }
+
+            consumed_by.sort();
+
+            json!({
+                "ref": cred["ref"],
+                "label": cred["label"],
+                "type": cred["type"],
+                "consumedBy": consumed_by,
+                "required": cred["required"],
+                "help": cred["help"]
+            })
+        }).collect();
+
+        // Compute network endpoints (unique hosts from mcp servers with url field, sorted)
+        let mut endpoints: Vec<String> = self
+            .mcp
+            .iter()
+            .filter_map(|s| s["url"].as_str().and_then(extract_host))
+            .collect();
+        endpoints.sort();
+        endpoints.dedup();
+
+        // spawnsProcesses: any mcp server has transport == "stdio"
+        let spawns_processes = self.mcp.iter().any(|s| s["transport"].as_str() == Some("stdio"));
 
         let manifest = json!({
             "specVersion": "0.1",
@@ -96,27 +553,27 @@ impl Session {
             "components": {
                 "identity": identity,
                 "memory": {
-                    "facts": 0,
+                    "facts": self.facts.len(),
                     "episodic": 0,
-                    "hasProfile": false
+                    "hasProfile": self.profile.is_some()
                 },
-                "skills": [],
-                "mcp": [],
+                "skills": skill_names,
+                "mcp": mcp_ids,
                 "tools": [],
-                "tasks": [],
-                "channels": []
+                "tasks": task_ids,
+                "channels": channel_ids
             },
-            "credentials": [],
+            "credentials": credentials_state,
             "permissions": {
                 "filesystem": {
                     "read": [],
                     "write": []
                 },
                 "network": {
-                    "endpoints": []
+                    "endpoints": endpoints
                 },
                 "autonomy": "suggest",
-                "spawnsProcesses": false
+                "spawnsProcesses": spawns_processes
             },
             "compatibility": {
                 "targets": self.targets
@@ -248,6 +705,49 @@ impl Session {
                 }
             }
         }
+
+        // MCP servers
+        if !self.mcp.is_empty() {
+            let servers_json = serde_json::to_string_pretty(&json!({"servers": self.mcp}))
+                .expect("mcp serialises");
+            bundle.set("mcp/servers.json", servers_json.into_bytes());
+        }
+
+        // Skills
+        for (name, md) in &self.skills {
+            bundle.set(&format!("skills/{name}/SKILL.md"), md.as_bytes().to_vec());
+        }
+
+        // Channels
+        if !self.channels.is_empty() {
+            let channels_json = serde_json::to_string_pretty(&json!({"channels": self.channels}))
+                .expect("channels serialises");
+            bundle.set("channels/channels.json", channels_json.into_bytes());
+        }
+
+        // Tasks
+        for task in &self.tasks {
+            let id = task["id"].as_str().unwrap_or("task");
+            let task_json = serde_json::to_string_pretty(task).expect("task serialises");
+            bundle.set(&format!("tasks/{id}.json"), task_json.into_bytes());
+        }
+
+        // Facts (JSONL format — each fact on its own line, trailing newline)
+        if !self.facts.is_empty() {
+            let mut facts_jsonl = String::new();
+            for fact in &self.facts {
+                facts_jsonl.push_str(&serde_json::to_string(fact).expect("fact serialises"));
+                facts_jsonl.push('\n');
+            }
+            bundle.set("memory/facts.jsonl", facts_jsonl.into_bytes());
+        }
+
+        // Profile
+        if let Some(profile) = &self.profile {
+            let profile_json = serde_json::to_string_pretty(profile).expect("profile serialises");
+            bundle.set("memory/profile.json", profile_json.into_bytes());
+        }
+
         bundle
     }
 
