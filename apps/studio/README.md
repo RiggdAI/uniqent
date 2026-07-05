@@ -11,7 +11,10 @@ Prereqs: Rust (`rustup`), Xcode CLT.
 - `pnpm --filter @uniqent/studio fixtures` — regenerate golden fixtures after changing the TS session
   (cargo tests in src-tauri assert the Rust session matches them)
 
-Phase 1 scope: brain meta/persona/readme/targets/avatar editing natively; export (signed or
-unsigned) is now live — `api.export(sign)` invokes the Rust core pack/sign pipeline, producing a
-`.uniqent` bundle that the TS core verifier (`scripts/verify-file.ts`) validates. Memory, MCP/skill
-hubs, and install land in later phases (the UI shows "not yet available in the native app").
+Phase 3a scope: content building is now fully native — MCP servers (catalog, custom, import, paste
+preview, remove), skills (catalog, custom, remove), channels (catalog, remove), tasks (add, remove),
+memory (add, import, preview, graph), and profile (get, set) all invoke the Rust backend directly.
+Export (signed or unsigned) invokes the Rust core pack/sign pipeline, producing a `.uniqent` bundle
+that the TS core verifier (`scripts/verify-file.ts`) validates. Hubs (MCP/skill/memory hub search &
+add), publish, vault preview/import, and install are still coming in Phase 3b/4 (the UI shows
+"not yet available in the native app" for those).

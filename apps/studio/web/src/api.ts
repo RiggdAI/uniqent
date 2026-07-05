@@ -68,19 +68,83 @@ export const api = {
     isNative ? invoke<StudioState>('remove_avatar') : post<StudioState>('/api/avatar/remove', {}),
   reset: () => (isNative ? invoke<StudioState>('reset') : post<StudioState>('/api/reset', {})),
 
-  // ── Later-phase stubs (soon in native, existing fetch in browser) ─────────
+  // ── Phase 3a: content commands (now native) ───────────────────────────────
+  addMcp: (id: string) =>
+    isNative
+      ? invoke<StudioState>('add_mcp_catalog', { id })
+      : post<StudioState>(`/api/mcp/catalog/${encodeURIComponent(id)}`, {}),
+  addCustomMcp: (server: Record<string, unknown>) =>
+    isNative
+      ? invoke<StudioState>('add_custom_mcp', { server })
+      : post<StudioState>('/api/mcp/custom', server),
+  importMcpServers: (servers: unknown[]) =>
+    isNative
+      ? invoke<StudioState>('import_mcp_servers', { servers })
+      : post<StudioState>('/api/mcp/import', { servers }),
+  pasteMcpPreview: (text: string) =>
+    isNative
+      ? invoke<McpNormalizePreview>('paste_mcp_preview', { text })
+      : post<McpNormalizePreview>('/api/mcp/paste', { text }),
+  removeMcp: (id: string) =>
+    isNative
+      ? invoke<StudioState>('remove_mcp', { id })
+      : post<StudioState>('/api/mcp/remove', { id }),
+  addSkill: (name: string) =>
+    isNative
+      ? invoke<StudioState>('add_skill_catalog', { name })
+      : post<StudioState>(`/api/skill/catalog/${encodeURIComponent(name)}`, {}),
+  addCustomSkill: (name: string, skillMd: string) =>
+    isNative
+      ? invoke<StudioState>('add_custom_skill', { name, skillMd })
+      : post<StudioState>('/api/skill/custom', { name, skillMd }),
+  removeSkill: (name: string) =>
+    isNative
+      ? invoke<StudioState>('remove_skill', { name })
+      : post<StudioState>('/api/skill/remove', { name }),
+  addChannel: (id: string) =>
+    isNative
+      ? invoke<StudioState>('add_channel_catalog', { id })
+      : post<StudioState>(`/api/channel/catalog/${encodeURIComponent(id)}`, {}),
+  removeChannel: (id: string) =>
+    isNative
+      ? invoke<StudioState>('remove_channel', { id })
+      : post<StudioState>('/api/channel/remove', { id }),
+  addTask: (payload: TaskInput) =>
+    isNative
+      ? invoke<StudioState>('add_task', { payload })
+      : post<StudioState>('/api/task/add', payload),
+  removeTask: (id: string) =>
+    isNative
+      ? invoke<StudioState>('remove_task', { id })
+      : post<StudioState>('/api/task/remove', { id }),
   addMemory: (text: string, importance?: number) =>
-    isNative ? soon() : post<StudioState>('/api/memory', { text, importance }),
-  getProfile: () => (isNative ? soon() : get<{ profile: Record<string, string> }>('/api/profile')),
-  setProfile: (profile: Record<string, string>) =>
-    isNative ? soon() : post<StudioState>('/api/profile', { profile }),
+    isNative
+      ? invoke<StudioState>('add_memory', { text, importance })
+      : post<StudioState>('/api/memory', { text, importance }),
   importMemory: (payload: { text?: string; items?: unknown[]; markdown?: string }) =>
-    isNative ? soon() : post<StudioState>('/api/memory/import', payload),
-  memoryGraph: () => (isNative ? soon() : get<MemoryGraph>('/api/memory/graph')),
+    isNative
+      ? invoke<StudioState>('import_memory', { payload })
+      : post<StudioState>('/api/memory/import', payload),
   previewMemory: (text: string) =>
     isNative
-      ? soon()
+      ? invoke<{ items: ImportedMemoryItem[]; graph: MemoryGraph }>('preview_memory', { text })
       : post<{ items: ImportedMemoryItem[]; graph: MemoryGraph }>('/api/memory/preview', { text }),
+  memoryGraph: () =>
+    isNative ? invoke<MemoryGraph>('memory_graph') : get<MemoryGraph>('/api/memory/graph'),
+  getProfile: () =>
+    isNative
+      ? invoke<{ profile: Record<string, string> }>('get_profile')
+      : get<{ profile: Record<string, string> }>('/api/profile'),
+  setProfile: (profile: Record<string, string>) =>
+    isNative
+      ? invoke<StudioState>('set_profile', { profile })
+      : post<StudioState>('/api/profile', { profile }),
+  export: (sign: boolean) =>
+    isNative
+      ? invoke<ExportResult>('export', { sign })
+      : post<ExportResult>('/api/export', { sign }),
+
+  // ── Phase 3b/4 stubs (hubs, publish, vault, install — coming later) ───────
   memoryHub: (query: string, registry?: string) =>
     isNative ? soon() : post<MemoryHubSearch>('/api/memory/hub/search', { query, registry }),
   addMemoryPack: (slug: string, registry?: string) =>
@@ -103,36 +167,11 @@ export const api = {
           dir,
           ...opts,
         }),
-  addMcp: (id: string) =>
-    isNative ? soon() : post<StudioState>(`/api/mcp/catalog/${encodeURIComponent(id)}`, {}),
-  addSkill: (name: string) =>
-    isNative ? soon() : post<StudioState>(`/api/skill/catalog/${encodeURIComponent(name)}`, {}),
-  addCustomSkill: (name: string, skillMd: string) =>
-    isNative ? soon() : post<StudioState>('/api/skill/custom', { name, skillMd }),
+  // importSkillFromUrl fetches a remote URL — stays stubbed until network phase
   importSkillFromUrl: (url: string) =>
     isNative ? soon() : post<StudioState>('/api/skill/url', { url }),
-  addCustomMcp: (server: Record<string, unknown>) =>
-    isNative ? soon() : post<StudioState>('/api/mcp/custom', server),
-  importMcpServers: (servers: unknown[]) =>
-    isNative ? soon() : post<StudioState>('/api/mcp/import', { servers }),
-  pasteMcpPreview: (text: string) =>
-    isNative ? soon() : post<McpNormalizePreview>('/api/mcp/paste', { text }),
   addPastedMcp: (text: string) =>
     isNative ? soon() : post<StudioState>('/api/mcp/paste/add', { text }),
-  removeMcp: (id: string) => (isNative ? soon() : post<StudioState>('/api/mcp/remove', { id })),
-  removeSkill: (name: string) =>
-    isNative ? soon() : post<StudioState>('/api/skill/remove', { name }),
-  addChannel: (id: string) =>
-    isNative ? soon() : post<StudioState>(`/api/channel/catalog/${encodeURIComponent(id)}`, {}),
-  removeChannel: (id: string) =>
-    isNative ? soon() : post<StudioState>('/api/channel/remove', { id }),
-  addTask: (payload: TaskInput) =>
-    isNative ? soon() : post<StudioState>('/api/task/add', payload),
-  removeTask: (id: string) => (isNative ? soon() : post<StudioState>('/api/task/remove', { id })),
-  export: (sign: boolean) =>
-    isNative
-      ? invoke<ExportResult>('export', { sign })
-      : post<ExportResult>('/api/export', { sign }),
   installPlan: (target: string, root: string) =>
     isNative ? soon() : post<InstallPlan>('/api/install/plan', { target, root }),
   install: (target: string, root: string, creds: Record<string, string>) =>
