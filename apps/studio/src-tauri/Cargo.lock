@@ -3763,6 +3763,7 @@ dependencies = [
  "flate2",
  "hex",
  "rand",
+ "regex",
  "serde",
  "serde_json",
  "sha2",

@@ -1,9 +1,10 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use uniqent_studio::core::archive::{pack, unpack};
+use uniqent_studio::core::archive::{pack, pack_checked, unpack};
 use uniqent_studio::core::bundle::Bundle;
 use uniqent_studio::core::digest::canonical_digest;
+use uniqent_studio::core::secret_scan::scan_for_secrets;
 use uniqent_studio::core::signing::{generate_keypair, sign, verify};
 
 fn core_fixtures() -> PathBuf {
@@ -104,4 +105,142 @@ fn tampered_content_fails_verification_with_exact_reason() {
     let v = verify(&b);
     assert!(v.signed && !v.valid);
     assert_eq!(v.reason.as_deref(), Some("digest mismatch (content changed)"));
+}
+
+// ---------------------------------------------------------------------------
+// Task 4: secret-scan gate tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn clean_fixture_has_no_findings_and_packs() {
+    assert!(scan_for_secrets(&fixture_bundle()).is_empty());
+    assert!(pack_checked(&fixture_bundle()).is_ok());
+}
+
+#[test]
+fn a_planted_secret_blocks_pack_and_sign() {
+    let mut b = fixture_bundle();
+    // Canonical AWS access key — exactly the format the TS scanner catches (AKIA[0-9A-Z]{16})
+    // Using the same string as the TS test suite (secret-scan.test.ts line 23).
+    b.set(
+        "mcp/servers.json",
+        br#"{"env": {"AWS_SECRET_ACCESS_KEY": "AKIAIOSFODNN7EXAMPLE"}}"#.to_vec(),
+    );
+    assert!(!scan_for_secrets(&b).is_empty(), "planted AWS key must be found");
+    assert!(pack_checked(&b).is_err(), "pack_checked must block when secret found");
+    let kp = generate_keypair();
+    assert!(sign(&b, &kp.private_key).is_err(), "sign must gate on the scan");
+}
+
+// Additional planted-secret cases mirroring the TS test suite (secret-scan.test.ts)
+
+#[test]
+fn detects_openai_key() {
+    // TS test: 'token: sk-abcdefghijklmnopqrstuvwxyz0123456789'
+    let mut b = Bundle::from_files(BTreeMap::new());
+    b.set("notes.md", b"token: sk-abcdefghijklmnopqrstuvwxyz0123456789".to_vec());
+    let findings = scan_for_secrets(&b);
+    assert!(!findings.is_empty());
+    assert!(findings[0].hint.starts_with("openai:"), "expected openai hint, got: {}", findings[0].hint);
+}
+
+#[test]
+fn detects_github_pat() {
+    // TS test: 'ghp_0123456789abcdefghijklmnopqrstuvwx'
+    let mut b = Bundle::from_files(BTreeMap::new());
+    b.set("a.md", b"ghp_0123456789abcdefghijklmnopqrstuvwx".to_vec());
+    let findings = scan_for_secrets(&b);
+    assert!(!findings.is_empty());
+    assert!(findings[0].hint.starts_with("github-pat:"));
+}
+
+#[test]
+fn detects_slack_token() {
+    // TS test: 'xoxb-0123456789-abcdefghij'
+    let mut b = Bundle::from_files(BTreeMap::new());
+    b.set("b.md", b"xoxb-0123456789-abcdefghij".to_vec());
+    let findings = scan_for_secrets(&b);
+    assert!(!findings.is_empty());
+    assert!(findings[0].hint.starts_with("slack:"));
+}
+
+#[test]
+fn detects_aws_access_key() {
+    // TS test: 'AKIAIOSFODNN7EXAMPLE'
+    let mut b = Bundle::from_files(BTreeMap::new());
+    b.set("c.md", b"AKIAIOSFODNN7EXAMPLE".to_vec());
+    let findings = scan_for_secrets(&b);
+    assert!(!findings.is_empty());
+    assert!(findings[0].hint.starts_with("aws-access-key:"));
+}
+
+#[test]
+fn detects_private_key_pem_block() {
+    // TS test: '-----BEGIN RSA PRIVATE KEY-----\nMIIE...\n-----END RSA PRIVATE KEY-----'
+    let mut b = Bundle::from_files(BTreeMap::new());
+    b.set(
+        "d.md",
+        b"-----BEGIN RSA PRIVATE KEY-----\nMIIE...\n-----END RSA PRIVATE KEY-----".to_vec(),
+    );
+    let findings = scan_for_secrets(&b);
+    assert!(!findings.is_empty());
+    assert!(findings[0].hint.starts_with("private-key:"));
+}
+
+#[test]
+fn detects_high_entropy_token() {
+    // TS test: 'value=Zk9Q2hVx7Lm4Tp8Rb1Nc6Yd3Wf0Gj5Hs2Aq8Eu4Iv'
+    let mut b = Bundle::from_files(BTreeMap::new());
+    b.set("a.md", b"value=Zk9Q2hVx7Lm4Tp8Rb1Nc6Yd3Wf0Gj5Hs2Aq8Eu4Iv".to_vec());
+    let findings = scan_for_secrets(&b);
+    assert!(findings.iter().any(|f| f.hint.starts_with("high-entropy:")), "expected high-entropy finding");
+}
+
+#[test]
+fn does_not_flag_natural_identifiers_and_paths() {
+    // TS test: long underscored identifiers and URL/file paths that break into short segments
+    let text = [
+        "Use dataforseo_labs_google_competitors_domain and dataforseo_labs_bulk_keyword_difficulty.",
+        "See https://developers.google.com/search/docs/fundamentals/creating-helpful-content",
+        "Refs live at skills/seo-geo/references/google-ai-optimization-guide.",
+        "A mixed-case path: claude/skills/gstack/codex/SKILL.md and .factory/skills/gstack-qa.",
+        "An all-caps constant: DATAFORSEO_LABS_BULK_TRAFFIC_ESTIMATION.",
+    ]
+    .join("\n");
+    let mut b = Bundle::from_files(BTreeMap::new());
+    b.set("skills/seo/SKILL.md", text.into_bytes());
+    assert!(scan_for_secrets(&b).is_empty(), "natural identifiers must not be flagged");
+}
+
+#[test]
+fn allows_credential_ref_placeholders() {
+    // TS test: mcp/servers.json with ${credentialRef:github_pat}
+    let mut b = Bundle::from_files(BTreeMap::new());
+    b.set(
+        "mcp/servers.json",
+        serde_json::to_vec(&serde_json::json!({"token": "${credentialRef:github_pat}"})).unwrap(),
+    );
+    assert!(scan_for_secrets(&b).is_empty(), "credentialRef placeholders must be allowed");
+}
+
+#[test]
+fn skips_signature_json_and_allowlists_pubkey() {
+    // TS test: signature.json with long base64 strings; uniqent.json pubkey
+    let mut b = Bundle::from_files(BTreeMap::new());
+    b.set(
+        "signature.json",
+        serde_json::to_vec(&serde_json::json!({
+            "signature": "A".repeat(88),
+            "publicKey": "B".repeat(64),
+        }))
+        .unwrap(),
+    );
+    b.set(
+        "uniqent.json",
+        serde_json::to_vec(&serde_json::json!({
+            "author": {"name": "x", "pubkey": "deadbeef".repeat(8)},
+        }))
+        .unwrap(),
+    );
+    assert!(scan_for_secrets(&b).is_empty(), "signature.json and pubkey values must be skipped");
 }

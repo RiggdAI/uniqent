@@ -3,6 +3,7 @@ use serde_json::{json, Value};
 
 use super::bundle::{paths, Bundle};
 use super::digest::canonical_digest;
+use super::secret_scan::{format_scan_error, scan_for_secrets};
 
 pub struct Keypair {
     pub private_key: String,
@@ -47,8 +48,15 @@ fn iso_now() -> String {
     )
 }
 
-/// Port of core sign() MINUS the secret-scan gate (added by the caller in Task 4).
+/// Port of TS core `sign()`. Runs secret-scan gate before computing the digest,
+/// matching the TS `sign` which calls `scanForSecrets` at the very top.
 pub fn sign(bundle: &Bundle, private_key_hex: &str) -> Result<Bundle, String> {
+    // Secret-scan gate — mirrors TS sign() which calls scanForSecrets before anything else.
+    let findings = scan_for_secrets(bundle);
+    if !findings.is_empty() {
+        return Err(format_scan_error(&findings));
+    }
+
     let digest = canonical_digest(bundle);
     let sk = signing_key(private_key_hex)?;
     let sig = sk.sign(digest.as_bytes());
