@@ -1,6 +1,7 @@
 use base64::Engine;
 use regex::Regex;
 use serde_json::{json, Map, Value};
+use std::sync::OnceLock;
 
 use crate::core::archive::pack_checked;
 use crate::core::bundle::Bundle;
@@ -67,82 +68,26 @@ struct McpCatalogEntry {
     credential: Option<Value>,
 }
 
+static CATALOG_DATA: OnceLock<Value> = OnceLock::new();
+
+fn catalog_data() -> &'static Value {
+    CATALOG_DATA.get_or_init(|| {
+        serde_json::from_str(include_str!("../../fixtures/catalog-data.json"))
+            .expect("catalog-data.json valid JSON")
+    })
+}
+
 fn mcp_catalog_entry(id: &str) -> Option<McpCatalogEntry> {
-    match id {
-        "github" => Some(McpCatalogEntry {
-            server: json!({
-                "id": "github",
-                "transport": "streamable-http",
-                "url": "https://api.githubcopilot.com/mcp/",
-                "auth": {"type": "bearer", "credentialRef": "github_pat"},
-                "tools": {"include": "all"},
-                "description": "GitHub MCP server"
-            }),
-            credential: Some(json!({
-                "ref": "github_pat",
-                "label": "GitHub Personal Access Token",
-                "type": "apiKey",
-                "consumedBy": [],
-                "required": true,
-                "help": "Create at https://github.com/settings/tokens with the scopes you need."
-            })),
-        }),
-        "filesystem" => Some(McpCatalogEntry {
-            server: json!({
-                "id": "filesystem",
-                "transport": "stdio",
-                "command": "npx",
-                "args": ["-y", "@modelcontextprotocol/server-filesystem", "${HOME}"],
-                "auth": {"type": "none"},
-                "tools": {"include": "all"},
-                "description": "Local filesystem MCP server"
-            }),
-            credential: None,
-        }),
-        "fetch" => Some(McpCatalogEntry {
-            server: json!({
-                "id": "fetch",
-                "transport": "stdio",
-                "command": "npx",
-                "args": ["-y", "@modelcontextprotocol/server-fetch"],
-                "auth": {"type": "none"},
-                "tools": {"include": "all"},
-                "description": "Web fetch MCP server"
-            }),
-            credential: None,
-        }),
-        "gbrain" => Some(McpCatalogEntry {
-            server: json!({
-                "id": "gbrain",
-                "transport": "stdio",
-                "command": "gbrain",
-                "args": ["serve"],
-                "auth": {"type": "none"},
-                "tools": {"include": "all"},
-                "description": "GBrain memory MCP server (local). Install once: `bun install -g github:garrytan/gbrain`, then `gbrain init`."
-            }),
-            credential: None,
-        }),
-        "gbrain-remote" => Some(McpCatalogEntry {
-            server: json!({
-                "id": "gbrain-remote",
-                "transport": "streamable-http",
-                "url": "https://your-gbrain.example.com/mcp",
-                "auth": {"type": "bearer", "credentialRef": "gbrain_token"},
-                "tools": {"include": "all"},
-                "description": "Hosted GBrain memory MCP server."
-            }),
-            credential: Some(json!({
-                "ref": "gbrain_token",
-                "label": "GBrain access token",
-                "type": "bearer",
-                "consumedBy": [],
-                "required": true,
-                "help": "From your gbrain server: gbrain connect <url> --token <tok>."
-            })),
-        }),
-        _ => None,
-    }
+    let entries = catalog_data()["mcp"].as_array()?;
+    let entry = entries.iter().find(|e| e["id"].as_str() == Some(id))?;
+    Some(McpCatalogEntry {
+        server: entry["server"].clone(),
+        credential: if entry.get("credential").map(|c| !c.is_null()).unwrap_or(false) {
+            Some(entry["credential"].clone())
+        } else {
+            None
+        },
+    })
 }
 
 /// Channel catalog entry: channel + credential
@@ -152,86 +97,12 @@ struct ChannelCatalogEntry {
 }
 
 fn channel_catalog_entry(id: &str) -> Option<ChannelCatalogEntry> {
-    match id {
-        "telegram" => Some(ChannelCatalogEntry {
-            channel: json!({"id": "telegram", "kind": "telegram", "credentialRef": "telegram_bot_token"}),
-            credential: json!({
-                "ref": "telegram_bot_token",
-                "label": "Telegram Bot Token",
-                "type": "bearer",
-                "consumedBy": [],
-                "required": true,
-                "help": "Create a bot with @BotFather and copy its token."
-            }),
-        }),
-        "slack" => Some(ChannelCatalogEntry {
-            channel: json!({"id": "slack", "kind": "slack", "credentialRef": "slack_bot_token"}),
-            credential: json!({
-                "ref": "slack_bot_token",
-                "label": "Slack Bot Token",
-                "type": "bearer",
-                "consumedBy": [],
-                "required": true,
-                "help": "Create a Slack app at api.slack.com/apps and install it to your workspace."
-            }),
-        }),
-        "discord" => Some(ChannelCatalogEntry {
-            channel: json!({"id": "discord", "kind": "discord", "credentialRef": "discord_bot_token"}),
-            credential: json!({
-                "ref": "discord_bot_token",
-                "label": "Discord Bot Token",
-                "type": "bearer",
-                "consumedBy": [],
-                "required": true,
-                "help": "Create a bot application at discord.com/developers/applications."
-            }),
-        }),
-        "email" => Some(ChannelCatalogEntry {
-            channel: json!({"id": "email", "kind": "email", "credentialRef": "smtp_password"}),
-            credential: json!({
-                "ref": "smtp_password",
-                "label": "SMTP Password",
-                "type": "apiKey",
-                "consumedBy": [],
-                "required": true,
-                "help": "Set SMTP_HOST, SMTP_USER, SMTP_PORT in your environment too."
-            }),
-        }),
-        "webhook" => Some(ChannelCatalogEntry {
-            channel: json!({"id": "webhook", "kind": "webhook", "credentialRef": "webhook_secret"}),
-            credential: json!({
-                "ref": "webhook_secret",
-                "label": "Webhook Secret",
-                "type": "apiKey",
-                "consumedBy": [],
-                "required": true,
-                "help": "A secret token to validate inbound webhook payloads."
-            }),
-        }),
-        "whatsapp" => Some(ChannelCatalogEntry {
-            channel: json!({"id": "whatsapp", "kind": "whatsapp", "credentialRef": "whatsapp_token"}),
-            credential: json!({
-                "ref": "whatsapp_token",
-                "label": "WhatsApp Cloud API Token",
-                "type": "bearer",
-                "consumedBy": [],
-                "required": true,
-                "help": "Get from Meta for Developers → WhatsApp → API Setup."
-            }),
-        }),
-        "sms" => Some(ChannelCatalogEntry {
-            channel: json!({"id": "sms", "kind": "sms", "credentialRef": "twilio_auth_token"}),
-            credential: json!({
-                "ref": "twilio_auth_token",
-                "label": "Twilio Auth Token",
-                "type": "apiKey",
-                "consumedBy": [],
-                "required": true,
-                "help": "Find your Account SID and Auth Token in the Twilio Console."
-            }),
-        }),
-        _ => None,
-    }
+    let entries = catalog_data()["channels"].as_array()?;
+    let entry = entries.iter().find(|e| e["id"].as_str() == Some(id))?;
+    Some(ChannelCatalogEntry {
+        channel: entry["channel"].clone(),
+        credential: entry["credential"].clone(),
+    })
 }
 
 pub struct Session {
@@ -358,6 +229,24 @@ impl Session {
     /// Remove skill by name.
     pub fn remove_skill(&mut self, name: &str) {
         self.skills.retain(|(n, _)| n != name);
+    }
+
+    /// Add skill from catalog by name. Returns Err if name not found.
+    pub fn add_skill_catalog(&mut self, name: &str) -> Result<(), String> {
+        let entries = catalog_data()["skills"]
+            .as_array()
+            .ok_or_else(|| "catalog skills missing".to_string())?;
+        let entry = entries
+            .iter()
+            .find(|e| e["name"].as_str() == Some(name))
+            .ok_or_else(|| format!("skill catalog name not found: {name}"))?;
+        let skill_md = entry["skillMd"]
+            .as_str()
+            .ok_or_else(|| format!("skill catalog entry missing skillMd: {name}"))?;
+        // Dedup by name: remove old, append new (same as add_custom_skill)
+        self.skills.retain(|(n, _)| n != name);
+        self.skills.push((name.to_string(), skill_md.to_string()));
+        Ok(())
     }
 
     /// Add channel from catalog by id. Returns Err if id not found.

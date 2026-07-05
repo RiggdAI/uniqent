@@ -17,18 +17,29 @@
         "episodic": 0,
         "hasProfile": true
       },
-      "skills": ["fixture-skill"],
-      "mcp": ["custom-api", "github"],
+      "skills": [
+        "fixture-skill"
+      ],
+      "mcp": [
+        "custom-api",
+        "github"
+      ],
       "tools": [],
-      "tasks": ["task-1"],
-      "channels": ["telegram"]
+      "tasks": [
+        "task-1"
+      ],
+      "channels": [
+        "telegram"
+      ]
     },
     "credentials": [
       {
         "ref": "github_pat",
         "label": "GitHub Personal Access Token",
         "type": "apiKey",
-        "consumedBy": ["mcp:github"],
+        "consumedBy": [
+          "mcp:github"
+        ],
         "required": true,
         "help": "Create at https://github.com/settings/tokens with the scopes you need."
       },
@@ -36,7 +47,9 @@
         "ref": "telegram_bot_token",
         "label": "Telegram Bot Token",
         "type": "bearer",
-        "consumedBy": ["channel:telegram"],
+        "consumedBy": [
+          "channel:telegram"
+        ],
         "required": true,
         "help": "Create a bot with @BotFather and copy its token."
       }
@@ -47,13 +60,19 @@
         "write": []
       },
       "network": {
-        "endpoints": ["api.example.com", "api.githubcopilot.com"]
+        "endpoints": [
+          "api.example.com",
+          "api.githubcopilot.com"
+        ]
       },
       "autonomy": "suggest",
       "spawnsProcesses": false
     },
     "compatibility": {
-      "targets": ["claude-code", "hermes"]
+      "targets": [
+        "claude-code",
+        "hermes"
+      ]
     }
   },
   "validation": {

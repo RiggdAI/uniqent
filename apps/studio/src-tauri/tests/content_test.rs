@@ -54,9 +54,32 @@ fn remove_skill_clears_it() {
 #[test]
 fn readd_mcp_deduplicates() {
     let mut s = Session::new();
+    // Add filesystem first, then github
+    s.add_mcp_catalog("filesystem").unwrap();
     s.add_mcp_catalog("github").unwrap();
-    s.add_mcp_catalog("github").unwrap(); // re-add same id
+    // Re-add filesystem — should dedup and retain only one; sorted state has it first alphabetically
+    s.add_mcp_catalog("filesystem").unwrap();
     let state = s.state();
     let mcp = state["manifest"]["components"]["mcp"].as_array().unwrap();
-    assert_eq!(mcp.len(), 1);
+    // Dedup: still 2 entries (filesystem + github)
+    assert_eq!(mcp.len(), 2);
+    // Sorted: filesystem < github alphabetically
+    assert_eq!(mcp[0].as_str(), Some("filesystem"));
+    assert_eq!(mcp[1].as_str(), Some("github"));
+}
+
+#[test]
+fn add_skill_catalog_known_name_adds_skill() {
+    let mut s = Session::new();
+    s.add_skill_catalog("summarizer").expect("summarizer is in catalog");
+    let state = s.state();
+    let skills = state["manifest"]["components"]["skills"].as_array().unwrap();
+    assert!(skills.iter().any(|v| v.as_str() == Some("summarizer")));
+}
+
+#[test]
+fn add_skill_catalog_unknown_name_errors() {
+    let mut s = Session::new();
+    let err = s.add_skill_catalog("nonexistent-skill").unwrap_err();
+    assert!(err.contains("skill catalog name not found"));
 }

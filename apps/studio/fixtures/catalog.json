@@ -33,7 +33,12 @@
       "credential": "gbrain_token"
     }
   ],
-  "skills": [],
+  "skills": [
+    {
+      "name": "summarizer",
+      "description": "Summarize long texts into concise bullets."
+    }
+  ],
   "channels": [
     {
       "id": "telegram",
@@ -85,5 +90,9 @@
       "credential": "webhook_secret"
     }
   ],
-  "targets": ["claude-code", "hermes", "openclaw"]
+  "targets": [
+    "claude-code",
+    "hermes",
+    "openclaw"
+  ]
 }

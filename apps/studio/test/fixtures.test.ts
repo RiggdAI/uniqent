@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { MCP_CATALOG, SKILL_CATALOG, CHANNEL_CATALOG } from '@uniqent/builder';
 import { StudioSession } from '../src/server/session.js';
 import { applyContentScript } from '../scripts/emit-fixtures.js';
 
@@ -54,5 +55,10 @@ describe('golden fixtures stay in sync with the TS session', () => {
     s.setReadme('# Readme\n\nFixture readme.');
     applyContentScript(s);
     expect(JSON.parse(JSON.stringify(s.state()))).toEqual(fx('state-content.json'));
+  });
+  it('catalog-data.json stays in sync with builder catalogs', () => {
+    expect({ mcp: MCP_CATALOG, skills: SKILL_CATALOG, channels: CHANNEL_CATALOG }).toEqual(
+      fx('catalog-data.json'),
+    );
   });
 });

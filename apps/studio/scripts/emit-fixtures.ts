@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { MCP_CATALOG, SKILL_CATALOG, CHANNEL_CATALOG } from '@uniqent/builder';
 import { StudioSession } from '../src/server/session.js';
 
 const out = join(dirname(fileURLToPath(import.meta.url)), '..', 'fixtures');
@@ -110,5 +111,11 @@ export async function buildFixtureBundle(): Promise<void> {
 }
 
 await buildFixtureBundle();
+
+await write('catalog-data.json', {
+  mcp: MCP_CATALOG,
+  skills: SKILL_CATALOG,
+  channels: CHANNEL_CATALOG,
+});
 
 console.log('fixtures written to', out);
