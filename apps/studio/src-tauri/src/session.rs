@@ -82,7 +82,11 @@ fn mcp_catalog_entry(id: &str) -> Option<McpCatalogEntry> {
     let entry = entries.iter().find(|e| e["id"].as_str() == Some(id))?;
     Some(McpCatalogEntry {
         server: entry["server"].clone(),
-        credential: if entry.get("credential").map(|c| !c.is_null()).unwrap_or(false) {
+        credential: if entry
+            .get("credential")
+            .map(|c| !c.is_null())
+            .unwrap_or(false)
+        {
             Some(entry["credential"].clone())
         } else {
             None
@@ -126,13 +130,13 @@ pub struct Session {
     avatar: Option<String>, // data: URL, validated on set
     keypair: Option<Keypair>,
     // Content collections
-    mcp: Vec<Value>,                 // MCP server objects stored verbatim
-    credentials: Vec<Value>,         // credentials, deduped by ref
-    skills: Vec<(String, String)>,   // (name, markdown) ordered
-    channels: Vec<Value>,            // channel objects
-    tasks: Vec<Value>,               // task objects
-    facts: Vec<Value>,               // fact objects (with createdAt for bundle)
-    profile: Option<Value>,          // profile object or None
+    mcp: Vec<Value>,               // MCP server objects stored verbatim
+    credentials: Vec<Value>,       // credentials, deduped by ref
+    skills: Vec<(String, String)>, // (name, markdown) ordered
+    channels: Vec<Value>,          // channel objects
+    tasks: Vec<Value>,             // task objects
+    facts: Vec<Value>,             // fact objects (with createdAt for bundle)
+    profile: Option<Value>,        // profile object or None
     fact_counter: u32,
     task_counter: u32,
 }
@@ -170,13 +174,15 @@ impl Session {
     /// Add a credential, deduped by ref (remove old, append new).
     fn add_credential(&mut self, cred: Value) {
         let cred_ref = cred["ref"].as_str().unwrap_or("").to_string();
-        self.credentials.retain(|c| c["ref"].as_str().unwrap_or("") != cred_ref);
+        self.credentials
+            .retain(|c| c["ref"].as_str().unwrap_or("") != cred_ref);
         self.credentials.push(cred);
     }
 
     /// Add MCP server from catalog by id. Returns Err if id not found.
     pub fn add_mcp_catalog(&mut self, id: &str) -> Result<(), String> {
-        let entry = mcp_catalog_entry(id).ok_or_else(|| format!("MCP catalog id not found: {id}"))?;
+        let entry =
+            mcp_catalog_entry(id).ok_or_else(|| format!("MCP catalog id not found: {id}"))?;
         // Dedup by id: remove old, append new
         self.mcp.retain(|s| s["id"].as_str().unwrap_or("") != id);
         self.mcp.push(entry.server);
@@ -256,7 +262,8 @@ impl Session {
         let entry = channel_catalog_entry(id)
             .ok_or_else(|| format!("channel catalog id not found: {id}"))?;
         // Dedup by id: remove old, append new
-        self.channels.retain(|c| c["id"].as_str().unwrap_or("") != id);
+        self.channels
+            .retain(|c| c["id"].as_str().unwrap_or("") != id);
         self.channels.push(entry.channel);
         self.add_credential(entry.credential);
         Ok(())
@@ -264,17 +271,15 @@ impl Session {
 
     /// Remove channel by id.
     pub fn remove_channel(&mut self, id: &str) {
-        self.channels.retain(|c| c["id"].as_str().unwrap_or("") != id);
+        self.channels
+            .retain(|c| c["id"].as_str().unwrap_or("") != id);
     }
 
     /// Add a task. Input may have: name, cron, event, prompt, enabled.
     pub fn add_task(&mut self, input: Value) -> Result<(), String> {
         self.task_counter += 1;
         let id = format!("task-{}", self.task_counter);
-        let name = input["name"]
-            .as_str()
-            .unwrap_or(&id)
-            .to_string();
+        let name = input["name"].as_str().unwrap_or(&id).to_string();
 
         let trigger = if let Some(cron) = input["cron"].as_str() {
             json!({"type": "schedule", "cron": cron})
@@ -386,39 +391,43 @@ impl Session {
         channel_ids.sort();
 
         // Compute consumedBy for each credential (synced dynamically)
-        let credentials_state: Vec<Value> = self.credentials.iter().map(|cred| {
-            let cred_ref = cred["ref"].as_str().unwrap_or("");
-            let mut consumed_by: Vec<String> = Vec::new();
+        let credentials_state: Vec<Value> = self
+            .credentials
+            .iter()
+            .map(|cred| {
+                let cred_ref = cred["ref"].as_str().unwrap_or("");
+                let mut consumed_by: Vec<String> = Vec::new();
 
-            // Check mcp servers
-            for server in &self.mcp {
-                if server["auth"]["credentialRef"].as_str() == Some(cred_ref) {
-                    if let Some(sid) = server["id"].as_str() {
-                        consumed_by.push(format!("mcp:{sid}"));
+                // Check mcp servers
+                for server in &self.mcp {
+                    if server["auth"]["credentialRef"].as_str() == Some(cred_ref) {
+                        if let Some(sid) = server["id"].as_str() {
+                            consumed_by.push(format!("mcp:{sid}"));
+                        }
                     }
                 }
-            }
 
-            // Check channels
-            for channel in &self.channels {
-                if channel["credentialRef"].as_str() == Some(cred_ref) {
-                    if let Some(cid) = channel["id"].as_str() {
-                        consumed_by.push(format!("channel:{cid}"));
+                // Check channels
+                for channel in &self.channels {
+                    if channel["credentialRef"].as_str() == Some(cred_ref) {
+                        if let Some(cid) = channel["id"].as_str() {
+                            consumed_by.push(format!("channel:{cid}"));
+                        }
                     }
                 }
-            }
 
-            consumed_by.sort();
+                consumed_by.sort();
 
-            json!({
-                "ref": cred["ref"],
-                "label": cred["label"],
-                "type": cred["type"],
-                "consumedBy": consumed_by,
-                "required": cred["required"],
-                "help": cred["help"]
+                json!({
+                    "ref": cred["ref"],
+                    "label": cred["label"],
+                    "type": cred["type"],
+                    "consumedBy": consumed_by,
+                    "required": cred["required"],
+                    "help": cred["help"]
+                })
             })
-        }).collect();
+            .collect();
 
         // Compute network endpoints (unique hosts from mcp servers with url field, sorted)
         let mut endpoints: Vec<String> = self
@@ -430,7 +439,10 @@ impl Session {
         endpoints.dedup();
 
         // spawnsProcesses: any mcp server has transport == "stdio"
-        let spawns_processes = self.mcp.iter().any(|s| s["transport"].as_str() == Some("stdio"));
+        let spawns_processes = self
+            .mcp
+            .iter()
+            .any(|s| s["transport"].as_str() == Some("stdio"));
 
         let manifest = json!({
             "specVersion": "0.1",
@@ -562,8 +574,8 @@ impl Session {
     fn build_bundle(&self) -> Bundle {
         let state = self.state();
         let manifest_value = &state["manifest"];
-        let manifest_json = serde_json::to_string_pretty(manifest_value)
-            .expect("manifest serialises");
+        let manifest_json =
+            serde_json::to_string_pretty(manifest_value).expect("manifest serialises");
 
         let mut bundle = Bundle::default();
         bundle.set("uniqent.json", manifest_json.into_bytes());
@@ -665,7 +677,11 @@ impl Session {
         };
 
         let bytes = pack_checked(&final_bundle)?;
-        let verified = if signed { verify(&final_bundle).valid } else { false };
+        let verified = if signed {
+            verify(&final_bundle).valid
+        } else {
+            false
+        };
         let bytes_b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
 
         Ok(json!({
@@ -700,19 +716,159 @@ impl Session {
     /// Add a pasted MCP config. Returns count of servers added.
     pub fn add_pasted_mcp(&mut self, text: &str) -> Result<usize, String> {
         use crate::ports::mcp_normalize::normalize_mcp_config;
-        let parsed: Value =
-            serde_json::from_str(text).map_err(|_| "not valid JSON".to_string())?;
+        let parsed: Value = serde_json::from_str(text).map_err(|_| "not valid JSON".to_string())?;
         let result = normalize_mcp_config(&parsed);
         let servers = result["servers"].as_array().cloned().unwrap_or_default();
-        let credentials = result["credentials"].as_array().cloned().unwrap_or_default();
+        let credentials = result["credentials"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
         for s in &servers {
-            self.mcp.retain(|existing| existing["id"].as_str() != s["id"].as_str());
+            self.mcp
+                .retain(|existing| existing["id"].as_str() != s["id"].as_str());
             self.mcp.push(s.clone());
         }
         for c in credentials {
             self.add_credential(c);
         }
         Ok(servers.len())
+    }
+
+    /// Import memory from `{markdown?, text?, items?}` payload — mirrors TS `/api/memory/import`.
+    ///
+    /// Priority (mirrors TS api.ts):
+    ///   1. `items` array  → importItems semantics (kind/text/id preserved; blanks skipped)
+    ///   2. `markdown` string → parseMemoryMarkdown (kind inferred from prefix; links/tags kept)
+    ///   3. `text` string → importLines (plain newline-split, each non-empty line = one fact)
+    ///
+    /// Returns the count of items added.
+    pub fn import_memory(&mut self, payload: Value) -> Result<usize, String> {
+        use crate::ports::memory::parse_memory_markdown;
+
+        if let Some(items) = payload["items"].as_array() {
+            // importItems semantics: text required, kind validated, id preserved or auto-generated
+            let valid_kinds = ["fact", "decision", "preference", "milestone", "episodic"];
+            let mut added = 0;
+            for raw in items.iter() {
+                let text = match raw["text"].as_str() {
+                    Some(t) => t.trim().to_string(),
+                    None => continue,
+                };
+                if text.is_empty() {
+                    continue;
+                }
+                self.fact_counter += 1;
+                let id = raw["id"]
+                    .as_str()
+                    .filter(|s| !s.is_empty())
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| format!("fact-{}", self.fact_counter));
+                let kind = raw["kind"]
+                    .as_str()
+                    .filter(|k| valid_kinds.contains(k))
+                    .unwrap_or("fact")
+                    .to_string();
+                let mut fact = json!({
+                    "id": id,
+                    "kind": kind,
+                    "text": text,
+                    "createdAt": "1970-01-01T00:00:00.000Z"
+                });
+                if let Some(imp) = raw.get("importance").filter(|v| v.is_number()) {
+                    fact["importance"] = imp.clone();
+                }
+                if raw["visibility"].as_str() == Some("personal") {
+                    fact["visibility"] = json!("personal");
+                }
+                self.facts.push(fact);
+                added += 1;
+            }
+            return Ok(added);
+        }
+
+        if let Some(markdown) = payload["markdown"].as_str() {
+            // importMarkdown semantics: parse with kind/entity/tag extraction
+            let parsed = parse_memory_markdown(markdown);
+            let items = parsed.as_array().cloned().unwrap_or_default();
+            let n = items.len();
+            for it in items {
+                self.fact_counter += 1;
+                let fact = json!({
+                    "id": format!("fact-{}", self.fact_counter),
+                    "kind": it["kind"],
+                    "text": it["text"],
+                    "createdAt": "1970-01-01T00:00:00.000Z"
+                });
+                self.facts.push(fact);
+            }
+            return Ok(n);
+        }
+
+        if let Some(text) = payload["text"].as_str() {
+            // importLines semantics: split by newline, trim, skip blanks
+            let lines: Vec<&str> = text
+                .split('\n')
+                .map(|l| l.trim())
+                .filter(|l| !l.is_empty())
+                .collect();
+            let n = lines.len();
+            for line in lines {
+                self.fact_counter += 1;
+                let fact = json!({
+                    "id": format!("fact-{}", self.fact_counter),
+                    "kind": "fact",
+                    "text": line,
+                    "createdAt": "1970-01-01T00:00:00.000Z"
+                });
+                self.facts.push(fact);
+            }
+            return Ok(n);
+        }
+
+        Ok(0)
+    }
+
+    /// Preview a memory import: parse markdown into items + build graph, WITHOUT mutating state.
+    /// Returns `{ items: ImportedMemoryItem[], graph: MemoryGraph }`.
+    /// Mirrors TS `previewMemoryImport(text)`.
+    pub fn preview_memory(&self, text: &str) -> Value {
+        use crate::ports::memory::{memory_graph, parse_memory_markdown};
+
+        let parsed = parse_memory_markdown(text);
+        let items = parsed.as_array().cloned().unwrap_or_default();
+        // Build graph input: id = p{i}, text, kind (same as TS previewMemoryImport)
+        let graph_input: Vec<Value> = items
+            .iter()
+            .enumerate()
+            .map(|(i, it)| {
+                json!({
+                    "id": format!("p{i}"),
+                    "text": it["text"],
+                    "kind": it["kind"]
+                })
+            })
+            .collect();
+        let graph = memory_graph(&Value::Array(graph_input));
+        json!({ "items": items, "graph": graph })
+    }
+
+    /// Return the memory knowledge graph from current session facts.
+    /// Each fact contributes its id, text, and kind. Mirrors TS `session.memoryGraph()`.
+    pub fn memory_graph(&self) -> Value {
+        use crate::ports::memory::memory_graph;
+
+        let input: Vec<Value> = self
+            .facts
+            .iter()
+            .map(|f| {
+                json!({
+                    "id": f["id"],
+                    "text": f["text"],
+                    "kind": f["kind"]
+                })
+            })
+            .collect();
+        memory_graph(&Value::Array(input))
     }
 
     /// Import MCP servers from a JSON array. Each element is normalized individually.
@@ -727,9 +883,13 @@ impl Session {
         for raw in arr {
             let result = normalize_mcp_config(&raw);
             let svrs = result["servers"].as_array().cloned().unwrap_or_default();
-            let creds = result["credentials"].as_array().cloned().unwrap_or_default();
+            let creds = result["credentials"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default();
             for s in svrs {
-                self.mcp.retain(|existing| existing["id"].as_str() != s["id"].as_str());
+                self.mcp
+                    .retain(|existing| existing["id"].as_str() != s["id"].as_str());
                 self.mcp.push(s);
                 n += 1;
             }

@@ -1,7 +1,7 @@
 import { writeFile, mkdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { normalizeMcpConfig } from '@uniqent/builder';
+import { normalizeMcpConfig, parseMemoryMarkdown, memoryGraph } from '@uniqent/builder';
 
 const out = join(dirname(fileURLToPath(import.meta.url)), '..', 'fixtures', 'ports');
 await mkdir(out, { recursive: true });
@@ -94,3 +94,135 @@ tc('remote-with-description', {
 await writeFile(join(out, 'normalize-cases.json'), JSON.stringify(cases, null, 2) + '\n');
 
 console.log(`fixtures/ports/normalize-cases.json written (${cases.length} cases)`);
+
+// ─── Memory port fixtures ─────────────────────────────────────────────────────
+
+interface MemoryCase {
+  name: string;
+  markdown: string;
+  parsed: ReturnType<typeof parseMemoryMarkdown>;
+  graph: ReturnType<typeof memoryGraph>;
+}
+
+function memCase(name: string, markdown: string): MemoryCase {
+  const parsed = parseMemoryMarkdown(markdown);
+  const graphInput = parsed.map((it, i) => ({ id: `m${i}`, text: it.text, kind: it.kind }));
+  const graph = memoryGraph(graphInput);
+  return { name, markdown, parsed, graph };
+}
+
+const memoryCases: MemoryCase[] = [];
+
+// 1. Headings + bullets — headings are skipped, bullets become facts
+memoryCases.push(
+  memCase(
+    'headings-and-bullets',
+    [
+      '# Project Context',
+      '- We decided to use Postgres for the main DB',
+      '- The API uses REST not GraphQL',
+      '## Technical Notes',
+      '* TypeScript is the primary language',
+    ].join('\n'),
+  ),
+);
+
+// 2. kind: prefixes — explicit Decision/Preference/Milestone/Episodic/Fact prefixes
+memoryCases.push(
+  memCase(
+    'kind-prefixes',
+    [
+      'Decision: use [[Postgres]] over [[MySQL]] #db',
+      'Preference: the user likes dark mode',
+      'Milestone: shipped v1.0 to production',
+      '[!episodic] fixed the auth bug on 2024-01-15',
+      'Fact: the API rate limit is 1000 req/hr',
+    ].join('\n'),
+  ),
+);
+
+// 3. [[entity]] wikilinks — extracted + deduped
+memoryCases.push(
+  memCase(
+    'wikilink-entities',
+    [
+      'chose [[Postgres]] over [[MySQL]] for the main DB',
+      '[[Postgres]] tuning notes: set max_connections to 200',
+      'integrated [[Auth-Service|auth]] with [[Postgres]]',
+    ].join('\n'),
+  ),
+);
+
+// 4. #tags — extracted + deduped
+memoryCases.push(
+  memCase(
+    'hashtags',
+    [
+      'uses REST API #api #backend',
+      'frontend is React #frontend #react',
+      'CI runs on GitHub Actions #ci #backend',
+    ].join('\n'),
+  ),
+);
+
+// 5. Blank / whitespace input — produces empty array
+memoryCases.push(memCase('blank-input', ''));
+memoryCases.push(memCase('whitespace-only', '   \n\n   \n'));
+
+// 6. Mixed doc — headings, bullets, prefixes, wikilinks, tags combined (from TS test suite)
+memoryCases.push(
+  memCase(
+    'mixed-doc',
+    [
+      '# Context',
+      '- Decision: we will use [[Postgres]] #db',
+      '* [!preference] the user likes [[TypeScript]]',
+      'The API hit a rate limit yesterday',
+      '   ',
+    ].join('\n'),
+  ),
+);
+
+// 7. From TS test suite: dedup entities and tags
+memoryCases.push(
+  memCase(
+    'dedup-entities-and-tags',
+    '[[Acme]] chose [[Postgres]] over [[Acme]] preferences #db #infra',
+  ),
+);
+
+// 8. Numbered list items
+memoryCases.push(
+  memCase(
+    'numbered-list',
+    [
+      '1. First we set up [[Postgres]]',
+      '2. Then we configured the ORM',
+      '3. Milestone: DB migrations running',
+    ].join('\n'),
+  ),
+);
+
+// 9. Alias wikilinks [[Target|alias]]
+memoryCases.push(
+  memCase(
+    'alias-wikilinks',
+    'see [[Auth-Service|the auth service]] for [[Postgres|our database]] #security #db',
+  ),
+);
+
+// 10. Callout-style prefix [!kind]
+memoryCases.push(
+  memCase(
+    'callout-prefix',
+    [
+      '[!decision] use microservices architecture',
+      '[!preference] prefer async patterns',
+      '[!milestone] first beta released',
+    ].join('\n'),
+  ),
+);
+
+await writeFile(join(out, 'memory-cases.json'), JSON.stringify(memoryCases, null, 2) + '\n');
+
+console.log(`fixtures/ports/memory-cases.json written (${memoryCases.length} cases)`);

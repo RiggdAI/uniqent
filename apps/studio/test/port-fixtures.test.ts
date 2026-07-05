@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { normalizeMcpConfig } from '@uniqent/builder';
+import { normalizeMcpConfig, parseMemoryMarkdown, memoryGraph } from '@uniqent/builder';
 
 const FIXTURES_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'fixtures', 'ports');
 
@@ -19,6 +19,31 @@ describe('normalize-cases fixture drift guard', () => {
     for (const c of cases) {
       const actual = normalizeMcpConfig(c.input);
       expect(actual, `case: ${c.name}`).toEqual(c.expected);
+    }
+  });
+});
+
+interface MemoryCase {
+  name: string;
+  markdown: string;
+  parsed: ReturnType<typeof parseMemoryMarkdown>;
+  graph: ReturnType<typeof memoryGraph>;
+}
+
+describe('memory-cases fixture drift guard', () => {
+  it('re-derives each memory case from live TS and matches the committed fixture', async () => {
+    const raw = await readFile(join(FIXTURES_DIR, 'memory-cases.json'), 'utf8');
+    const cases: MemoryCase[] = JSON.parse(raw);
+    for (const c of cases) {
+      const parsedActual = parseMemoryMarkdown(c.markdown);
+      expect(parsedActual, `case: ${c.name} (parsed)`).toEqual(c.parsed);
+      const graphInput = parsedActual.map((it, i) => ({
+        id: `m${i}`,
+        text: it.text,
+        kind: it.kind,
+      }));
+      const graphActual = memoryGraph(graphInput);
+      expect(graphActual, `case: ${c.name} (graph)`).toEqual(c.graph);
     }
   });
 });
