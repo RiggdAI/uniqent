@@ -34,11 +34,7 @@
         "id": "filesystem",
         "transport": "stdio",
         "command": "npx",
-        "args": [
-          "-y",
-          "@modelcontextprotocol/server-filesystem",
-          "${HOME}"
-        ],
+        "args": ["-y", "@modelcontextprotocol/server-filesystem", "${HOME}"],
         "auth": {
           "type": "none"
         },
@@ -56,10 +52,7 @@
         "id": "fetch",
         "transport": "stdio",
         "command": "npx",
-        "args": [
-          "-y",
-          "@modelcontextprotocol/server-fetch"
-        ],
+        "args": ["-y", "@modelcontextprotocol/server-fetch"],
         "auth": {
           "type": "none"
         },
@@ -77,9 +70,7 @@
         "id": "gbrain",
         "transport": "stdio",
         "command": "gbrain",
-        "args": [
-          "serve"
-        ],
+        "args": ["serve"],
         "auth": {
           "type": "none"
         },

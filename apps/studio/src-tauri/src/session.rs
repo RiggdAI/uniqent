@@ -680,4 +680,63 @@ impl Session {
     pub fn reset(&mut self) {
         *self = Session::new();
     }
+
+    /// Preview a pasted MCP config without mutating state. Mirrors TS previewPastedMcp.
+    pub fn paste_mcp_preview(&self, text: &str) -> Value {
+        use crate::ports::mcp_normalize::normalize_mcp_config;
+        let parsed: Value = match serde_json::from_str(text) {
+            Ok(v) => v,
+            Err(_) => {
+                return json!({
+                    "servers": [],
+                    "credentials": [],
+                    "lossiness": ["not valid JSON"]
+                });
+            }
+        };
+        normalize_mcp_config(&parsed)
+    }
+
+    /// Add a pasted MCP config. Returns count of servers added.
+    pub fn add_pasted_mcp(&mut self, text: &str) -> Result<usize, String> {
+        use crate::ports::mcp_normalize::normalize_mcp_config;
+        let parsed: Value =
+            serde_json::from_str(text).map_err(|_| "not valid JSON".to_string())?;
+        let result = normalize_mcp_config(&parsed);
+        let servers = result["servers"].as_array().cloned().unwrap_or_default();
+        let credentials = result["credentials"].as_array().cloned().unwrap_or_default();
+        for s in &servers {
+            self.mcp.retain(|existing| existing["id"].as_str() != s["id"].as_str());
+            self.mcp.push(s.clone());
+        }
+        for c in credentials {
+            self.add_credential(c);
+        }
+        Ok(servers.len())
+    }
+
+    /// Import MCP servers from a JSON array. Each element is normalized individually.
+    /// Returns total server count added.
+    pub fn import_mcp_servers(&mut self, servers: Value) -> Result<usize, String> {
+        use crate::ports::mcp_normalize::normalize_mcp_config;
+        let arr = servers
+            .as_array()
+            .ok_or_else(|| "servers must be an array".to_string())?;
+        let arr = arr.to_vec();
+        let mut n = 0;
+        for raw in arr {
+            let result = normalize_mcp_config(&raw);
+            let svrs = result["servers"].as_array().cloned().unwrap_or_default();
+            let creds = result["credentials"].as_array().cloned().unwrap_or_default();
+            for s in svrs {
+                self.mcp.retain(|existing| existing["id"].as_str() != s["id"].as_str());
+                self.mcp.push(s);
+                n += 1;
+            }
+            for c in creds {
+                self.add_credential(c);
+            }
+        }
+        Ok(n)
+    }
 }

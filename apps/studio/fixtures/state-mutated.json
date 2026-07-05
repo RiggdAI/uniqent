@@ -36,10 +36,7 @@
       "spawnsProcesses": false
     },
     "compatibility": {
-      "targets": [
-        "claude-code",
-        "hermes"
-      ]
+      "targets": ["claude-code", "hermes"]
     }
   },
   "validation": {

@@ -17,7 +17,8 @@
     "native:dev": "tauri dev",
     "native:build": "tauri build",
     "fixtures": "tsx scripts/emit-fixtures.ts",
-    "fixtures:core": "tsx scripts/emit-core-fixtures.ts"
+    "fixtures:core": "tsx scripts/emit-core-fixtures.ts",
+    "fixtures:ports": "tsx scripts/emit-port-fixtures.ts"
   },
   "dependencies": {
     "@radix-ui/react-label": "^2.1.1",

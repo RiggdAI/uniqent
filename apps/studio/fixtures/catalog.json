@@ -85,9 +85,5 @@
       "credential": "webhook_secret"
     }
   ],
-  "targets": [
-    "claude-code",
-    "hermes",
-    "openclaw"
-  ]
+  "targets": ["claude-code", "hermes", "openclaw"]
 }

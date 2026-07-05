@@ -1,0 +1,357 @@
+[
+  {
+    "name": "claude-desktop-stdio-with-secret-env",
+    "input": {
+      "mcpServers": {
+        "brave-search": {
+          "command": "npx",
+          "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+          "env": {
+            "BRAVE_API_KEY": "sk-abcdefghijklmnopqrstuvwxyz0123",
+            "LANG": "en"
+          }
+        }
+      }
+    },
+    "expected": {
+      "servers": [
+        {
+          "id": "brave-search",
+          "transport": "stdio",
+          "command": "npx",
+          "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+          "env": {
+            "BRAVE_API_KEY": "${credentialRef:brave-search_brave_api_key}",
+            "LANG": "en"
+          },
+          "auth": {
+            "type": "none"
+          },
+          "tools": {
+            "include": "all"
+          }
+        }
+      ],
+      "credentials": [
+        {
+          "ref": "brave-search_brave_api_key",
+          "label": "BRAVE_API_KEY",
+          "type": "apiKey",
+          "consumedBy": ["mcp:brave-search"],
+          "required": true
+        }
+      ],
+      "lossiness": []
+    }
+  },
+  {
+    "name": "secret-env-by-name-low-entropy",
+    "input": {
+      "mcpServers": {
+        "x": {
+          "command": "run",
+          "env": {
+            "API_TOKEN": "short"
+          }
+        }
+      }
+    },
+    "expected": {
+      "servers": [
+        {
+          "id": "x",
+          "transport": "stdio",
+          "command": "run",
+          "env": {
+            "API_TOKEN": "${credentialRef:x_api_token}"
+          },
+          "auth": {
+            "type": "none"
+          },
+          "tools": {
+            "include": "all"
+          }
+        }
+      ],
+      "credentials": [
+        {
+          "ref": "x_api_token",
+          "label": "API_TOKEN",
+          "type": "apiKey",
+          "consumedBy": ["mcp:x"],
+          "required": true
+        }
+      ],
+      "lossiness": []
+    }
+  },
+  {
+    "name": "remote-bearer-header",
+    "input": {
+      "mcpServers": {
+        "linear": {
+          "url": "https://mcp.linear.app/sse",
+          "headers": {
+            "Authorization": "Bearer xyz"
+          }
+        }
+      }
+    },
+    "expected": {
+      "servers": [
+        {
+          "id": "linear",
+          "transport": "sse",
+          "url": "https://mcp.linear.app/sse",
+          "auth": {
+            "type": "bearer",
+            "credentialRef": "linear_token"
+          },
+          "tools": {
+            "include": "all"
+          }
+        }
+      ],
+      "credentials": [
+        {
+          "ref": "linear_token",
+          "label": "Authorization",
+          "type": "apiKey",
+          "consumedBy": ["mcp:linear"],
+          "required": true
+        }
+      ],
+      "lossiness": []
+    }
+  },
+  {
+    "name": "remote-non-auth-secret-header",
+    "input": {
+      "mcpServers": {
+        "svc": {
+          "url": "https://api.x.com/mcp",
+          "headers": {
+            "X-API-Key": "abc"
+          }
+        }
+      }
+    },
+    "expected": {
+      "servers": [
+        {
+          "id": "svc",
+          "transport": "streamable-http",
+          "url": "https://api.x.com/mcp",
+          "auth": {
+            "type": "header",
+            "credentialRef": "svc_x_api_key",
+            "headerName": "X-API-Key"
+          },
+          "tools": {
+            "include": "all"
+          }
+        }
+      ],
+      "credentials": [
+        {
+          "ref": "svc_x_api_key",
+          "label": "X-API-Key",
+          "type": "apiKey",
+          "consumedBy": ["mcp:svc"],
+          "required": true
+        }
+      ],
+      "lossiness": []
+    }
+  },
+  {
+    "name": "already-canonical-passthrough",
+    "input": {
+      "id": "gh",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "x"],
+      "auth": {
+        "type": "none"
+      },
+      "tools": {
+        "include": "all"
+      }
+    },
+    "expected": {
+      "servers": [
+        {
+          "id": "gh",
+          "transport": "stdio",
+          "command": "npx",
+          "args": ["-y", "x"],
+          "auth": {
+            "type": "none"
+          },
+          "tools": {
+            "include": "all"
+          }
+        }
+      ],
+      "credentials": [],
+      "lossiness": []
+    }
+  },
+  {
+    "name": "unrecognized-shape",
+    "input": {
+      "totally": "unrelated"
+    },
+    "expected": {
+      "servers": [],
+      "credentials": [],
+      "lossiness": ["unrecognized MCP config format"]
+    }
+  },
+  {
+    "name": "raw-secret-high-entropy",
+    "input": {
+      "mcpServers": {
+        "x": {
+          "command": "run",
+          "env": {
+            "OPENAI_API_KEY": "sk-abcdefghijklmnopqrstuvwxyz0123"
+          }
+        }
+      }
+    },
+    "expected": {
+      "servers": [
+        {
+          "id": "x",
+          "transport": "stdio",
+          "command": "run",
+          "env": {
+            "OPENAI_API_KEY": "${credentialRef:x_openai_api_key}"
+          },
+          "auth": {
+            "type": "none"
+          },
+          "tools": {
+            "include": "all"
+          }
+        }
+      ],
+      "credentials": [
+        {
+          "ref": "x_openai_api_key",
+          "label": "OPENAI_API_KEY",
+          "type": "apiKey",
+          "consumedBy": ["mcp:x"],
+          "required": true
+        }
+      ],
+      "lossiness": []
+    }
+  },
+  {
+    "name": "bare-server-object",
+    "input": {
+      "command": "python",
+      "args": ["-m", "myserver"]
+    },
+    "expected": {
+      "servers": [
+        {
+          "id": "mcp-server",
+          "transport": "stdio",
+          "command": "python",
+          "args": ["-m", "myserver"],
+          "auth": {
+            "type": "none"
+          },
+          "tools": {
+            "include": "all"
+          }
+        }
+      ],
+      "credentials": [],
+      "lossiness": []
+    }
+  },
+  {
+    "name": "servers-array",
+    "input": {
+      "servers": [
+        {
+          "id": "srv1",
+          "command": "node",
+          "args": ["index.js"]
+        }
+      ]
+    },
+    "expected": {
+      "servers": [
+        {
+          "id": "srv1",
+          "transport": "stdio",
+          "command": "node",
+          "args": ["index.js"],
+          "auth": {
+            "type": "none"
+          },
+          "tools": {
+            "include": "all"
+          }
+        }
+      ],
+      "credentials": [],
+      "lossiness": []
+    }
+  },
+  {
+    "name": "null-input",
+    "input": null,
+    "expected": {
+      "servers": [],
+      "credentials": [],
+      "lossiness": ["unrecognized MCP config format"]
+    }
+  },
+  {
+    "name": "already-canonical-invalid-no-url",
+    "input": {
+      "id": "x",
+      "transport": "sse"
+    },
+    "expected": {
+      "servers": [],
+      "credentials": [],
+      "lossiness": ["unrecognized MCP config format"]
+    }
+  },
+  {
+    "name": "remote-with-description",
+    "input": {
+      "mcpServers": {
+        "myapi": {
+          "url": "https://api.myservice.com/mcp",
+          "description": "My API MCP server"
+        }
+      }
+    },
+    "expected": {
+      "servers": [
+        {
+          "id": "myapi",
+          "transport": "streamable-http",
+          "url": "https://api.myservice.com/mcp",
+          "auth": {
+            "type": "none"
+          },
+          "tools": {
+            "include": "all"
+          },
+          "description": "My API MCP server"
+        }
+      ],
+      "credentials": [],
+      "lossiness": []
+    }
+  }
+]
