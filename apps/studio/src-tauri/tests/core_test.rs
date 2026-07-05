@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use uniqent_studio::core::archive::{pack, unpack};
 use uniqent_studio::core::bundle::Bundle;
 use uniqent_studio::core::digest::canonical_digest;
+use uniqent_studio::core::signing::{generate_keypair, sign, verify};
 
 fn core_fixtures() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../fixtures/core")
@@ -67,4 +68,40 @@ fn rust_pack_roundtrips_and_preserves_digest() {
     let packed = pack(&b).expect("packs");
     let back = unpack(&packed).expect("unpacks own output");
     assert_eq!(canonical_digest(&back), expected_digest());
+}
+
+#[test]
+fn verifies_the_ts_signed_fixture() {
+    let bytes = fs::read(core_fixtures().join("fixture-signed.uniqent")).expect("signed fixture");
+    let b = unpack(&bytes).expect("unpacks");
+    let kp: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(core_fixtures().join("keypair.json")).unwrap()).unwrap();
+    let v = verify(&b);
+    assert!(v.signed && v.valid, "TS-signed bundle must verify in Rust: {:?}", v.reason);
+    assert_eq!(v.public_key.as_deref(), kp["publicKey"].as_str());
+}
+
+#[test]
+fn rust_sign_self_verifies_and_ts_keypair_signs() {
+    // With the committed TS keypair: Rust-signed bundle verifies (same key derivation).
+    let kp: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(core_fixtures().join("keypair.json")).unwrap()).unwrap();
+    let signed = sign(&fixture_bundle(), kp["privateKey"].as_str().unwrap()).expect("signs");
+    let v = verify(&signed);
+    assert!(v.signed && v.valid);
+    assert_eq!(v.public_key.as_deref(), kp["publicKey"].as_str());
+    // And a fresh Rust keypair round-trips too.
+    let fresh = generate_keypair();
+    let signed2 = sign(&fixture_bundle(), &fresh.private_key).expect("signs");
+    assert!(verify(&signed2).valid);
+}
+
+#[test]
+fn tampered_content_fails_verification_with_exact_reason() {
+    let bytes = fs::read(core_fixtures().join("fixture-signed.uniqent")).unwrap();
+    let mut b = unpack(&bytes).unwrap();
+    b.set("README.md", b"tampered".to_vec());
+    let v = verify(&b);
+    assert!(v.signed && !v.valid);
+    assert_eq!(v.reason.as_deref(), Some("digest mismatch (content changed)"));
 }
