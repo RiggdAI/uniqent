@@ -312,6 +312,7 @@ export class StudioSession {
       };
       if (typeof raw.importance === 'number') item.importance = raw.importance;
       if (raw.visibility === 'personal') item.visibility = 'personal';
+      if (typeof raw.source === 'string') item.source = raw.source;
       this.brain.addMemory(item);
     }
     return kept.length;

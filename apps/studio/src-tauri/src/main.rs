@@ -43,6 +43,12 @@ fn main() {
             // Profile
             commands::get_profile,
             commands::set_profile,
+            // Hubs + publish
+            commands::add_mcp_hub_result,
+            commands::hub_indexes,
+            commands::set_hub_indexes,
+            commands::publish_payload,
+            commands::registry_token,
         ])
         .run(tauri::generate_context!())
         .expect("error while running uniqent studio");

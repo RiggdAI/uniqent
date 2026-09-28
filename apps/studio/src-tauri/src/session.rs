@@ -145,6 +145,45 @@ fn validate_visibility(value: Option<&Value>, field: &str) -> Result<Option<&'st
     }
 }
 
+/// A credential requirement in the spec's shape (never a value). Mirrors CredentialRequirement.
+fn validate_credential(c: &Value) -> Result<(), String> {
+    const TYPES: [&str; 5] = ["apiKey", "bearer", "header", "oauth2", "envVar"];
+    let non_empty = |k: &str| c[k].as_str().is_some_and(|v| !v.is_empty());
+    if !c.is_object() {
+        return Err(format!("must be an object, got {c}"));
+    }
+    if !non_empty("ref") {
+        return Err("ref must be a non-empty string".into());
+    }
+    if !non_empty("label") {
+        return Err("label must be a non-empty string".into());
+    }
+    let ty = c["type"].as_str().unwrap_or("");
+    if !TYPES.contains(&ty) {
+        return Err(format!(
+            "type must be one of {}, got {}",
+            TYPES.join("|"),
+            c["type"]
+        ));
+    }
+    let consumers_ok = c["consumedBy"]
+        .as_array()
+        .is_some_and(|a| a.iter().all(Value::is_string));
+    if !consumers_ok {
+        return Err("consumedBy must be an array of strings".into());
+    }
+    if !c["required"].is_boolean() {
+        return Err("required must be a boolean".into());
+    }
+    if !(c["help"].is_null() || c["help"].is_string()) {
+        return Err("help must be a string".into());
+    }
+    if !c["oauth"].is_null() && ty != "oauth2" {
+        return Err("oauth details are only allowed when type is \"oauth2\"".into());
+    }
+    Ok(())
+}
+
 /// Error for a skill name that is not slug-safe (it becomes a directory name on install).
 fn invalid_skill_name(name: &str) -> String {
     format!(
@@ -242,6 +281,7 @@ pub struct Session {
     profile: Option<Value>,        // profile object or None
     fact_counter: u32,
     task_counter: u32,
+    hub_index_urls: Vec<String>, // extra JSON-index hub URLs (https only)
 }
 
 impl Default for Session {
@@ -271,6 +311,7 @@ impl Session {
             profile: None,
             fact_counter: 0,
             task_counter: 0,
+            hub_index_urls: vec![],
         }
     }
 
@@ -293,6 +334,70 @@ impl Session {
             self.add_credential(cred);
         }
         Ok(())
+    }
+
+    /// Add a hub search result: its server plus every credential it declares. All credentials are
+    /// validated first (spec CredentialRequirement shape); on any error nothing changes.
+    pub fn add_mcp_hub_result(
+        &mut self,
+        server: Value,
+        credentials: Vec<Value>,
+    ) -> Result<(), String> {
+        for (i, c) in credentials.iter().enumerate() {
+            validate_credential(c).map_err(|e| format!("credentials[{i}]: {e}"))?;
+        }
+        self.add_custom_mcp(server)?;
+        for c in credentials {
+            self.add_credential(c);
+        }
+        Ok(())
+    }
+
+    /// Extra JSON-index hub URLs searched alongside the built-in hubs.
+    pub fn hub_indexes(&self) -> Vec<String> {
+        self.hub_index_urls.clone()
+    }
+
+    /// Replace the JSON-index hub URLs: trimmed, https only, deduped in order.
+    pub fn set_hub_indexes(&mut self, urls: Vec<String>) -> Result<Vec<String>, String> {
+        let mut kept: Vec<String> = vec![];
+        for url in urls {
+            let url = url.trim().to_string();
+            if !url.starts_with("https://") {
+                return Err(format!("hub index URLs must use https://, got {url}"));
+            }
+            if !kept.contains(&url) {
+                kept.push(url);
+            }
+        }
+        self.hub_index_urls = kept.clone();
+        Ok(kept)
+    }
+
+    /// The brain's memory facts (bundle shape), e.g. to read provenance.
+    pub fn memory_items(&self) -> Vec<Value> {
+        self.facts.clone()
+    }
+
+    /// The memory-pack upload for the hub: shareable facts only (personal ones never leave).
+    pub fn publish_payload(&self) -> Result<Value, String> {
+        let facts: Vec<Value> = self
+            .facts
+            .iter()
+            .filter(|f| f["visibility"].as_str() != Some("personal"))
+            .map(|f| json!({ "kind": f["kind"], "text": f["text"] }))
+            .collect();
+        if facts.is_empty() {
+            return Err("no shareable memory to publish".into());
+        }
+        let m = &self.state()["manifest"];
+        Ok(json!({
+            "slug": m["name"],
+            "name": m["displayName"],
+            "description": m["description"],
+            "tags": m["tags"],
+            "facts": facts,
+        }))
     }
 
     /// Add custom MCP server. Merges tools:{include:'all'} as default.
@@ -1055,6 +1160,13 @@ impl Session {
                 }
                 if visibility == Some("personal") {
                     fact["visibility"] = json!("personal");
+                }
+                match raw.get("source") {
+                    None | Some(Value::Null) => {}
+                    Some(Value::String(src)) => fact["source"] = json!(src),
+                    Some(other) => {
+                        return Err(format!("items[{i}].source must be a string, got {other}"))
+                    }
                 }
                 pending.push((id, fact));
             }

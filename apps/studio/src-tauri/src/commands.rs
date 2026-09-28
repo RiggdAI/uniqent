@@ -173,7 +173,11 @@ pub fn remove_task(s: State<AppState>, id: String) -> Value {
 // ── Memory commands ───────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn add_memory(s: State<AppState>, text: String, importance: Option<f64>) -> Result<Value, String> {
+pub fn add_memory(
+    s: State<AppState>,
+    text: String,
+    importance: Option<f64>,
+) -> Result<Value, String> {
     let mut g = s.0.lock().unwrap();
     let mut input = serde_json::json!({ "text": text });
     if let Some(imp) = importance {
@@ -213,4 +217,37 @@ pub fn set_profile(s: State<AppState>, profile: Value) -> Result<Value, String> 
     let mut g = s.0.lock().unwrap();
     g.set_profile(profile)?;
     Ok(g.state())
+}
+
+// ── Hubs, memory provenance, publish ────────────────────────────────────────
+
+#[tauri::command]
+pub fn add_mcp_hub_result(
+    s: State<AppState>,
+    server: Value,
+    credentials: Vec<Value>,
+) -> Result<Value, String> {
+    let mut g = s.0.lock().unwrap();
+    g.add_mcp_hub_result(server, credentials)?;
+    Ok(g.state())
+}
+
+#[tauri::command]
+pub fn hub_indexes(s: State<AppState>) -> Vec<String> {
+    s.0.lock().unwrap().hub_indexes()
+}
+
+#[tauri::command]
+pub fn set_hub_indexes(s: State<AppState>, urls: Vec<String>) -> Result<Vec<String>, String> {
+    s.0.lock().unwrap().set_hub_indexes(urls)
+}
+
+#[tauri::command]
+pub fn publish_payload(s: State<AppState>) -> Result<Value, String> {
+    s.0.lock().unwrap().publish_payload()
+}
+
+#[tauri::command]
+pub fn registry_token(registry: String) -> Result<Option<String>, String> {
+    crate::credentials::registry_token(&registry)
 }
