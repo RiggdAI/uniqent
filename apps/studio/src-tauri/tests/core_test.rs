@@ -103,7 +103,7 @@ fn rust_sign_self_verifies_and_ts_keypair_signs() {
     assert!(v.signed && v.valid);
     assert_eq!(v.public_key.as_deref(), kp["publicKey"].as_str());
     // And a fresh Rust keypair round-trips too.
-    let fresh = generate_keypair();
+    let fresh = generate_keypair().expect("keypair");
     let signed2 = sign(&fixture_bundle(), &fresh.private_key).expect("signs");
     assert!(verify(&signed2).valid);
 }
@@ -149,7 +149,7 @@ fn a_planted_secret_blocks_pack_and_sign() {
         pack_checked(&b).is_err(),
         "pack_checked must block when secret found"
     );
-    let kp = generate_keypair();
+    let kp = generate_keypair().expect("keypair");
     assert!(
         sign(&b, &kp.private_key).is_err(),
         "sign must gate on the scan"

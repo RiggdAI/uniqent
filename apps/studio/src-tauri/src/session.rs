@@ -922,7 +922,7 @@ impl Session {
 
         let (final_bundle, signed) = if sign_it {
             if self.keypair.is_none() {
-                self.keypair = Some(generate_keypair());
+                self.keypair = Some(generate_keypair()?);
             }
             let kp = self.keypair.as_ref().unwrap();
             let signed_bundle = sign(&bundle, &kp.private_key)?;
