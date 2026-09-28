@@ -116,7 +116,10 @@ default).
   `#tags`, plus a **"Memory brain"** force-directed graph (🧠 button) of memory↔entities↔tags
   (`packages/builder/src/memory/parse.ts` builds the graph; `d3-force` lays it out). Run:
   `pnpm --filter @uniqent/studio build && pnpm --filter @uniqent/studio start` (`:4173`,
-  `UNIQENT_STUDIO_PORT` to override). Verified in a real browser.
+  `UNIQENT_STUDIO_PORT` to override). Verified in a real browser. The native Tauri app (`native:dev`/`native:build`) runs all
+  of this except install/capture (Phase 4): Rust owns files/session/crypto, the web UI runs the
+  CLI's pure logic via the `@uniqent/core/pure`, `@uniqent/builder/{hubs,memory}` entries (no Node APIs —
+  enforced by lint + `packages/builder/test/pure-entries.test.ts`) with an injected `fetch`.
 - **Install** — `@uniqent/adapter-sdk` (Adapter interface + conformance harness) +
   `@uniqent/adapter-claude-code` (skills→`.claude/skills`, persona+memory→a managed
   `<!-- uniqent:begin/end -->` section of `AGENTS.md` (+ an `@AGENTS.md` import when a `CLAUDE.md`
