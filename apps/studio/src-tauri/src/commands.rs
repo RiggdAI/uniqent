@@ -16,10 +16,10 @@ pub fn catalog(s: State<AppState>) -> Value {
 }
 
 #[tauri::command]
-pub fn set_meta(s: State<AppState>, meta: Value) -> Value {
+pub fn set_meta(s: State<AppState>, meta: Value) -> Result<Value, String> {
     let mut g = s.0.lock().unwrap();
-    g.set_meta(meta);
-    g.state()
+    g.set_meta(meta)?;
+    Ok(g.state())
 }
 
 #[tauri::command]
@@ -121,10 +121,14 @@ pub fn add_skill_catalog(s: State<AppState>, name: String) -> Result<Value, Stri
 }
 
 #[tauri::command]
-pub fn add_custom_skill(s: State<AppState>, name: String, skill_md: String) -> Value {
+pub fn add_custom_skill(
+    s: State<AppState>,
+    name: String,
+    skill_md: String,
+) -> Result<Value, String> {
     let mut g = s.0.lock().unwrap();
-    g.add_custom_skill(&name, &skill_md);
-    g.state()
+    g.add_custom_skill(&name, &skill_md)?;
+    Ok(g.state())
 }
 
 #[tauri::command]
@@ -205,8 +209,8 @@ pub fn get_profile(s: State<AppState>) -> Value {
 }
 
 #[tauri::command]
-pub fn set_profile(s: State<AppState>, profile: Value) -> Value {
+pub fn set_profile(s: State<AppState>, profile: Value) -> Result<Value, String> {
     let mut g = s.0.lock().unwrap();
-    g.set_profile(profile);
-    g.state()
+    g.set_profile(profile)?;
+    Ok(g.state())
 }

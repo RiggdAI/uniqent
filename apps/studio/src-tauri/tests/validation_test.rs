@@ -131,3 +131,171 @@ fn default_session_state_validation_ok_true() {
         "default session must have no errors, got: {errors:?}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Session input validation (parity with the TS Studio API)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn set_meta_rejects_invalid_values_without_changing_anything() {
+    let mut s = Session::new();
+    let err = s
+        .set_meta(serde_json::json!({"name": "My Brain", "version": "1.0.0"}))
+        .unwrap_err();
+    assert!(err.contains("\"name\""), "got: {err}");
+    assert!(s
+        .set_meta(serde_json::json!({"name": "ok-name", "version": "v1"}))
+        .is_err());
+    let state = s.state();
+    assert_eq!(state["manifest"]["name"], "my-brain");
+    assert_eq!(state["manifest"]["version"], "0.1.0");
+    assert_eq!(state["validation"]["ok"], true);
+    s.set_meta(serde_json::json!({"name": "renamed", "displayName": "Renamed"}))
+        .unwrap();
+    assert_eq!(s.state()["manifest"]["displayName"], "Renamed");
+}
+
+#[test]
+fn memory_importance_must_be_between_0_and_1() {
+    let mut s = Session::new();
+    let err = s
+        .add_fact(serde_json::json!({"text": "x", "importance": 5}))
+        .unwrap_err();
+    assert!(err.contains("between 0 and 1"), "got: {err}");
+    assert!(s
+        .import_memory(
+            serde_json::json!({"items": [{"text": "ok"}, {"text": "y", "importance": -1}]})
+        )
+        .is_err());
+    assert!(s
+        .import_memory(serde_json::json!({"items": [null]}))
+        .is_err());
+    assert!(s
+        .import_memory(serde_json::json!({"items": [{"text": "z", "kind": "gossip"}]}))
+        .is_err());
+    // Nothing was added by the rejected batches.
+    assert_eq!(s.state()["manifest"]["components"]["memory"]["facts"], 0);
+    s.add_fact(serde_json::json!({"text": "x", "importance": 1}))
+        .unwrap();
+    assert_eq!(s.state()["manifest"]["components"]["memory"]["facts"], 1);
+}
+
+#[test]
+fn skill_names_must_be_slugs_and_unique() {
+    let mut s = Session::new();
+    for bad in ["My Skill!", "..", "", "-x"] {
+        assert!(s.add_custom_skill(bad, "# x").is_err(), "accepted {bad:?}");
+    }
+    s.add_custom_skill("notes", "# one").unwrap();
+    let err = s.add_custom_skill("notes", "# two").unwrap_err();
+    assert!(err.contains("already in this brain"), "got: {err}");
+}
+
+#[test]
+fn tasks_validate_cron_and_trigger_type() {
+    let mut s = Session::new();
+    for cron in [
+        "every day at nine",
+        "0 25 * * *",
+        "* * * *",
+        "*/0 * * * *",
+        "5-1 * * * *",
+    ] {
+        let err = s
+            .add_task(serde_json::json!({"triggerType": "schedule", "cron": cron}))
+            .unwrap_err();
+        assert!(err.starts_with("invalid cron"), "cron {cron:?}: {err}");
+    }
+    assert!(s
+        .add_task(serde_json::json!({"triggerType": "sometimes"}))
+        .is_err());
+    assert!(s
+        .add_task(serde_json::json!({"triggerType": "event", "event": " "}))
+        .is_err());
+    assert_eq!(
+        s.state()["manifest"]["components"]["tasks"]
+            .as_array()
+            .unwrap()
+            .len(),
+        0
+    );
+    s.add_task(
+        serde_json::json!({"name": "", "triggerType": "schedule", "cron": "*/15 9-17 * * 1-5"}),
+    )
+    .unwrap();
+    s.add_task(serde_json::json!({"triggerType": "manual", "cron": "0 9 * * *"}))
+        .unwrap();
+    assert_eq!(
+        s.state()["manifest"]["components"]["tasks"],
+        serde_json::json!(["task-1", "task-2"])
+    );
+}
+
+#[test]
+fn cron_problem_matches_the_ts_rules() {
+    use uniqent_studio::session::cron_problem;
+    assert_eq!(cron_problem("0 9 * * *"), None);
+    assert_eq!(cron_problem("0,30 */2 1-15 1,6,12 0-7"), None);
+    assert!(cron_problem("every day at nine").is_some());
+    assert!(cron_problem("60 * * * *").is_some());
+}
+
+#[test]
+fn profile_must_be_an_object_of_text() {
+    let mut s = Session::new();
+    assert!(s.set_profile(serde_json::json!("abc")).is_err());
+    assert!(s.set_profile(serde_json::json!({"age": 3})).is_err());
+    assert!(s
+        .set_profile(serde_json::json!({"Role": "a", " Role ": "b"}))
+        .is_err());
+    s.set_profile(serde_json::json!({"Role": "Engineer"}))
+        .unwrap();
+    assert_eq!(s.get_profile(), serde_json::json!({"Role": "Engineer"}));
+}
+
+#[test]
+fn facts_carry_a_real_created_at() {
+    use base64::Engine;
+    let mut s = Session::new();
+    s.add_fact(serde_json::json!({"text": "remember me"}))
+        .unwrap();
+    s.import_memory(serde_json::json!({"text": "line one"}))
+        .unwrap();
+    let out = s.export(false).unwrap();
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(out["bytesBase64"].as_str().unwrap())
+        .unwrap();
+    let b = uniqent_studio::core::archive::unpack(&bytes).unwrap();
+    let facts = String::from_utf8(b.get("memory/facts.jsonl").unwrap().clone()).unwrap();
+    let ts = regex::Regex::new(r"^20\d\d-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$").unwrap();
+    for line in facts.lines() {
+        let fact: serde_json::Value = serde_json::from_str(line).unwrap();
+        let created = fact["createdAt"].as_str().unwrap();
+        assert!(
+            ts.is_match(created),
+            "createdAt {created:?} is not a current ISO timestamp"
+        );
+    }
+}
+
+#[test]
+fn generated_fact_ids_skip_imported_ones() {
+    let mut s = Session::new();
+    s.import_memory(serde_json::json!({"items": [{"id": "fact-1", "text": "imported"}]}))
+        .unwrap();
+    s.add_fact(serde_json::json!({"text": "typed"})).unwrap();
+    assert!(s
+        .import_memory(serde_json::json!({"items": [{"id": "fact-1", "text": "again"}]}))
+        .unwrap_err()
+        .contains("duplicate memory id"));
+    let ids: Vec<String> = s.memory_graph()["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|n| n["id"].as_str().map(String::from))
+        .collect();
+    assert!(
+        ids.contains(&"mem:fact-1".to_string()) && ids.contains(&"mem:fact-2".to_string()),
+        "{ids:?}"
+    );
+}

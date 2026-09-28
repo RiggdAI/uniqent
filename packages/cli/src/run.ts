@@ -1,6 +1,7 @@
 import { readFile, writeFile, stat, readdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { basename, join, relative, sep } from 'node:path';
+import { basename, dirname, join, relative, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   unpack,
   verify,
@@ -10,6 +11,7 @@ import {
   readDir,
   validateBundle,
   scanForSecrets,
+  publicKeyFingerprint,
 } from '@uniqent/core';
 import type { Bundle } from '@uniqent/core';
 import type { Adapter, ResolvedCredentials } from '@uniqent/adapter-sdk';
@@ -29,18 +31,29 @@ import {
   findFeatured,
   featuredBrains,
   detectTarget,
+  AmbiguousTargetError,
 } from '@uniqent/builder';
-import type { VaultFile, MemoryPackUpload } from '@uniqent/builder';
+import type { VaultFile, MemoryPackUpload, TargetGuess } from '@uniqent/builder';
 import { saveToken, clearToken, resolveToken } from './credentials.js';
 import { runDeviceLogin } from './device.js';
-import { fetchIndex, findEntry, looksLikeSlug, registryUrl } from './registry.js';
+import { fetchIndex, findEntry, isUrl, looksLikeSlug, registryUrl } from './registry.js';
+import type { RegistryIndex } from './registry.js';
 import { loadFeaturedBundle } from './featured.js';
+import { parseArgs, wantsHelp, UsageError, type FlagSpec } from './args.js';
+import { download } from './download.js';
+import { safe, describeMcpServers, describeIssues } from './display.js';
+import { defaultRoot, nextStep } from './targets.js';
 
 export interface CliIo {
   log: (msg: string) => void;
   error: (msg: string) => void;
-  /** Interactive prompt; omit in non-interactive contexts (credentials must come from flags/env). */
+  /**
+   * Interactive prompt; present only on a TTY. Without it, commands never block on stdin:
+   * confirmations need --yes and credentials need --cred / UNIQENT_CRED_<REF>.
+   */
   prompt?: (question: string) => Promise<string>;
+  /** Like `prompt`, but the typed answer is not echoed (for credential values). */
+  promptSecret?: (question: string) => Promise<string>;
 }
 
 const ADAPTERS: Record<string, Adapter> = {
@@ -49,74 +62,111 @@ const ADAPTERS: Record<string, Adapter> = {
   openclaw: openClawAdapter,
 };
 
-const BOOLEAN_FLAGS = new Set(['yes', 'allow-unsigned', 'json', 'sign', 'dry-run', 'list']);
+/** Flags each command accepts; anything else is a usage error. */
+const FLAGS: Record<string, FlagSpec> = {
+  try: {
+    boolean: ['yes', 'allow-unsigned', 'dry-run', 'list'],
+    value: ['target', 'root', 'registry', 'version'],
+    cred: true,
+  },
+  inspect: { boolean: [], value: ['registry', 'version'], cred: false },
+  install: {
+    boolean: ['yes', 'allow-unsigned', 'dry-run'],
+    value: ['target', 'root', 'registry', 'version'],
+    cred: true,
+  },
+  validate: { boolean: [], value: [], cred: false },
+  pack: { boolean: ['sign'], value: ['out', 'key'], cred: false },
+  search: { boolean: [], value: ['registry'], cred: false },
+  hub: { boolean: ['json'], value: ['index'], cred: false },
+  export: { boolean: ['sign'], value: ['from', 'root', 'out', 'key'], cred: false },
+  'import-vault': {
+    boolean: ['sign'],
+    value: ['name', 'version', 'description', 'author', 'out', 'key'],
+    cred: false,
+  },
+  'publish-memory': {
+    boolean: [],
+    value: ['registry', 'token', 'slug', 'name', 'description', 'tags'],
+    cred: false,
+  },
+  publish: { boolean: ['sign'], value: ['registry', 'token', 'key'], cred: false },
+  login: { boolean: [], value: ['registry', 'token'], cred: false },
+  logout: { boolean: [], value: ['registry'], cred: false },
+  keygen: { boolean: [], value: ['out'], cred: false },
+  sign: { boolean: [], value: ['key', 'out'], cred: false },
+};
 
-interface ParsedArgs {
-  positionals: string[];
-  flags: Record<string, string | true>;
-  creds: Record<string, string>;
-}
+/** Per-command usage, shown by `<cmd> --help` and in the top-level usage. */
+const USAGE: Record<string, string> = {
+  try: 'try <brain> [--target <id>] [--root <dir>] [--cred <ref>=<value>] [--yes] [--dry-run] [--list]   (one-command install of a featured brain)',
+  inspect: 'inspect <file|url|slug> [--registry <url|file>] [--version <v>]',
+  install:
+    'install <file|url|slug> [--target <claude-code|hermes|openclaw>] [--root <dir>] [--cred <ref>=<value>] [--registry <url|file>] [--version <v>] [--allow-unsigned] [--dry-run] [--yes]',
+  validate: 'validate <dir|file.uniqent>',
+  pack: 'pack <dir> [-o <file>] [--sign|--key <keyfile>]',
+  search: 'search <query> --registry <url|file>',
+  hub: 'hub <mcp|skills> <query> [--index <url,url>] [--json]',
+  export:
+    'export [--from <claude-code|hermes|openclaw>] --root <dir> [-o <file>] [--sign|--key <keyfile>]',
+  'import-vault':
+    'import-vault <dir> [--name <n>] [--version <v>] [--description <d>] [--author <a>] [-o <file>] [--sign|--key <keyfile>]   (Obsidian/second-brain → .uniqent)',
+  'publish-memory':
+    'publish-memory <pack.json|notes.md> --slug <s> --name <n> [--description <d>] [--registry <site>] [--token <t>] [--tags a,b]',
+  publish: 'publish <file.uniqent|dir> [--registry <site>] [--token <t>] [--sign|--key <keyfile>]',
+  login: 'login [--registry <site>] [--token <t>]',
+  logout: 'logout [--registry <site>]',
+  keygen: 'keygen [-o <keyfile>]',
+  sign: 'sign <file.uniqent> --key <keyfile> [-o <file>]',
+};
 
-function parseArgs(args: string[]): ParsedArgs {
-  const positionals: string[] = [];
-  const flags: Record<string, string | true> = {};
-  const creds: Record<string, string> = {};
-  for (let i = 0; i < args.length; i++) {
-    const a = args[i];
-    if (a === undefined) continue;
-    if (a.startsWith('--')) {
-      const key = a.slice(2);
-      if (key === 'cred') {
-        const v = args[++i] ?? '';
-        const eq = v.indexOf('=');
-        if (eq > 0) creds[v.slice(0, eq)] = v.slice(eq + 1);
-      } else if (BOOLEAN_FLAGS.has(key)) {
-        flags[key] = true;
-      } else {
-        const next = args[i + 1];
-        if (next !== undefined && !next.startsWith('--')) flags[key] = args[++i] as string;
-        else flags[key] = true;
-      }
-    } else if (a === '-o') {
-      flags.out = args[++i] ?? '';
-    } else {
-      positionals.push(a);
-    }
+/** Unpack archive bytes, turning a non-gzip payload into a clear "not a .uniqent" error. */
+async function unpackFrom(bytes: Uint8Array, source: string): Promise<Bundle> {
+  try {
+    return await unpack(bytes);
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code;
+    if (typeof code === 'string' && code.startsWith('Z_'))
+      throw new Error(`not a .uniqent (gzip) file: ${source}`);
+    throw e;
   }
-  return { positionals, flags, creds };
 }
 
-async function bundleFromUrl(url: string): Promise<Bundle> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`fetch failed: ${res.status} ${res.statusText}`);
-  return unpack(new Uint8Array(await res.arrayBuffer()));
+async function bundleFromUrl(url: string, io: CliIo): Promise<Bundle> {
+  return unpackFrom(await download(url, io.error), url);
+}
+
+async function bundleFromFile(path: string): Promise<Bundle> {
+  return unpackFrom(new Uint8Array(await readFile(path)), path);
 }
 
 /**
  * Resolve an install target into a bundle. A target is one of:
- *  - an http(s) URL to a .uniqent          → fetched directly
- *  - a bare registry slug (e.g. dev-powerpack) → resolved via the registry index, no service
- *  - a local file path                      → read from disk
+ *  - an https URL to a .uniqent (http only on loopback) → downloaded
+ *  - an existing local file path                         → read from disk
+ *  - a bare registry slug (e.g. dev-powerpack)           → resolved via the registry index
  */
 async function resolveBundle(
   target: string,
   flags: Record<string, string | true>,
+  io: CliIo,
 ): Promise<Bundle> {
-  if (/^https?:\/\//.test(target)) return bundleFromUrl(target);
+  if (isUrl(target)) return bundleFromUrl(target, io);
+  if (await pathExists(target)) return bundleFromFile(target);
   if (looksLikeSlug(target)) {
     const reg = registryUrl(flags.registry);
     if (!reg) {
       throw new Error(
-        `"${target}" looks like a registry slug but no registry is set (pass --registry <url> or set UNIQENT_REGISTRY), or give a file path or URL`,
+        `"${target}" looks like a registry slug but no registry is set (pass --registry <url|file> or set UNIQENT_REGISTRY), or give a file path or URL`,
       );
     }
     const wanted = typeof flags.version === 'string' ? flags.version : undefined;
-    const entry = findEntry(await fetchIndex(reg), target, wanted);
+    const entry = findEntry(await fetchIndex(reg, io.error), target, wanted);
     if (!entry)
       throw new Error(`"${target}"${wanted ? `@${wanted}` : ''} not found in registry ${reg}`);
-    return bundleFromUrl(entry.url);
+    return bundleFromUrl(entry.url, io);
   }
-  return unpack(new Uint8Array(await readFile(target)));
+  throw new Error(`no such file: ${target}`);
 }
 
 /** Load a bundle for validate/pack: a directory (canonical layout) or a packed file. */
@@ -124,11 +174,26 @@ async function loadDirOrFile(target: string): Promise<Bundle> {
   const isDir = await stat(target)
     .then((s) => s.isDirectory())
     .catch(() => false);
-  return isDir ? readDir(target) : unpack(new Uint8Array(await readFile(target)));
+  return isDir ? readDir(target) : bundleFromFile(target);
+}
+
+/** Validate a loaded bundle; print readable problems and return false when it is invalid. */
+function reportInvalid(bundle: Bundle, cmd: string, io: CliIo): boolean {
+  const result = validateBundle(bundle);
+  if (result.ok) return false;
+  const lines = describeIssues(result.errors);
+  io.error(`${cmd}: invalid bundle (${lines.length} error(s)):`);
+  for (const line of lines) io.error(`  ${line}`);
+  return true;
+}
+
+/** "signed by <fingerprint>" line; any key can sign, so the fingerprint is what to compare. */
+function signerLine(publicKey: string): string {
+  return `signed by key ${publicKeyFingerprint(publicKey)} (anyone can sign; compare this fingerprint with the one the publisher advertises)`;
 }
 
 async function inspect(args: string[], io: CliIo): Promise<number> {
-  const { positionals, flags } = parseArgs(args);
+  const { positionals, flags } = parseArgs(args, FLAGS.inspect as FlagSpec);
   const file = positionals[0];
   if (!file) {
     io.error('inspect: missing <file.uniqent|url|slug>');
@@ -136,26 +201,37 @@ async function inspect(args: string[], io: CliIo): Promise<number> {
   }
   let bundle: Bundle;
   try {
-    bundle = await resolveBundle(file, flags);
+    bundle = await resolveBundle(file, flags, io);
   } catch (e) {
     io.error(`inspect: ${(e as Error).message}`);
     return 1;
   }
+  if (reportInvalid(bundle, 'inspect', io)) return 1;
   const m = bundle.manifest();
   const v = await verify(bundle);
-  io.log(`${m.displayName}  (${m.name}@${m.version})`);
-  if (m.description) io.log(m.description);
-  io.log(`signature: ${v.signed ? (v.valid ? 'valid ✓' : 'INVALID ✗') : 'unsigned'}`);
+  io.log(`${safe(m.displayName)}  (${m.name}@${m.version})`);
+  if (m.description) io.log(safe(m.description));
+  io.log(
+    `signature: ${v.signed ? (v.valid ? 'valid ✓' : `INVALID ✗ (${v.reason ?? 'unknown reason'})`) : 'unsigned'}`,
+  );
+  if (v.signed && v.publicKey) io.log(`  ${signerLine(v.publicKey)}`);
   io.log(
     `components: identity=${m.components.identity} skills=${m.components.skills.length} mcp=${m.components.mcp.length} memory=${m.components.memory.facts} tasks=${m.components.tasks.length} channels=${m.components.channels.length}`,
   );
   io.log(
-    `permissions: network=[${m.permissions.network.endpoints.join(', ')}] autonomy=${m.permissions.autonomy} spawnsProcesses=${m.permissions.spawnsProcesses}`,
+    `permissions: network=[${m.permissions.network.endpoints.map(safe).join(', ')}] autonomy=${m.permissions.autonomy} spawnsProcesses=${m.permissions.spawnsProcesses}`,
   );
+  const mcp = describeMcpServers(bundle);
+  if (mcp.length > 0) {
+    io.log('mcp servers:');
+    for (const line of mcp) io.log(`  - ${line}`);
+  }
   if (m.credentials.length > 0) {
     io.log('credentials:');
     for (const c of m.credentials) {
-      io.log(`  - ${c.ref} (${c.type}${c.required ? ', required' : ''}) — ${c.label}`);
+      io.log(
+        `  - ${safe(c.ref)} (${c.type}${c.required ? ', required' : ', optional'}) — ${safe(c.label)}`,
+      );
     }
   }
   return 0;
@@ -177,49 +253,81 @@ async function runInstall(bundle: Bundle, opts: RunInstallOpts, io: CliIo): Prom
     io.error(`unknown target "${opts.target}" (available: ${Object.keys(ADAPTERS).join(', ')})`);
     return 1;
   }
+  if (reportInvalid(bundle, 'install', io)) return 1;
 
   const v = await verify(bundle);
-  if (!v.signed || !v.valid) {
+  if (v.signed && !v.valid) {
+    // Never overridable: a broken signature means the content changed after signing.
+    io.error(
+      `bundle signature is INVALID (${v.reason ?? 'unknown reason'}): it was modified after signing; refusing to install. --allow-unsigned does not override an invalid signature.`,
+    );
+    return 1;
+  }
+  if (!v.signed) {
     if (!opts.allowUnsigned) {
-      io.error(
-        `bundle is ${v.signed ? 'INVALID (tampered)' : 'unsigned'}; refusing. Pass --allow-unsigned to override.`,
-      );
+      io.error('bundle is unsigned; refusing. Pass --allow-unsigned to override.');
       return 1;
     }
-    io.log(
-      `WARNING: installing an ${v.signed ? 'INVALID' : 'unsigned'} bundle (--allow-unsigned).`,
-    );
+    io.log('WARNING: installing an unsigned bundle (--allow-unsigned).');
   } else {
     io.log('signature: valid ✓');
+    if (v.publicKey) io.log(`  ${signerLine(v.publicKey)}`);
   }
 
   const plan = await adapter.plan(bundle, { root: opts.root });
   io.log(`\nPlan — ${adapter.displayName} at ${opts.root}:`);
-  for (const w of plan.writes) io.log(`  write ${w.path}  (${w.summary})`);
+  for (const w of plan.writes) io.log(`  write ${safe(w.path)}  (${safe(w.summary)})`);
+  const mcp = describeMcpServers(bundle);
+  if (mcp.length > 0) {
+    io.log('mcp servers (these commands/URLs will be registered with the agent):');
+    for (const line of mcp) io.log(`  ${line}`);
+  }
   if (plan.lossiness.length > 0) {
     io.log('lossiness:');
-    for (const l of plan.lossiness) io.log(`  ${l.action}: ${l.component} — ${l.issue}`);
+    for (const l of plan.lossiness)
+      io.log(`  ${l.action}: ${safe(l.component)} — ${safe(l.issue)}`);
   }
 
   if (opts.dryRun) {
     if (plan.requiresCredentials.length > 0)
-      io.log(`requires credentials: ${plan.requiresCredentials.join(', ')}`);
+      io.log(`requires credentials: ${plan.requiresCredentials.map(safe).join(', ')}`);
     io.log('\ndry run — nothing written.');
     return 0;
   }
 
+  const declared = new Map(bundle.manifest().credentials.map((c) => [c.ref, c]));
   const resolved: ResolvedCredentials = {};
   for (const ref of plan.requiresCredentials) {
-    let value = opts.creds[ref] ?? process.env[`UNIQENT_CRED_${ref.toUpperCase()}`];
-    if (!value && io.prompt) value = await io.prompt(`credential "${ref}": `);
+    const cred = declared.get(ref);
+    const optional = cred?.required === false;
+    const envName = `UNIQENT_CRED_${ref.toUpperCase()}`;
+    let value = opts.creds[ref] ?? process.env[envName];
+    if (!value && io.promptSecret) {
+      const label = cred ? ` — ${safe(cred.label)}` : '';
+      value = await io.promptSecret(
+        `credential "${safe(ref)}"${label}${optional ? ' (optional, Enter to skip)' : ''}: `,
+      );
+    }
+    if (!value && optional) {
+      io.log(`  skipping optional credential "${safe(ref)}"`);
+      continue;
+    }
     if (!value) {
-      io.error(`missing credential "${ref}" (pass --cred ${ref}=<value>)`);
+      io.error(
+        `missing credential "${safe(ref)}" (pass --cred ${safe(ref)}=<value> or set ${safe(envName)})`,
+      );
       return 1;
     }
     resolved[ref] = value;
   }
 
-  if (!opts.autoYes && io.prompt) {
+  if (!opts.autoYes) {
+    if (!io.prompt) {
+      io.error(
+        'not asking for confirmation: stdin is not an interactive terminal. Review the plan (--dry-run), then re-run with --yes to install.',
+      );
+      return 1;
+    }
     const ans = await io.prompt('Proceed with install? [y/N] ');
     if (ans.trim().toLowerCase() !== 'y') {
       io.log('aborted.');
@@ -229,23 +337,36 @@ async function runInstall(bundle: Bundle, opts: RunInstallOpts, io: CliIo): Prom
 
   const result = await adapter.apply(bundle, plan, resolved, { root: opts.root });
   io.log(`\nInstalled into ${opts.root}:`);
-  for (const w of result.written) io.log(`  ${w}`);
-  for (const n of result.notes) io.log(`  note: ${n}`);
+  for (const w of result.written) io.log(`  ${safe(w)}`);
+  for (const n of result.notes) io.log(`  note: ${safe(n)}`);
   return 0;
 }
 
+/** --root default for a known target on this machine (see defaultRoot). */
+function rootFor(target: string): string {
+  return defaultRoot(target, process.env, homedir(), process.cwd());
+}
+
+/** Print an error and return false when `target` names no adapter. */
+function knownTarget(cmd: string, target: string, io: CliIo): boolean {
+  if (ADAPTERS[target]) return true;
+  io.error(`${cmd}: unknown target "${target}" (available: ${Object.keys(ADAPTERS).join(', ')})`);
+  return false;
+}
+
 async function install(args: string[], io: CliIo): Promise<number> {
-  const { positionals, flags, creds } = parseArgs(args);
+  const { positionals, flags, creds } = parseArgs(args, FLAGS.install as FlagSpec);
   const file = positionals[0];
   if (!file) {
     io.error('install: missing <file.uniqent|url|slug>');
     return 1;
   }
   const target = typeof flags.target === 'string' ? flags.target : 'claude-code';
-  const root = typeof flags.root === 'string' ? flags.root : process.cwd();
+  if (!knownTarget('install', target, io)) return 1;
+  const root = typeof flags.root === 'string' ? flags.root : rootFor(target);
   let bundle: Bundle;
   try {
-    bundle = await resolveBundle(file, flags);
+    bundle = await resolveBundle(file, flags, io);
   } catch (e) {
     io.error(`install: ${(e as Error).message}`);
     return 1;
@@ -262,7 +383,7 @@ async function install(args: string[], io: CliIo): Promise<number> {
     },
     io,
   );
-  if (code === 0 && !flags['dry-run']) io.log('\nDone. Open the project in Claude Code.');
+  if (code === 0 && !flags['dry-run']) io.log(`\nDone. ${nextStep(target, root)}`);
   return code;
 }
 
@@ -272,8 +393,44 @@ function printFeatured(io: CliIo, out: (m: string) => void = (m) => io.log(m)): 
   out('\n  uniqent try <name>');
 }
 
+/**
+ * Pick where `try` installs: explicit flags win, else auto-detect. With --target but no --root,
+ * a detected install of that same framework supplies the root, else the target's default root.
+ */
+async function resolveTryTarget(
+  flags: Record<string, string | true>,
+  io: CliIo,
+): Promise<{ target: string; root: string } | undefined> {
+  const target = typeof flags.target === 'string' ? flags.target : undefined;
+  const root = typeof flags.root === 'string' ? flags.root : undefined;
+  if (target && root) return { target, root };
+
+  let guess: TargetGuess | null;
+  try {
+    guess = await detectTarget({ cwd: root ?? process.cwd(), home: homedir(), env: process.env });
+  } catch (e) {
+    if (!(e instanceof AmbiguousTargetError)) throw e;
+    if (target) {
+      const match = e.candidates.find((c) => c.id === target);
+      return { target, root: root ?? match?.configRoot ?? rootFor(target) };
+    }
+    io.error('try: found more than one agent framework:');
+    for (const c of e.candidates) io.error(`  ${c.id}  (${c.configRoot})`);
+    io.error('pick one with --target <id> (and --root <dir> to choose where it installs).');
+    return undefined;
+  }
+  if (guess && (!target || guess.id === target)) {
+    io.log(`detected: ${ADAPTERS[guess.id]?.displayName ?? guess.id} (${guess.configRoot})`);
+    return { target: guess.id, root: root ?? guess.configRoot };
+  }
+  if (target) return { target, root: root ?? rootFor(target) };
+  const where = root ?? process.cwd();
+  io.log(`no agent detected — setting up ${claudeCodeAdapter.displayName} in ${where}`);
+  return { target: 'claude-code', root: where };
+}
+
 async function tryCmd(args: string[], io: CliIo): Promise<number> {
-  const { positionals, flags, creds } = parseArgs(args);
+  const { positionals, flags, creds } = parseArgs(args, FLAGS.try as FlagSpec);
 
   if (flags.list === true) {
     printFeatured(io);
@@ -290,56 +447,29 @@ async function tryCmd(args: string[], io: CliIo): Promise<number> {
   const featured = findFeatured(name);
   let bundle: Bundle;
   try {
-    bundle = featured ? await loadFeaturedBundle(name) : await resolveBundle(name, flags);
+    bundle = featured ? await loadFeaturedBundle(name) : await resolveBundle(name, flags, io);
   } catch (e) {
     io.error(`try: couldn't load "${name}": ${(e as Error).message}`);
     if (!featured) printFeatured(io, (m) => io.error(m));
     return 1;
   }
+  if (reportInvalid(bundle, 'try', io)) return 1;
 
   // Print brain identity.
-  const manifestBytes = bundle.get('uniqent.json');
-  const manifestData = manifestBytes
-    ? (JSON.parse(new TextDecoder().decode(manifestBytes)) as {
-        displayName?: string;
-        description?: string;
-      })
-    : undefined;
-  if (manifestData?.displayName)
-    io.log(
-      `${manifestData.displayName}${manifestData.description ? ` — ${manifestData.description}` : ''}`,
-    );
+  const manifest = bundle.manifest();
+  io.log(
+    `${safe(manifest.displayName)}${manifest.description ? ` — ${safe(manifest.description)}` : ''}`,
+  );
 
-  // Resolve target + root: explicit flags win, else auto-detect, else default claude-code in cwd.
-  let target: string | undefined = typeof flags.target === 'string' ? flags.target : undefined;
-  let root: string | undefined = typeof flags.root === 'string' ? flags.root : undefined;
-  if (!target || !root) {
-    const guess = await detectTarget({
-      cwd: root ?? process.cwd(),
-      home: homedir(),
-      env: process.env,
-    });
-    if (guess) {
-      target = target ?? guess.id;
-      root = root ?? guess.configRoot;
-      io.log(`detected: ${ADAPTERS[guess.id]?.displayName ?? guess.id} (${guess.configRoot})`);
-    } else {
-      target = target ?? 'claude-code';
-      root = root ?? process.cwd();
-      io.log(
-        `no agent detected — setting up ${ADAPTERS[target]?.displayName ?? target} in ${root}`,
-      );
-    }
-  }
-  // Both are guaranteed to be set by the if block above.
-  const resolvedTarget = target as string;
-  const resolvedRoot = root as string;
+  if (typeof flags.target === 'string' && !knownTarget('try', flags.target, io)) return 1;
+  const picked = await resolveTryTarget(flags, io);
+  if (!picked) return 1;
 
   const code = await runInstall(
     bundle,
     {
-      target: resolvedTarget,
-      root: resolvedRoot,
+      target: picked.target,
+      root: picked.root,
       creds,
       allowUnsigned: flags['allow-unsigned'] === true,
       autoYes: flags.yes === true,
@@ -350,41 +480,54 @@ async function tryCmd(args: string[], io: CliIo): Promise<number> {
   if (code !== 0 || flags['dry-run']) return code;
 
   // The payoff: surface the brain's suggested prompts.
-  const prompts: string[] =
-    (manifestData as { suggestedPrompts?: string[] } | undefined)?.suggestedPrompts ?? [];
-  io.log(
-    `\nDone. Open this folder in ${ADAPTERS[resolvedTarget]?.displayName ?? resolvedTarget} and ask:`,
-  );
-  if (prompts.length) for (const p of prompts) io.log(`  → "${p}"`);
+  const prompts = manifest.suggestedPrompts ?? [];
+  io.log(`\nDone. ${nextStep(picked.target, picked.root)} Then ask:`);
+  if (prompts.length) for (const p of prompts) io.log(`  → "${safe(p)}"`);
   else io.log('  → ask it anything in its wheelhouse.');
   return 0;
 }
 
 async function validate(args: string[], io: CliIo): Promise<number> {
-  const { positionals } = parseArgs(args);
+  const { positionals } = parseArgs(args, FLAGS.validate as FlagSpec);
   const target = positionals[0];
   if (!target) {
     io.error('validate: missing <dir|file.uniqent>');
     return 1;
   }
-  const result = validateBundle(await loadDirOrFile(target));
+  let bundle: Bundle;
+  try {
+    bundle = await loadDirOrFile(target);
+  } catch (e) {
+    io.error(`validate: ${(e as Error).message}`);
+    return 1;
+  }
+  const result = validateBundle(bundle);
   if (result.ok) {
     io.log('valid ✓');
     return 0;
   }
-  io.error(`invalid: ${result.errors.length} error(s)`);
-  for (const e of result.errors) io.error(`  ${e.code}: ${e.message}`);
+  const lines = describeIssues(result.errors);
+  io.error(`invalid: ${lines.length} error(s)`);
+  for (const line of lines) io.error(`  ${line}`);
   return 1;
 }
 
 async function pack(args: string[], io: CliIo): Promise<number> {
-  const { positionals, flags } = parseArgs(args);
+  const { positionals, flags } = parseArgs(args, FLAGS.pack as FlagSpec);
   const dir = positionals[0];
   if (!dir) {
     io.error('pack: missing <dir>');
     return 1;
   }
-  const bundle = await maybeSign(await readDir(dir), flags, io);
+  let source: Bundle;
+  try {
+    source = await readDir(dir);
+  } catch (e) {
+    io.error(`pack: ${(e as Error).message}`);
+    return 1;
+  }
+  if (reportInvalid(source, 'pack', io)) return 1;
+  const bundle = await maybeSign(source, flags, io);
   const bytes = await packBundle(bundle); // validates + secret-scans (throws on a secret)
   const out = typeof flags.out === 'string' ? flags.out : `${bundle.manifest().name}.uniqent`;
   await writeFile(out, bytes);
@@ -394,14 +537,20 @@ async function pack(args: string[], io: CliIo): Promise<number> {
 }
 
 async function search(args: string[], io: CliIo): Promise<number> {
-  const { positionals, flags } = parseArgs(args);
+  const { positionals, flags } = parseArgs(args, FLAGS.search as FlagSpec);
   const reg = registryUrl(flags.registry);
   if (!reg) {
-    io.error('search: no registry set (pass --registry <url> or set UNIQENT_REGISTRY)');
+    io.error('search: no registry set (pass --registry <url|file> or set UNIQENT_REGISTRY)');
     return 1;
   }
   const q = (positionals[0] ?? '').toLowerCase();
-  const index = await fetchIndex(reg);
+  let index: RegistryIndex;
+  try {
+    index = await fetchIndex(reg, io.error);
+  } catch (e) {
+    io.error(`search: ${(e as Error).message}`);
+    return 1;
+  }
   const hits = index.bundles.filter((e) =>
     !q
       ? true
@@ -412,8 +561,8 @@ async function search(args: string[], io: CliIo): Promise<number> {
     return 0;
   }
   for (const e of hits) {
-    const tags = e.tags && e.tags.length > 0 ? `  [${e.tags.join(', ')}]` : '';
-    io.log(`${e.name}@${e.version ?? '?'}  ${e.description ?? ''}${tags}`);
+    const tags = e.tags && e.tags.length > 0 ? `  [${e.tags.map(safe).join(', ')}]` : '';
+    io.log(`${safe(e.name)}@${safe(e.version ?? '?')}  ${safe(e.description ?? '')}${tags}`);
   }
   io.log(`\nInstall one with:  uniqent install <name> --registry ${reg} --target <id>`);
   return 0;
@@ -429,7 +578,7 @@ function jsonIndexUrls(flags: Record<string, string | true>): string[] {
 }
 
 async function hub(args: string[], io: CliIo): Promise<number> {
-  const { positionals, flags } = parseArgs(args);
+  const { positionals, flags } = parseArgs(args, FLAGS.hub as FlagSpec);
   const kind = positionals[0];
   const query = positionals.slice(1).join(' ');
   const indexes = jsonIndexUrls(flags);
@@ -447,9 +596,11 @@ async function hub(args: string[], io: CliIo): Promise<number> {
       for (const r of results) {
         const pop = typeof r.popularity === 'number' ? `  (${r.popularity} uses)` : '';
         const creds =
-          r.credentials.length > 0 ? `  needs ${r.credentials.map((c) => c.ref).join(', ')}` : '';
+          r.credentials.length > 0
+            ? `  needs ${r.credentials.map((c) => safe(c.ref)).join(', ')}`
+            : '';
         io.log(
-          `${r.entry.id}  [${r.source}]  ${r.entry.name} — ${r.entry.description}${pop}${creds}`,
+          `${safe(r.entry.id)}  [${r.source}]  ${safe(r.entry.name)} — ${safe(r.entry.description)}${pop}${creds}`,
         );
       }
     }
@@ -469,23 +620,38 @@ async function hub(args: string[], io: CliIo): Promise<number> {
     } else {
       for (const r of results) {
         const stars = typeof r.stars === 'number' ? `  ★${r.stars}` : '';
-        io.log(`${r.name}  [${r.source}]${stars}  ${r.description}`);
-        if (r.skillUrl) io.log(`    SKILL.md: ${r.skillUrl}`);
+        io.log(`${safe(r.name)}  [${r.source}]${stars}  ${safe(r.description)}`);
+        if (r.skillUrl) io.log(`    SKILL.md: ${safe(r.skillUrl)}`);
       }
     }
     for (const e of errors) io.error(`  (hub ${e.source} unavailable: ${e.message})`);
     return 0;
   }
 
-  io.error('usage: uniqent hub <mcp|skills> <query> [--index <url,url>] [--json]');
+  io.error(`usage: uniqent ${USAGE.hub}`);
   return 1;
 }
 
-/** Read a hex private key from a keyfile written by `keygen`. */
+/** Read a hex private key from a keyfile written by `keygen`; explains exactly what is wrong. */
 async function loadPrivateKey(path: string): Promise<string> {
-  const kp = JSON.parse(await readFile(path, 'utf8')) as { privateKey?: string };
-  if (!kp.privateKey) throw new Error(`${path} has no "privateKey"`);
-  return kp.privateKey;
+  const hint =
+    'expected a JSON keyfile with a 64-hex-char "privateKey" (create one with: uniqent keygen)';
+  let raw: string;
+  try {
+    raw = await readFile(path, 'utf8');
+  } catch (e) {
+    throw new Error(`cannot read key file ${path}: ${(e as Error).message}`);
+  }
+  let kp: unknown;
+  try {
+    kp = JSON.parse(raw);
+  } catch {
+    throw new Error(`${path} is not valid JSON; ${hint}`);
+  }
+  const privateKey = (kp as { privateKey?: unknown } | null)?.privateKey;
+  if (typeof privateKey !== 'string' || !/^[0-9a-f]{64}$/i.test(privateKey))
+    throw new Error(`${path} has no valid "privateKey"; ${hint}`);
+  return privateKey;
 }
 
 /** Sign the bundle if --key (stable identity) or --sign (ephemeral, integrity-only) was passed. */
@@ -498,22 +664,26 @@ async function maybeSign(
   if (typeof flags.key === 'string') return signBundle(bundle, await loadPrivateKey(flags.key));
   const kp = await generateKeypair();
   io.log(
-    `signing with an ephemeral key (integrity only; pubkey ${kp.publicKey.slice(0, 16)}…). Use --key <keyfile> for a stable publisher identity.`,
+    `signing with an ephemeral key (integrity only; fingerprint ${publicKeyFingerprint(kp.publicKey)}). Use --key <keyfile> for a stable publisher identity.`,
   );
   return signBundle(bundle, kp.privateKey);
 }
 
 async function keygen(args: string[], io: CliIo): Promise<number> {
-  const { flags } = parseArgs(args);
+  const { flags } = parseArgs(args, FLAGS.keygen as FlagSpec);
   const out = typeof flags.out === 'string' ? flags.out : 'uniqent.key.json';
   if (await pathExists(out)) {
     io.error(`keygen: ${out} already exists; pass -o <file> or remove it (do not overwrite a key)`);
     return 1;
   }
   const kp = await generateKeypair();
-  await writeFile(out, JSON.stringify(kp, null, 2) + '\n');
+  // Private key: owner-only, and never clobber an existing file (wx).
+  await writeFile(out, JSON.stringify(kp, null, 2) + '\n', { mode: 0o600, flag: 'wx' });
   io.log(`wrote ${out}`);
   io.log(`public key: ${kp.publicKey}`);
+  io.log(
+    `fingerprint: ${publicKeyFingerprint(kp.publicKey)} (share this so installers can check it)`,
+  );
   io.log(
     `Keep ${out} secret and out of git (add it to .gitignore). Sign with: uniqent sign <file> --key ${out}`,
   );
@@ -521,7 +691,7 @@ async function keygen(args: string[], io: CliIo): Promise<number> {
 }
 
 async function signCmd(args: string[], io: CliIo): Promise<number> {
-  const { positionals, flags } = parseArgs(args);
+  const { positionals, flags } = parseArgs(args, FLAGS.sign as FlagSpec);
   const file = positionals[0];
   if (!file) {
     io.error('sign: missing <file.uniqent>');
@@ -533,7 +703,7 @@ async function signCmd(args: string[], io: CliIo): Promise<number> {
   }
   let signed: Bundle;
   try {
-    const bundle = await unpack(new Uint8Array(await readFile(file)));
+    const bundle = await bundleFromFile(file);
     signed = await signBundle(bundle, await loadPrivateKey(flags.key));
   } catch (e) {
     io.error(`sign: ${(e as Error).message}`);
@@ -543,7 +713,7 @@ async function signCmd(args: string[], io: CliIo): Promise<number> {
   await writeFile(out, await packBundle(signed));
   const v = await verify(signed);
   io.log(
-    `signed ${out} — signature ${v.valid ? 'valid ✓' : 'INVALID'} (pubkey ${v.publicKey?.slice(0, 16)}…)`,
+    `signed ${out} — signature ${v.valid ? 'valid ✓' : 'INVALID'} (key fingerprint ${v.publicKey ? publicKeyFingerprint(v.publicKey) : 'none'})`,
   );
   return 0;
 }
@@ -554,19 +724,30 @@ async function pathExists(p: string): Promise<boolean> {
     .catch(() => false);
 }
 
-/** Best-effort framework detection from marker files, so `--from` is optional. */
+/**
+ * Framework detection from marker files, so `--from` is optional. `root` is the Claude Code
+ * project, the Hermes home (config.yaml / SOUL.md) or the OpenClaw state dir (openclaw.json).
+ */
 async function detectExportTarget(root: string): Promise<string[]> {
   const hits: string[] = [];
-  if ((await pathExists(`${root}/.claude`)) || (await pathExists(`${root}/.mcp.json`)))
+  if ((await pathExists(join(root, '.claude'))) || (await pathExists(join(root, '.mcp.json'))))
     hits.push('claude-code');
-  if (await pathExists(`${root}/hermes.json`)) hits.push('hermes');
-  if (await pathExists(`${root}/openclaw.json`)) hits.push('openclaw');
+  if ((await pathExists(join(root, 'config.yaml'))) || (await pathExists(join(root, 'SOUL.md'))))
+    hits.push('hermes');
+  if (await pathExists(join(root, 'openclaw.json'))) hits.push('openclaw');
   return hits;
 }
 
 async function exportCmd(args: string[], io: CliIo): Promise<number> {
-  const { flags } = parseArgs(args);
+  const { flags } = parseArgs(args, FLAGS.export as FlagSpec);
   const root = typeof flags.root === 'string' ? flags.root : process.cwd();
+  const isDir = await stat(root)
+    .then((st) => st.isDirectory())
+    .catch(() => false);
+  if (!isDir) {
+    io.error(`export: --root ${root} is not an existing directory`);
+    return 1;
+  }
 
   let target = typeof flags.from === 'string' ? flags.from : undefined;
   if (!target) {
@@ -601,6 +782,23 @@ async function exportCmd(args: string[], io: CliIo): Promise<number> {
   }
 
   const m = bundle.manifest();
+  const c = m.components;
+  if (
+    !c.identity &&
+    c.skills.length === 0 &&
+    c.mcp.length === 0 &&
+    c.memory.facts === 0 &&
+    c.memory.episodic === 0 &&
+    !c.memory.hasProfile &&
+    c.tools.length === 0 &&
+    c.channels.length === 0 &&
+    c.tasks.length === 0
+  ) {
+    io.error(
+      `export: found nothing to capture from ${adapter.displayName} at ${root} (no persona, skills, MCP servers, memory, profile, tools, channels or tasks); check --root and --from`,
+    );
+    return 1;
+  }
   io.log(`\nCaptured from ${adapter.displayName} at ${root}:`);
   io.log(
     `  identity=${m.components.identity} skills=${m.components.skills.length} mcp=${m.components.mcp.length} memory=${m.components.memory.facts} channels=${m.components.channels.length} tasks=${m.components.tasks.length}`,
@@ -610,9 +808,7 @@ async function exportCmd(args: string[], io: CliIo): Promise<number> {
 
   const result = validateBundle(bundle);
   if (!result.ok) {
-    io.error(
-      `export: captured bundle is invalid: ${result.errors.map((e) => e.message).join('; ')}`,
-    );
+    io.error(`export: captured bundle is invalid: ${describeIssues(result.errors).join('; ')}`);
     return 1;
   }
   const findings = scanForSecrets(bundle);
@@ -665,7 +861,7 @@ function slugify(s: string): string {
 
 /** Capture an Obsidian / second-brain vault folder into a canonical .uniqent bundle. */
 async function importVaultCmd(args: string[], io: CliIo): Promise<number> {
-  const { positionals, flags } = parseArgs(args);
+  const { positionals, flags } = parseArgs(args, FLAGS['import-vault'] as FlagSpec);
   const dir = positionals[0];
   if (!dir) {
     io.error('import-vault: missing <dir>');
@@ -709,7 +905,7 @@ async function importVaultCmd(args: string[], io: CliIo): Promise<number> {
   const valid = validateBundle(bundle);
   if (!valid.ok) {
     io.error(
-      `import-vault: produced an invalid bundle: ${valid.errors.map((e) => e.message).join('; ')}`,
+      `import-vault: produced an invalid bundle: ${describeIssues(valid.errors).join('; ')}`,
     );
     return 1;
   }
@@ -740,7 +936,7 @@ const DEFAULT_HUB = 'https://uniqent.ai';
 
 /** Publish a memory pack to a hosted hub (default uniqent.ai). Accepts a .json pack or .md/.txt. */
 async function publishMemoryCmd(args: string[], io: CliIo): Promise<number> {
-  const { positionals, flags } = parseArgs(args);
+  const { positionals, flags } = parseArgs(args, FLAGS['publish-memory'] as FlagSpec);
   const file = positionals[0];
   if (!file) {
     io.error('publish-memory: missing <pack.json|notes.md>');
@@ -804,7 +1000,7 @@ async function publishMemoryCmd(args: string[], io: CliIo): Promise<number> {
 
 /** Publish a packed .uniqent (or a dir, packed on the fly) to a hosted registry. */
 async function publishCmd(args: string[], io: CliIo): Promise<number> {
-  const { positionals, flags } = parseArgs(args);
+  const { positionals, flags } = parseArgs(args, FLAGS['publish'] as FlagSpec);
   const target = positionals[0];
   if (!target) {
     io.error('publish: missing <file.uniqent|dir>');
@@ -855,7 +1051,7 @@ async function publishCmd(args: string[], io: CliIo): Promise<number> {
 }
 
 async function loginCmd(args: string[], io: CliIo): Promise<number> {
-  const { flags } = parseArgs(args);
+  const { flags } = parseArgs(args, FLAGS.login as FlagSpec);
   const registry = typeof flags.registry === 'string' ? flags.registry : DEFAULT_HUB;
 
   // Explicit paste/store path.
@@ -886,7 +1082,7 @@ async function loginCmd(args: string[], io: CliIo): Promise<number> {
 }
 
 async function logoutCmd(args: string[], io: CliIo): Promise<number> {
-  const { flags } = parseArgs(args);
+  const { flags } = parseArgs(args, FLAGS.logout as FlagSpec);
   const registry = typeof flags.registry === 'string' ? flags.registry : DEFAULT_HUB;
   const had = await clearToken(registry);
   io.log(had ? `Logged out of ${registry}.` : `No token stored for ${registry}.`);
@@ -900,45 +1096,67 @@ function splitCsv(s: string): string[] {
     .filter(Boolean);
 }
 
+const COMMANDS: Record<string, (args: string[], io: CliIo) => Promise<number>> = {
+  try: tryCmd,
+  inspect,
+  install,
+  validate,
+  pack,
+  search,
+  hub,
+  export: exportCmd,
+  'import-vault': importVaultCmd,
+  publish: publishCmd,
+  login: loginCmd,
+  logout: logoutCmd,
+  'publish-memory': publishMemoryCmd,
+  keygen,
+  sign: signCmd,
+};
+
+function printUsage(out: (m: string) => void): void {
+  out(`usage: uniqent <${Object.keys(COMMANDS).join('|')}> [options]`);
+  for (const name of Object.keys(COMMANDS)) out(`  ${USAGE[name]}`);
+  out('  run `uniqent <command> --help` for one command; `uniqent --version` for the version');
+}
+
+async function cliVersion(): Promise<string> {
+  // package.json sits one level above both src/ (tests) and dist/ (published).
+  const here = dirname(fileURLToPath(import.meta.url));
+  const pkg = JSON.parse(await readFile(resolve(here, '..', 'package.json'), 'utf8')) as {
+    version?: unknown;
+  };
+  if (typeof pkg.version !== 'string') throw new Error('@uniqent/cli package.json has no version');
+  return pkg.version;
+}
+
 export async function run(argv: string[], io: CliIo): Promise<number> {
   const [cmd, ...rest] = argv;
-  if (cmd === 'try') return tryCmd(rest, io);
-  if (cmd === 'inspect') return inspect(rest, io);
-  if (cmd === 'install') return install(rest, io);
-  if (cmd === 'validate') return validate(rest, io);
-  if (cmd === 'pack') return pack(rest, io);
-  if (cmd === 'search') return search(rest, io);
-  if (cmd === 'hub') return hub(rest, io);
-  if (cmd === 'export') return exportCmd(rest, io);
-  if (cmd === 'import-vault') return importVaultCmd(rest, io);
-  if (cmd === 'publish') return publishCmd(rest, io);
-  if (cmd === 'login') return loginCmd(rest, io);
-  if (cmd === 'logout') return logoutCmd(rest, io);
-  if (cmd === 'publish-memory') return publishMemoryCmd(rest, io);
-  if (cmd === 'keygen') return keygen(rest, io);
-  if (cmd === 'sign') return signCmd(rest, io);
-  io.error(
-    'usage: uniqent <try|inspect|install|validate|pack|publish|search|hub|export|import-vault|login|logout|publish-memory|keygen|sign> <file|dir|url|slug|query> [options]',
-  );
-  io.error(
-    '  try <brain> [--target <id>] [--root <dir>] [--yes] [--list]   (one-command install of a featured brain)',
-  );
-  io.error(
-    '  install <file|url|slug> --target <id> --root <dir> --cred <ref>=<value> [--registry <url>] [--allow-unsigned] [--yes]',
-  );
-  io.error('  pack <dir> [-o <file>]    validate <dir|file>    search <query> --registry <url>');
-  io.error('  hub <mcp|skills> <query> [--index <url,url>] [--json]');
-  io.error(
-    '  export [--from <claude-code|hermes|openclaw>] --root <dir> [-o <file>] [--sign|--key <k>]',
-  );
-  io.error(
-    '  import-vault <dir> [--name <n>] [-o <file>] [--sign|--key <k>]   (Obsidian/second-brain → .uniqent)',
-  );
-  io.error(
-    '  publish-memory <pack.json|notes.md> --slug <s> --name <n> [--registry <site>] [--token <t>] [--tags a,b]',
-  );
-  io.error('  publish <file.uniqent|dir> [--registry <site>] [--token <t>] [--sign|--key <k>]');
-  io.error('  login [--registry <site>] [--token <t>]    logout [--registry <site>]');
-  io.error('  keygen [-o <keyfile>]    sign <file> --key <keyfile> [-o]    install … --dry-run');
-  return cmd ? 1 : 0;
+  if (cmd === undefined || cmd === '--help' || cmd === '-h' || cmd === 'help') {
+    printUsage(io.log);
+    return 0;
+  }
+  if (cmd === '--version') {
+    io.log(await cliVersion());
+    return 0;
+  }
+  const handler = COMMANDS[cmd];
+  if (!handler) {
+    io.error(`unknown command "${cmd}"`);
+    printUsage(io.error);
+    return 1;
+  }
+  // `<cmd> --help` only prints usage: it must never write keys, clear tokens or open a browser.
+  if (wantsHelp(rest)) {
+    io.log(`usage: uniqent ${USAGE[cmd]}`);
+    return 0;
+  }
+  try {
+    return await handler(rest, io);
+  } catch (e) {
+    if (!(e instanceof UsageError)) throw e;
+    io.error(`${cmd}: ${e.message}`);
+    io.error(`usage: uniqent ${USAGE[cmd]}`);
+    return 1;
+  }
 }

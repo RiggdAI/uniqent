@@ -49,4 +49,19 @@ describe('Bundle', () => {
     expect(PATHS.manifest).toBe('uniqent.json');
     expect(PATHS.signature).toBe('signature.json');
   });
+
+  it('rejects unsafe paths on set and fromFiles', () => {
+    for (const bad of [
+      'skills/ok/../../escape.txt',
+      '/etc/passwd',
+      './a.txt',
+      'a//b.txt',
+      'skills\\x.md',
+      'a\nb.txt',
+      '',
+    ]) {
+      expect(() => Bundle.empty().set(bad, 'x')).toThrow(BundleFormatError);
+      expect(() => Bundle.fromFiles(new Map([[bad, new Uint8Array()]]))).toThrow(BundleFormatError);
+    }
+  });
 });

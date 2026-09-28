@@ -1,4 +1,10 @@
-import type { CatalogSource, McpHubResult, SkillHubResult } from './types.js';
+import type {
+  CatalogSource,
+  McpHubResult,
+  SkillHubResult,
+  SkippedHubEntry,
+  SourceResults,
+} from './types.js';
 
 /** One source's outcome, so callers can surface "hub X is down" without failing the search. */
 export interface SourceError {
@@ -9,11 +15,15 @@ export interface SourceError {
 export interface HubSearch<T> {
   results: T[];
   errors: SourceError[];
+  /** Entries a source found but could not represent, each with its reason. */
+  skipped: SkippedHubEntry[];
 }
 
 /**
  * Fan out an MCP search across sources. A source that lacks searchMcp is skipped; one that throws
- * is isolated into `errors` (the rest still return). Results are sorted by popularity desc.
+ * is isolated into `errors` (the rest still return). Built-in sources bound every request with a
+ * timeout (see HUB_REQUEST_TIMEOUT_MS), so a hanging hub surfaces as an error, not a stall.
+ * Results are sorted by popularity desc.
  */
 export async function searchMcpHubs(
   query: string,
@@ -38,17 +48,19 @@ export async function searchSkillHubs(
 
 function collect<T>(
   sources: CatalogSource[],
-  settled: PromiseSettledResult<T[]>[],
+  settled: PromiseSettledResult<SourceResults<T>>[],
   sort: (a: T, b: T) => number,
 ): HubSearch<T> {
   const results: T[] = [];
   const errors: SourceError[] = [];
+  const skipped: SkippedHubEntry[] = [];
   for (let i = 0; i < settled.length; i++) {
     const outcome = settled[i];
     const source = sources[i];
     if (!outcome || !source) continue;
     if (outcome.status === 'fulfilled') {
-      results.push(...outcome.value);
+      results.push(...outcome.value.results);
+      skipped.push(...outcome.value.skipped);
     } else {
       errors.push({
         source: source.id,
@@ -57,5 +69,5 @@ function collect<T>(
     }
   }
   results.sort(sort);
-  return { results, errors };
+  return { results, errors, skipped };
 }

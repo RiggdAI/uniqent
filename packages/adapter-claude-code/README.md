@@ -9,9 +9,9 @@ Part of **[Uniqent](https://github.com/RiggdAI/uniqent)** — _any brain, any ag
 Translates a canonical `.uniqent` bundle into Claude Code's native layout:
 
 - **skills** → `.claude/skills/`
-- **persona + policies + memory** → `AGENTS.md`
-- **MCP servers** → merged `.mcp.json` (your credentials are resolved locally — secrets never travel in the bundle)
-- **channels / tasks / tools** that Claude Code can't hold are reported as **lossiness**, never silently dropped
+- **persona + policies + profile + memory facts** → a `<!-- uniqent:begin -->…<!-- uniqent:end -->` managed section of `AGENTS.md` (your own content is preserved; an existing `CLAUDE.md` gets a managed `@AGENTS.md` import, since Claude Code ignores `AGENTS.md` when `CLAUDE.md` exists)
+- **MCP servers** → merged `.mcp.json` (your credentials are resolved locally — secrets never travel in the bundle; a file holding resolved credentials is written with mode `0600` and must not be committed)
+- **channels / tasks / tools / runtime config / episodic memory / MCP tool allowlists** that Claude Code can't hold are reported as **lossiness**, never silently dropped
 
 Implements the [`@uniqent/adapter-sdk`](https://www.npmjs.com/package/@uniqent/adapter-sdk) `Adapter` interface (`detect` / `plan` / `apply` / `export`).
 
@@ -38,7 +38,7 @@ import type { ResolvedCredentials } from '@uniqent/adapter-sdk';
 const bundle = await readBundle('./my-brain.uniqent');
 
 // 1. Plan — inspect what will be written and what credentials are needed
-const plan = await claudeCodeAdapter.plan(bundle);
+const plan = await claudeCodeAdapter.plan(bundle, { root: '/path/to/project' });
 console.log('Writes:', plan.writes);
 console.log('Needs credentials:', plan.requiresCredentials);
 console.log('Lossiness:', plan.lossiness);

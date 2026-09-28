@@ -19,10 +19,52 @@ fn wikilink_re() -> &'static Regex {
     RE.get_or_init(|| Regex::new(r"\[\[([^\]\[|]+)(?:\|([^\]\[]+))?\]\]").unwrap())
 }
 
-/// A #tag: starts after start/whitespace/(, letters/digits/_/-/ (not a markdown heading "# ").
+/// A #tag candidate: `#` then a letter, then letters/digits/marks/_/-/ in any script. The TS
+/// TAG regex also requires (via lookbehind, which Rust's regex lacks) that the `#` follows
+/// start/whitespace/`(` but not a markdown link target `](` — see `tag_matches`.
 fn tag_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"(?:^|[\s(])#([A-Za-z][\w/-]*)").unwrap())
+    RE.get_or_init(|| Regex::new(r"#(\p{L}[\p{L}\p{N}\p{M}_/-]*)").unwrap())
+}
+
+/// A CSS hex color (#fff, #ffff, #ff0000, #ff000080) is not a tag.
+fn hex_color_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"(?i)^(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$").unwrap())
+}
+
+/// TS TRAILING_TAGS: a run of tags ending the text (`… inline. #citations #format`).
+fn trailing_tags_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"(?:\s+#\p{L}[\p{L}\p{N}\p{M}_/-]*)+\s*$").unwrap())
+}
+
+/// The `#tag` matches of TS `TAG` in `text`: (byte range of `#tag`, tag without `#`).
+fn tag_matches(text: &str) -> Vec<(std::ops::Range<usize>, String)> {
+    let ws = Regex::new(r"^\s$").unwrap();
+    tag_re()
+        .captures_iter(text)
+        .filter_map(|c| {
+            let whole = c.get(0)?;
+            let before = &text[..whole.start()];
+            let mut prev = before.chars().rev();
+            let allowed = match prev.next() {
+                None => true,
+                Some('(') => prev.next() != Some(']'),
+                Some(ch) => ws.is_match(&ch.to_string()),
+            };
+            allowed.then(|| (whole.range(), c[1].to_string()))
+        })
+        .collect()
+}
+
+/// The tags of `text` (TS `tagsIn`): TAG matches that are not hex colors.
+fn tags_in(text: &str) -> Vec<String> {
+    tag_matches(text)
+        .into_iter()
+        .map(|(_, t)| t)
+        .filter(|t| !hex_color_re().is_match(t))
+        .collect()
 }
 
 // ─── Kind classification (mirrors KIND_PREFIX + STRIP_PREFIX) ─────────────────
@@ -116,15 +158,66 @@ fn parse_memory_text(text: &str) -> (Vec<String>, Vec<String>) {
             .captures_iter(text)
             .map(|c| c.get(1).map(|m| m.as_str().to_string()).unwrap_or_default()),
     );
-    let tags = dedupe(
-        tag_re()
-            .captures_iter(text)
-            .map(|c| c.get(1).map(|m| m.as_str().to_string()).unwrap_or_default()),
-    );
+    let tags = dedupe(tags_in(text).into_iter());
     (entities, tags)
 }
 
 // ─── parseMemoryMarkdown ──────────────────────────────────────────────────────
+
+/// TS `HORIZONTAL_RULE` (`^([-*_])(?:\s*\1){2,}$`): three or more of the same `-`/`*`/`_`,
+/// optionally separated by whitespace. Written by hand because Rust's regex has no backreferences.
+fn is_horizontal_rule(line: &str) -> bool {
+    let Some(first) = line.chars().next() else {
+        return false;
+    };
+    matches!(first, '-' | '*' | '_')
+        && line.ends_with(first)
+        && line.chars().all(|c| c == first || c.is_whitespace())
+        && line.chars().filter(|&c| c == first).count() >= 3
+}
+
+/// Port of TS `contentLines`: drop the markdown lines that are structure, not facts — a leading
+/// YAML front-matter block, fenced code blocks (an unclosed fence runs to the end), table rows
+/// and horizontal rules.
+fn content_lines(md: &str) -> Vec<String> {
+    let lines: Vec<String> = Regex::new(r"\r?\n")
+        .unwrap()
+        .split(md)
+        .map(|l| l.trim().to_string())
+        .collect();
+    let mut start = 0;
+    if lines.first().map(String::as_str) == Some("---") {
+        if let Some(end) = lines
+            .iter()
+            .enumerate()
+            .skip(1)
+            .find(|(_, l)| *l == "---" || *l == "...")
+            .map(|(i, _)| i)
+        {
+            start = end + 1;
+        }
+    }
+    let mut out = Vec::new();
+    let mut fence: Option<&str> = None;
+    for line in &lines[start..] {
+        let f = ["```", "~~~"].into_iter().find(|f| line.starts_with(f));
+        if let Some(open) = fence {
+            if f == Some(open) {
+                fence = None;
+            }
+            continue;
+        }
+        if f.is_some() {
+            fence = f;
+            continue;
+        }
+        if line.starts_with('|') || is_horizontal_rule(line) {
+            continue;
+        }
+        out.push(line.clone());
+    }
+    out
+}
 
 /// Port of TS `parseMemoryMarkdown`.
 ///
@@ -132,21 +225,25 @@ fn parse_memory_text(text: &str) -> (Vec<String>, Vec<String>) {
 /// Returns a JSON array of `{ text, kind, entities, tags }`.
 pub fn parse_memory_markdown(md: &str) -> Value {
     let heading_re = Regex::new(r"^#{1,6}\s").unwrap();
+    let quote_re = Regex::new(r"^(?:>\s*)+").unwrap();
     let bullet_re = Regex::new(r"^[-*+]\s+").unwrap();
     let numbered_re = Regex::new(r"^\d+\.\s+").unwrap();
+    let checkbox_re = Regex::new(r"^\[[ xX]\](?:\s+|$)").unwrap();
 
     let mut items: Vec<Value> = Vec::new();
 
-    for raw in md.split('\n') {
-        let line = raw.trim();
+    for line in content_lines(md) {
         if line.is_empty() {
             continue;
         }
-        if heading_re.is_match(line) {
+        if heading_re.is_match(&line) {
             continue; // markdown heading — context, not a fact
         }
-        let body = bullet_re.replace(line, "").to_string();
+        // Strip blockquote markers, a bullet/number, then a task checkbox.
+        let body = quote_re.replace(&line, "").to_string();
+        let body = bullet_re.replace(&body, "").to_string();
         let body = numbered_re.replace(&body, "").to_string();
+        let body = checkbox_re.replace(&body, "").to_string();
         if body.is_empty() {
             continue;
         }
@@ -170,7 +267,8 @@ pub fn parse_memory_markdown(md: &str) -> Value {
 
 /// Port of TS `stripMemoryMarkup`.
 ///
-/// Renders `[[Target]]`/`[[Target|alias]]` to names and removes #tags.
+/// Renders `[[Target]]`/`[[Target|alias]]` to names, drops a trailing run of tags (metadata), and
+/// renders an inline `#tag` as `tag` (hex colors and markdown link targets are left untouched).
 fn strip_memory_markup(text: &str) -> String {
     // Replace wikilinks: [[Target]] → Target, [[Target|alias]] → alias
     let result = wikilink_re().replace_all(text, |caps: &regex::Captures| {
@@ -182,25 +280,29 @@ fn strip_memory_markup(text: &str) -> String {
         alias.unwrap_or(name)
     });
 
-    // Remove #tags — mirror TS: if match starts with whitespace/paren, keep that char; else empty
-    let result = tag_re().replace_all(&result, |caps: &regex::Captures| {
-        let full_match = caps.get(0).map(|m| m.as_str()).unwrap_or("");
-        if full_match.starts_with(|c: char| c.is_whitespace() || c == '(') {
-            full_match[..1].to_string()
-        } else {
-            String::new()
-        }
+    // A run of tags ending the text is metadata, not prose: drop it (hex colors survive).
+    let result = trailing_tags_re().replace(&result, |caps: &regex::Captures| {
+        caps[0]
+            .split_whitespace()
+            .filter(|t| t.starts_with('#') && hex_color_re().is_match(&t[1..]))
+            .map(|t| format!(" {t}"))
+            .collect::<String>()
     });
 
-    // Collapse multiple spaces/tabs to one
-    let multi_space = Regex::new(r"[ \t]{2,}").unwrap();
-    let result = multi_space.replace_all(&result, " ");
+    // `#tag` → `tag`; a hex color keeps its `#`.
+    let mut out = String::with_capacity(result.len());
+    let mut last = 0;
+    for (range, tag) in tag_matches(&result) {
+        if hex_color_re().is_match(&tag) {
+            continue;
+        }
+        out.push_str(&result[last..range.start]);
+        out.push_str(&tag);
+        last = range.end;
+    }
+    out.push_str(&result[last..]);
 
-    // Remove space before punctuation
-    let punct_space = Regex::new(r"\s+([.,;:!?])").unwrap();
-    let result = punct_space.replace_all(&result, "$1");
-
-    result.trim().to_string()
+    out.trim().to_string()
 }
 
 // ─── memoryGraph ──────────────────────────────────────────────────────────────

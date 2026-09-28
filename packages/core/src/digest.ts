@@ -4,6 +4,8 @@ import { Bundle, PATHS } from './bundle.js';
 /**
  * Deterministic content digest over preserved file bytes, excluding signature.json.
  * Independent of archive format and insertion order, so unpack(pack(b)) reproduces it.
+ * The `path\nhash\n` framing is unambiguous only because every Bundle path is checked by
+ * assertBundlePath (no control characters, so no newline) — do not bypass that check.
  */
 export function canonicalDigest(bundle: Bundle): string {
   const entries = bundle

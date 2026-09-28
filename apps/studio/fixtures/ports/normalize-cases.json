@@ -353,5 +353,281 @@
       "credentials": [],
       "lossiness": []
     }
+  },
+  {
+    "name": "secret-name-last-word",
+    "input": {
+      "mcpServers": {
+        "fs": {
+          "command": "node",
+          "env": {
+            "PATH": "/usr/bin",
+            "AUTHOR_NAME": "Ada",
+            "MEMORY_FILE_PATH": "/tmp/mem.json",
+            "TOKEN_URL": "https://auth.example.com/token",
+            "xApiKey": "short",
+            "DB_PASSWORD": "hunter2"
+          }
+        }
+      }
+    },
+    "expected": {
+      "servers": [
+        {
+          "id": "fs",
+          "transport": "stdio",
+          "command": "node",
+          "env": {
+            "PATH": "/usr/bin",
+            "AUTHOR_NAME": "Ada",
+            "MEMORY_FILE_PATH": "/tmp/mem.json",
+            "TOKEN_URL": "https://auth.example.com/token",
+            "xApiKey": "${credentialRef:fs_xapikey}",
+            "DB_PASSWORD": "${credentialRef:fs_db_password}"
+          },
+          "auth": {
+            "type": "none"
+          },
+          "tools": {
+            "include": "all"
+          }
+        }
+      ],
+      "credentials": [
+        {
+          "ref": "fs_xapikey",
+          "label": "xApiKey",
+          "type": "apiKey",
+          "consumedBy": ["mcp:fs"],
+          "required": true
+        },
+        {
+          "ref": "fs_db_password",
+          "label": "DB_PASSWORD",
+          "type": "apiKey",
+          "consumedBy": ["mcp:fs"],
+          "required": true
+        }
+      ],
+      "lossiness": []
+    }
+  },
+  {
+    "name": "vscode-servers-map",
+    "input": {
+      "servers": {
+        "events": {
+          "type": "sse",
+          "url": "https://mcp.example.com/events"
+        },
+        "local": {
+          "type": "stdio",
+          "command": "uvx",
+          "args": ["mcp-server-fetch"]
+        }
+      }
+    },
+    "expected": {
+      "servers": [
+        {
+          "id": "events",
+          "transport": "sse",
+          "url": "https://mcp.example.com/events",
+          "auth": {
+            "type": "none"
+          },
+          "tools": {
+            "include": "all"
+          }
+        },
+        {
+          "id": "local",
+          "transport": "stdio",
+          "command": "uvx",
+          "args": ["mcp-server-fetch"],
+          "auth": {
+            "type": "none"
+          },
+          "tools": {
+            "include": "all"
+          }
+        }
+      ],
+      "credentials": [],
+      "lossiness": []
+    }
+  },
+  {
+    "name": "colliding-map-ids",
+    "input": {
+      "mcpServers": {
+        "My Server": {
+          "command": "a"
+        },
+        "my-server": {
+          "command": "b"
+        },
+        "MY_SERVER": {
+          "command": "c"
+        }
+      }
+    },
+    "expected": {
+      "servers": [
+        {
+          "id": "my-server",
+          "transport": "stdio",
+          "command": "a",
+          "auth": {
+            "type": "none"
+          },
+          "tools": {
+            "include": "all"
+          }
+        },
+        {
+          "id": "my-server-2",
+          "transport": "stdio",
+          "command": "b",
+          "auth": {
+            "type": "none"
+          },
+          "tools": {
+            "include": "all"
+          }
+        },
+        {
+          "id": "my-server-3",
+          "transport": "stdio",
+          "command": "c",
+          "auth": {
+            "type": "none"
+          },
+          "tools": {
+            "include": "all"
+          }
+        }
+      ],
+      "credentials": [],
+      "lossiness": []
+    }
+  },
+  {
+    "name": "colliding-array-ids",
+    "input": {
+      "servers": [
+        {
+          "command": "a"
+        },
+        {
+          "command": "b"
+        },
+        {
+          "id": "mcp-server",
+          "command": "c"
+        }
+      ]
+    },
+    "expected": {
+      "servers": [
+        {
+          "id": "mcp-server",
+          "transport": "stdio",
+          "command": "a",
+          "auth": {
+            "type": "none"
+          },
+          "tools": {
+            "include": "all"
+          }
+        },
+        {
+          "id": "mcp-server-2",
+          "transport": "stdio",
+          "command": "b",
+          "auth": {
+            "type": "none"
+          },
+          "tools": {
+            "include": "all"
+          }
+        },
+        {
+          "id": "mcp-server-3",
+          "transport": "stdio",
+          "command": "c",
+          "auth": {
+            "type": "none"
+          },
+          "tools": {
+            "include": "all"
+          }
+        }
+      ],
+      "credentials": [],
+      "lossiness": []
+    }
+  },
+  {
+    "name": "canonical-lifts-env-secrets",
+    "input": {
+      "id": "gh",
+      "transport": "stdio",
+      "command": "npx",
+      "env": {
+        "GITHUB_TOKEN": "plain",
+        "EXISTING": "${credentialRef:gh_existing}",
+        "LANG": "en"
+      },
+      "auth": {
+        "type": "none"
+      },
+      "extra": "dropped like zod does"
+    },
+    "expected": {
+      "servers": [
+        {
+          "id": "gh",
+          "transport": "stdio",
+          "command": "npx",
+          "env": {
+            "GITHUB_TOKEN": "${credentialRef:gh_github_token}",
+            "EXISTING": "${credentialRef:gh_existing}",
+            "LANG": "en"
+          },
+          "auth": {
+            "type": "none"
+          },
+          "tools": {
+            "include": "all"
+          }
+        }
+      ],
+      "credentials": [
+        {
+          "ref": "gh_github_token",
+          "label": "GITHUB_TOKEN",
+          "type": "apiKey",
+          "consumedBy": ["mcp:gh"],
+          "required": true
+        }
+      ],
+      "lossiness": []
+    }
+  },
+  {
+    "name": "no-command-no-url",
+    "input": {
+      "mcpServers": {
+        "ghost": {
+          "args": ["x"]
+        }
+      }
+    },
+    "expected": {
+      "servers": [],
+      "credentials": [],
+      "lossiness": ["skipped server \"ghost\": it has neither a command nor a url"]
+    }
   }
 ]

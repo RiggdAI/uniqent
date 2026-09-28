@@ -49,6 +49,41 @@ jobs:
 
       - run: pnpm test
 
+      # pnpm publish skips versions already on npm, so a package whose code changed without a
+      # version bump silently stays stale on npm while its dependents ship code that needs the new
+      # version (e.g. builder importing a core export the published core lacks). For every package
+      # whose version is already on npm, the freshly built dist/ must equal the published one.
+      - name: Require a version bump for every package whose code changed
+        run: |
+          gate="$RUNNER_TEMP/version-gate"
+          fail=0
+          for dir in packages/*; do
+            name="$(node -p "require('./${dir}/package.json').name")"
+            version="$(node -p "require('./${dir}/package.json').version")"
+            if ! published="$(npm view "${name}@${version}" version 2>&1)"; then
+              if grep -q E404 <<<"$published"; then
+                echo "${name} is not on npm yet"
+                continue
+              fi
+              echo "::error::npm view ${name}@${version} failed: ${published}"
+              exit 1
+            fi
+            if [ -z "$published" ]; then
+              echo "${name}@${version} is new"
+              continue
+            fi
+            rm -rf "$gate" && mkdir -p "$gate/local" "$gate/npm"
+            (cd "$dir" && pnpm pack --pack-destination "$gate/local" >/dev/null)
+            npm pack "${name}@${version}" --pack-destination "$gate/npm" >/dev/null
+            tar -xzf "$gate"/local/*.tgz -C "$gate/local"
+            tar -xzf "$gate"/npm/*.tgz -C "$gate/npm"
+            if ! diff -rq "$gate/local/package/dist" "$gate/npm/package/dist"; then
+              echo "::error file=${dir}/package.json::${name}@${version} is already on npm with different code; bump its version"
+              fail=1
+            fi
+          done
+          exit "$fail"
+
       # Publish every public package. pnpm skips versions already on the registry,
       # so re-running the same tag is safe (idempotent). The cli's prepublishOnly
       # regenerates the signed featured/ bundle so it ships in the tarball.

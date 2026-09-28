@@ -28,18 +28,19 @@ export function deriveComponents(input: ComponentsInput): Components {
 }
 
 /**
- * Derive a baseline permission scope. Network endpoints come from MCP http URLs;
- * stdio servers imply process spawning. Any field present in `override` wins, so a
- * round-trip through fromBundle preserves stored permissions exactly. Filesystem is
- * never inferred.
+ * Derive the permission scope from the brain's content: network endpoints from MCP http URLs,
+ * process spawning from stdio servers, autonomy from the runtime config. `declared` holds what
+ * the author states on top and can only WIDEN the derived scope, never hide it: filesystem and
+ * notes (never inferred), extra endpoints (unioned), spawnsProcesses (OR-ed), and an autonomy
+ * used only when the runtime config sets none.
  */
 export function derivePermissions(
   mcp: McpServer[],
   _channels: Channel[],
   runtime: RuntimeConfig | undefined,
-  override: Partial<PermissionScope> | undefined,
+  declared: Partial<PermissionScope> | undefined,
 ): PermissionScope {
-  const endpoints = new Set<string>();
+  const endpoints = new Set<string>(declared?.network?.endpoints ?? []);
   for (const s of mcp) {
     if (s.url) {
       try {
@@ -52,11 +53,11 @@ export function derivePermissions(
   const spawnsProcesses = mcp.some((s) => s.transport === 'stdio');
 
   const result: PermissionScope = {
-    filesystem: override?.filesystem ?? { read: [], write: [] },
-    network: override?.network ?? { endpoints: [...endpoints].sort() },
-    autonomy: override?.autonomy ?? runtime?.autonomy ?? 'suggest',
-    spawnsProcesses: override?.spawnsProcesses ?? spawnsProcesses,
+    filesystem: declared?.filesystem ?? { read: [], write: [] },
+    network: { endpoints: [...endpoints].sort() },
+    autonomy: runtime?.autonomy ?? declared?.autonomy ?? 'suggest',
+    spawnsProcesses: spawnsProcesses || (declared?.spawnsProcesses ?? false),
   };
-  if (override?.notes !== undefined) result.notes = override.notes;
+  if (declared?.notes !== undefined) result.notes = declared.notes;
   return result;
 }

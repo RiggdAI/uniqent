@@ -6,26 +6,59 @@ export interface SecretFinding {
   snippet: string;
 }
 
-const dec = new TextDecoder();
+type Hit = { kind: string; snippet: string };
 
+const strictUtf8 = new TextDecoder('utf-8', { fatal: true });
+
+/** Known secret formats, matched anywhere (including inside URLs and binary files). */
 const PREFIX_PATTERNS: Array<{ kind: string; re: RegExp }> = [
+  { kind: 'anthropic', re: /\bsk-ant-[A-Za-z0-9_-]{20,}/ },
+  { kind: 'openai', re: /\bsk-(?:proj|svcacct|admin)-[A-Za-z0-9_-]{20,}/ },
   { kind: 'openai', re: /\bsk-[A-Za-z0-9]{20,}\b/ },
   { kind: 'github-pat', re: /\bgh[posru]_[A-Za-z0-9]{30,}\b/ },
+  { kind: 'github-pat', re: /\bgithub_pat_[A-Za-z0-9_]{22,}/ },
+  { kind: 'gitlab-pat', re: /\bglpat-[A-Za-z0-9_-]{20,}/ },
+  { kind: 'google-api-key', re: /\bAIza[0-9A-Za-z_-]{35}/ },
+  { kind: 'stripe', re: /\b[rs]k_live_[A-Za-z0-9]{16,}/ },
   { kind: 'slack', re: /\bxox[baprs]-[A-Za-z0-9-]{10,}\b/ },
+  { kind: 'slack-webhook', re: /hooks\.slack\.com\/services\/[A-Za-z0-9_/-]{20,}/ },
+  { kind: 'discord-webhook', re: /discord(?:app)?\.com\/api\/webhooks\/\d+\/[A-Za-z0-9_-]{20,}/ },
   { kind: 'aws-access-key', re: /\bAKIA[0-9A-Z]{16}\b/ },
-  { kind: 'private-key', re: /-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----/ },
+  { kind: 'private-key', re: /-----BEGIN [A-Z0-9 ]*PRIVATE KEY[A-Z ]*-----/ },
+  // scheme://user:password@host — a password that is an env/template reference ($X, {x}, <x>) is not a value.
+  { kind: 'url-credentials', re: /\b[a-z][a-z0-9+.-]*:\/\/[^\s/:@]+:[^\s/@$<{]+@/i },
 ];
 
-const PLACEHOLDER_RE = /\$\{credentialRef:[^}]+\}/g;
+/**
+ * A `${credentialRef:<name>}` placeholder is allowed only when <name> is slug-like; its name is
+ * still scanned on its own (so a token can't hide as a ref name). Anything else is scanned raw.
+ */
+const PLACEHOLDER_RE = /\$\{credentialRef:([A-Za-z0-9][A-Za-z0-9_.-]*)\}/g;
 const HIGH_ENTROPY_TOKEN = /[A-Za-z0-9+/_=-]{32,}/g;
 
-// Image/binary assets (e.g. an avatar) aren't text — decoding their bytes as UTF-8 yields
-// high-entropy garbage that would false-positive the entropy detector. Secrets only ever leak
-// through the text surfaces (config, memory, manifest), which are still scanned.
-const BINARY_EXT = /\.(png|jpe?g|gif|webp|avif|ico|bmp|svg)$/i;
+/** Non-secret high-entropy surfaces removed before the entropy check (known formats still apply). */
+const DATA_URI_RE = /data:[a-z0-9.+/-]+;base64,[A-Za-z0-9+/=]+/gi;
+const INTEGRITY_RE = /\bsha(?:1|256|384|512)[-:][A-Za-z0-9+/=]+/gi;
+const URL_RE = /\b[a-z][a-z0-9+.-]*:\/\/[^\s"'<>()`]+/gi;
 
-/** Keys whose string values legitimately hold public key material; not secrets. */
-const ALLOWLISTED_KEYS = new Set(['pubkey', 'publicKey']);
+/** Names (JSON keys, env vars, assignments) whose values are credentials. */
+const SECRET_NAME_WORD =
+  /^(?:keys?|apikey|tokens?|secrets?|passwords?|passwd|pwd|pat|auth|authorization|credentials?)$/;
+const ASSIGNMENT_RE =
+  /([A-Za-z_][A-Za-z0-9_.-]{0,63})["']?\s*[:=]\s*["']?((?:(?:Bearer|Basic|Token)\s+)?[A-Za-z0-9/+=_-]+)/g;
+/** Credential-shaped values that are only suspicious next to a secret-ish name. */
+const SECRET_SHAPED_VALUES: RegExp[] = [
+  /^(?:[0-9a-f]{32}|[0-9a-f]{40}|[0-9a-f]{64})$/i,
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+  // AWS secret access key shape.
+  /^(?=.*[0-9])(?=.*[a-z])(?=.*[A-Z])[A-Za-z0-9/+]{40}$/,
+];
+
+/** JSON fields that legitimately hold public key material / signatures, per bundle file. */
+const ALLOWLISTED_JSON_FIELDS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+  [PATHS.signature, new Set(['publicKey', 'signature', 'digest'])],
+  [PATHS.manifest, new Set(['author.pubkey'])],
+]);
 
 function shannonEntropy(s: string): number {
   const counts = new Map<string, number>();
@@ -46,39 +79,118 @@ function snippet(match: string): string {
  * The longest run of a token with no identifier/path separators (`/ _ - + = .`). A real secret is a
  * long UNBROKEN random string (base64/hex/token), so its longest run is long; natural identifiers
  * and URL/file paths — `dataforseo_labs_google_competitors_domain`, `claude/skills/foo/SKILL.md` —
- * break into short word segments. We only entropy-flag when the longest unbroken run is long enough
- * to be a key. Known-format secrets (sk-, ghp_, …) are matched by PREFIX_PATTERNS regardless.
+ * break into short word segments. Known-format secrets (sk-, ghp_, …) are matched by PREFIX_PATTERNS.
  */
-function longestUnbrokenRun(token: string): number {
-  return token.split(/[/_+=.-]/).reduce((max, seg) => Math.max(max, seg.length), 0);
+function longestUnbrokenRun(token: string): string {
+  return token
+    .split(/[/_+=.-]/)
+    .reduce((longest, seg) => (seg.length > longest.length ? seg : longest), '');
 }
 
-/** Detect a secret in a single string value (placeholders already allowed). */
-function detect(value: string): { kind: string; snippet: string } | null {
-  const cleaned = value.replace(PLACEHOLDER_RE, '');
+function isSecretName(name: string): boolean {
+  if (/api[_-]?key/i.test(name)) return true;
+  return name
+    .split(/[^A-Za-z0-9]+|(?<=[a-z0-9])(?=[A-Z])/)
+    .some((word) => SECRET_NAME_WORD.test(word.toLowerCase()));
+}
+
+/** A credential-shaped value (hex/UUID/AWS secret) under a secret-ish name. */
+function detectNamed(name: string, value: string): Hit | null {
+  if (!isSecretName(name)) return null;
+  const bare = value.trim().replace(/^(?:Bearer|Basic|Token)\s+/i, '');
+  return SECRET_SHAPED_VALUES.some((re) => re.test(bare))
+    ? { kind: 'named-secret', snippet: snippet(bare) }
+    : null;
+}
+
+function detectKnownFormat(text: string): Hit | null {
   for (const { kind, re } of PREFIX_PATTERNS) {
-    const m = re.exec(cleaned);
+    const m = re.exec(text);
     if (m) return { kind, snippet: snippet(m[0]) };
   }
-  for (const m of cleaned.matchAll(HIGH_ENTROPY_TOKEN)) {
-    if (longestUnbrokenRun(m[0]) < 20) continue; // identifier / path, not a secret-like run
+  return null;
+}
+
+/** Keep only a URL's query/fragment: paths and hosts are public identifiers (drive ids, slugs). */
+function urlSecretSurface(url: string): string {
+  const cut = url.search(/[?#]/);
+  return cut === -1 ? ' ' : ` ${url.slice(cut + 1).replace(/[&#]/g, ' ')} `;
+}
+
+function detectHighEntropy(text: string): Hit | null {
+  const surface = text
+    .replace(DATA_URI_RE, ' ')
+    .replace(INTEGRITY_RE, ' ')
+    .replace(URL_RE, urlSecretSurface);
+  for (const m of surface.matchAll(HIGH_ENTROPY_TOKEN)) {
+    const run = longestUnbrokenRun(m[0]);
+    if (run.length < 20) continue; // identifier / path, not a secret-like run
+    if (/^(?:[a-z]+|[A-Z]+)$/.test(run)) continue; // a plain word (e.g. an npm scope), not random
     if (shannonEntropy(m[0]) >= 4.0) return { kind: 'high-entropy', snippet: snippet(m[0]) };
   }
   return null;
 }
 
-function walkJson(node: unknown, key: string | undefined, onString: (s: string) => void): void {
+/** Detect a secret in text with placeholders already removed. */
+function detectText(text: string): Hit | null {
+  const known = detectKnownFormat(text);
+  if (known) return known;
+  for (const m of text.matchAll(ASSIGNMENT_RE)) {
+    const hit = detectNamed(m[1] ?? '', m[2] ?? '');
+    if (hit) return hit;
+  }
+  return detectHighEntropy(text);
+}
+
+/** Detect a secret in a single string value; slug-named credentialRef placeholders are allowed. */
+function detect(value: string): Hit | null {
+  for (const m of value.matchAll(PLACEHOLDER_RE)) {
+    const hit = detectText(m[1] ?? '');
+    if (hit) return hit;
+  }
+  return detectText(value.replace(PLACEHOLDER_RE, ''));
+}
+
+/** Visit every object key and string value with its dotted field path (array items add an index). */
+function walkJson(
+  node: unknown,
+  fieldPath: string[],
+  onString: (value: string, fieldPath: string[]) => void,
+): void {
   if (typeof node === 'string') {
-    if (key !== undefined && ALLOWLISTED_KEYS.has(key)) return;
-    onString(node);
+    onString(node, fieldPath);
   } else if (Array.isArray(node)) {
-    for (const item of node) walkJson(item, undefined, onString);
+    node.forEach((item, i) => walkJson(item, [...fieldPath, String(i)], onString));
   } else if (node && typeof node === 'object') {
-    for (const [k, v] of Object.entries(node)) walkJson(v, k, onString);
+    for (const [k, v] of Object.entries(node)) {
+      onString(k, [...fieldPath, k, '<key>']);
+      walkJson(v, [...fieldPath, k], onString);
+    }
   }
 }
 
-/** True when a single string value looks like a secret (known prefix or high entropy). */
+function scanJson(path: string, json: unknown, record: (hit: Hit | null) => void): void {
+  const allowlisted = ALLOWLISTED_JSON_FIELDS.get(path);
+  walkJson(json, [], (value, fieldPath) => {
+    if (allowlisted?.has(fieldPath.join('.'))) return;
+    record(detect(value));
+    const name = fieldPath[fieldPath.length - 1];
+    if (name !== undefined && name !== '<key>') record(detectNamed(name, value));
+  });
+}
+
+/** UTF-8 text without NULs is scanned as text whatever its extension; anything else is binary. */
+function decodeText(bytes: Uint8Array): string | undefined {
+  if (bytes.includes(0)) return undefined;
+  try {
+    return strictUtf8.decode(bytes);
+  } catch (e) {
+    if (e instanceof TypeError) return undefined; // invalid UTF-8
+    throw e;
+  }
+}
+
+/** True when a single string value looks like a secret (known format, named credential, high entropy). */
 export function isLikelySecretValue(value: string): boolean {
   return detect(value) !== null;
 }
@@ -86,24 +198,30 @@ export function isLikelySecretValue(value: string): boolean {
 export function scanForSecrets(bundle: Bundle): SecretFinding[] {
   const findings: SecretFinding[] = [];
   for (const [path, bytes] of bundle.entries()) {
-    if (path === PATHS.signature) continue;
-    if (BINARY_EXT.test(path)) continue; // binary asset — not a text surface
-    const text = dec.decode(bytes);
-
-    const record = (hit: { kind: string; snippet: string } | null) => {
+    const record = (hit: Hit | null): void => {
       if (hit) findings.push({ path, kind: hit.kind, snippet: hit.snippet });
     };
+
+    const text = decodeText(bytes);
+    if (text === undefined) {
+      // Binary asset (e.g. an avatar): entropy is meaningless, but known formats can't hide in it.
+      record(detectKnownFormat(Buffer.from(bytes).toString('latin1')));
+      continue;
+    }
 
     if (path.endsWith('.json') || path.endsWith('.jsonl')) {
       const lines = path.endsWith('.jsonl') ? text.split('\n') : [text];
       for (const line of lines) {
         const trimmed = line.trim();
         if (!trimmed) continue;
+        let json: unknown;
         try {
-          walkJson(JSON.parse(trimmed), undefined, (s) => record(detect(s)));
+          json = JSON.parse(trimmed);
         } catch {
           record(detect(trimmed)); // malformed JSON: fall back to a text scan
+          continue;
         }
+        scanJson(path, json, record);
       }
     } else {
       record(detect(text));

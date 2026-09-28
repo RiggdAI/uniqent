@@ -1,8 +1,9 @@
-import { mkdir, writeFile, readFile, readdir } from 'node:fs/promises';
+import { chmod, mkdir, writeFile, readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, relative, sep } from 'node:path';
 import type { Bundle } from '@uniqent/core';
-import { Brain, stripMemoryMarkup } from '@uniqent/builder';
+import type { McpServer } from '@uniqent/spec';
+import { requiredCredentialRefs, resolveInside } from '@uniqent/adapter-sdk';
 import type {
   Adapter,
   DetectResult,
@@ -11,33 +12,75 @@ import type {
   InstallPlan,
   InstallResult,
   Lossiness,
+  PlanWrite,
   ResolvedCredentials,
 } from '@uniqent/adapter-sdk';
-import { toClaudeMcpEntry } from './mcp.js';
+import { describeAgentsBody, renderAgentsBody, upsertManagedSection } from './agents-md.js';
+import { exportClaudeCode } from './export.js';
+import {
+  mcpEntryShape,
+  parseMcpJson,
+  placeholderCredentials,
+  scopedCredentials,
+  toClaudeMcpEntry,
+} from './mcp.js';
+import type { McpJsonFile } from './mcp.js';
 
-function computePlan(bundle: Bundle): InstallPlan {
-  const writes = [];
-  for (const path of bundle.list()) {
-    if (path.startsWith('skills/')) writes.push({ path: `.claude/${path}`, summary: 'skill file' });
-  }
-  if (bundle.persona() !== undefined) {
-    writes.push({ path: 'AGENTS.md', summary: 'persona + policies + memory' });
-  }
-  const servers = bundle.mcpServers();
-  if (servers.length > 0) {
-    writes.push({ path: '.mcp.json', summary: `${servers.length} MCP server(s)` });
-  }
+const AGENTS_MD = 'AGENTS.md';
+const CLAUDE_MD = 'CLAUDE.md';
+const MCP_JSON = '.mcp.json';
+const SKILLS_DIR = join('.claude', 'skills');
+/** Claude Code reads AGENTS.md only when no CLAUDE.md exists, so a CLAUDE.md must import it. */
+const AGENTS_IMPORT = '@AGENTS.md';
 
-  const manifest = bundle.manifest();
-  const requiresCredentials = manifest.credentials
-    .filter((c) => c.consumedBy.some((x) => x.startsWith('mcp:')))
-    .map((c) => c.ref);
+async function readIfExists(path: string): Promise<string | undefined> {
+  return existsSync(path) ? readFile(path, 'utf8') : undefined;
+}
 
+interface SkillTarget {
+  bundlePath: string;
+  /** Root-relative, forward-slash path for plans and results. */
+  rel: string;
+  target: string;
+}
+
+/** Bundle skill files, each resolved inside `<root>/.claude/skills` (throws PathEscapeError). */
+function skillTargets(bundle: Bundle, root: string): SkillTarget[] {
+  return bundle
+    .list()
+    .filter((p) => p.startsWith('skills/'))
+    .map((bundlePath) => {
+      const target = resolveInside(join(root, SKILLS_DIR), bundlePath.slice('skills/'.length));
+      return { bundlePath, rel: relative(root, target).split(sep).join('/'), target };
+    });
+}
+
+async function readMcpJson(root: string): Promise<McpJsonFile | undefined> {
+  const path = resolveInside(root, MCP_JSON);
+  const text = await readIfExists(path);
+  return text === undefined ? undefined : parseMcpJson(path, text);
+}
+
+/** Incoming servers whose id already exists in `.mcp.json` with a different command/url/shape. */
+function replacedServerIds(servers: McpServer[], existing: McpJsonFile | undefined): string[] {
+  if (!existing) return [];
+  return servers
+    .filter((s) => {
+      const current = existing.servers[s.id];
+      if (current === undefined) return false;
+      const incoming = toClaudeMcpEntry(s, placeholderCredentials(s));
+      return mcpEntryShape(current) !== mcpEntryShape(incoming);
+    })
+    .map((s) => s.id);
+}
+
+function computeLossiness(bundle: Bundle, replaced: string[]): Lossiness[] {
   const lossiness: Lossiness[] = [];
-  if (bundle.channels().length > 0)
+  const channels = bundle.channels();
+  if (channels.length > 0)
     lossiness.push({
       component: 'channels',
-      issue: 'Claude Code has no channel concept; dropped.',
+      issue: `Claude Code has no channel concept; ${channels.map((c) => c.id).join(', ')} and their config dropped.`,
       action: 'dropped',
     });
   if (bundle.tasks().length > 0)
@@ -52,57 +95,96 @@ function computePlan(bundle: Bundle): InstallPlan {
       issue: 'native tool enablement differs; dropped.',
       action: 'dropped',
     });
-  if (
-    bundle.memoryFacts().length > 0 ||
-    bundle.memoryEpisodic().length > 0 ||
-    bundle.memoryProfile()
-  )
+  if (bundle.runtime() !== undefined)
+    lossiness.push({
+      component: 'runtime',
+      issue:
+        'setup/runtime.json (model, autonomy, toolAllowlist, defaults) is not mapped into Claude Code settings; dropped.',
+      action: 'dropped',
+    });
+  const profile = bundle.memoryProfile();
+  if (bundle.memoryFacts().length > 0 || (profile && Object.keys(profile).length > 0))
     lossiness.push({
       component: 'memory',
-      issue: 'folded into AGENTS.md as text; structure not preserved.',
+      issue: 'facts + profile folded into AGENTS.md as text; structure not preserved.',
       action: 'transformed',
     });
+  const episodic = bundle.memoryEpisodic().length;
+  if (episodic > 0)
+    lossiness.push({
+      component: 'memory (episodic)',
+      issue: `${episodic} episodic memory item(s) are not installed; Claude Code has no episodic store.`,
+      action: 'dropped',
+    });
+  for (const s of bundle.mcpServers()) {
+    if (s.tools.include === 'all') continue;
+    lossiness.push({
+      component: `mcp:${s.id} tools`,
+      issue: `.mcp.json has no per-server tool filter; allowlist [${s.tools.include.join(', ')}] is not enforced — every tool the server exposes is available.`,
+      action: 'dropped',
+    });
+  }
+  for (const id of replaced)
+    lossiness.push({
+      component: `mcp:${id}`,
+      issue: `replaces your existing, different "${id}" entry in .mcp.json.`,
+      action: 'transformed',
+    });
+  return lossiness;
+}
+
+/**
+ * Dry-analyze an install into `root`: validates every path, credential scope, and the existing
+ * `.mcp.json` up front (throwing before anything is written) and reports modifications of
+ * existing files as such.
+ */
+async function computePlan(bundle: Bundle, root: string): Promise<InstallPlan> {
+  const writes: PlanWrite[] = skillTargets(bundle, root).map((s) => ({
+    path: s.rel,
+    summary: 'skill file',
+  }));
+
+  const agentsParts = describeAgentsBody(bundle);
+  if (agentsParts) {
+    const exists = existsSync(resolveInside(root, AGENTS_MD));
+    writes.push({
+      path: AGENTS_MD,
+      summary: exists
+        ? `modify existing: replace the uniqent-managed section (${agentsParts}); content outside it is preserved`
+        : `create: ${agentsParts}`,
+    });
+    if (existsSync(resolveInside(root, CLAUDE_MD)))
+      writes.push({
+        path: CLAUDE_MD,
+        summary: `modify existing: add a uniqent-managed "${AGENTS_IMPORT}" import (Claude Code ignores AGENTS.md when CLAUDE.md exists); content outside it is preserved`,
+      });
+  }
+
+  const servers = bundle.mcpServers();
+  const requiresCredentials = requiredCredentialRefs(bundle, ['mcp']);
+  let replaced: string[] = [];
+  if (servers.length > 0) {
+    for (const s of servers) scopedCredentials(bundle, s, {});
+    const existing = await readMcpJson(root);
+    replaced = replacedServerIds(servers, existing);
+    const merge = existing
+      ? `modify existing: merge ${servers.length} MCP server(s)` +
+        (replaced.length > 0 ? `, replacing your entries: ${replaced.join(', ')}` : '')
+      : `create: ${servers.length} MCP server(s)`;
+    const secrets =
+      requiresCredentials.length > 0
+        ? '; will contain resolved credentials (mode 0600 — do not commit)'
+        : '';
+    writes.push({ path: MCP_JSON, summary: merge + secrets });
+  }
 
   return {
     writes,
     mcpRegistrations: servers.map((s) => s.id),
     channelRegistrations: [],
-    lossiness,
+    lossiness: computeLossiness(bundle, replaced),
     requiresCredentials,
   };
-}
-
-function buildAgentsMd(bundle: Bundle): string {
-  const parts: string[] = ['<!-- Generated by Uniqent — installed from a .uniqent brain. -->', ''];
-  const persona = bundle.persona();
-  if (persona) parts.push(persona.trim(), '');
-  const policies = bundle.policies();
-  if (policies) parts.push('## Policies', '', policies.trim(), '');
-  const facts = bundle.memoryFacts();
-  if (facts.length > 0) {
-    parts.push('## Memory', '');
-    for (const f of facts) parts.push(`- ${stripMemoryMarkup(f.text)}`);
-    parts.push('');
-  }
-  return parts.join('\n');
-}
-
-interface ClaudeMcpEntry {
-  command?: string;
-  args?: string[];
-  type?: string;
-  url?: string;
-  headers?: Record<string, string>;
-  env?: Record<string, string>;
-}
-
-/** A stable credential ref id from an MCP server id (e.g. "com.x/gh" → "com-x-gh_token"). */
-function credRefFor(id: string): string {
-  const slug = id
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-  return `${slug || 'mcp'}_token`;
 }
 
 export const claudeCodeAdapter: Adapter = {
@@ -111,11 +193,12 @@ export const claudeCodeAdapter: Adapter = {
 
   async detect({ root }): Promise<DetectResult> {
     const r = root ?? process.cwd();
-    return { present: true, configRoot: join(r, '.claude') };
+    const present = existsSync(join(r, '.claude')) || existsSync(join(r, MCP_JSON));
+    return { present, configRoot: join(r, '.claude') };
   },
 
-  async plan(bundle: Bundle): Promise<InstallPlan> {
-    return computePlan(bundle);
+  async plan(bundle: Bundle, { root }: InstallOptions): Promise<InstallPlan> {
+    return computePlan(bundle, root);
   },
 
   async apply(
@@ -124,133 +207,79 @@ export const claudeCodeAdapter: Adapter = {
     resolved: ResolvedCredentials,
     { root }: InstallOptions,
   ): Promise<InstallResult> {
+    // Re-plan against the current state: validates everything before the first write.
+    const plan = await computePlan(bundle, root);
+    await mkdir(root, { recursive: true });
     const written: string[] = [];
     const notes: string[] = [];
 
-    for (const path of bundle.list()) {
-      if (!path.startsWith('skills/')) continue;
-      const bytes = bundle.get(path);
+    for (const skill of skillTargets(bundle, root)) {
+      const bytes = bundle.get(skill.bundlePath);
       if (!bytes) continue;
-      const target = join(root, '.claude', path);
-      await mkdir(dirname(target), { recursive: true });
-      await writeFile(target, bytes);
-      written.push(`.claude/${path}`);
+      await mkdir(dirname(skill.target), { recursive: true });
+      await writeFile(skill.target, bytes);
+      written.push(skill.rel);
     }
 
-    const persona = bundle.persona();
-    if (persona !== undefined) {
-      const agentsPath = join(root, 'AGENTS.md');
-      if (existsSync(agentsPath)) notes.push('overwrote existing AGENTS.md (adapter-owned)');
-      await writeFile(agentsPath, buildAgentsMd(bundle));
-      written.push('AGENTS.md');
+    const body = renderAgentsBody(bundle);
+    if (body !== undefined) {
+      const agentsPath = resolveInside(root, AGENTS_MD);
+      const agents = await readIfExists(agentsPath);
+      await writeFile(agentsPath, upsertManagedSection(agentsPath, agents, body));
+      written.push(AGENTS_MD);
+      const claudePath = resolveInside(root, CLAUDE_MD);
+      const claude = await readIfExists(claudePath);
+      if (claude !== undefined) {
+        await writeFile(claudePath, upsertManagedSection(claudePath, claude, AGENTS_IMPORT));
+        written.push(CLAUDE_MD);
+        notes.push(
+          `CLAUDE.md exists, so Claude Code would ignore AGENTS.md; added a uniqent-managed "${AGENTS_IMPORT}" import to CLAUDE.md`,
+        );
+      }
     }
 
     const servers = bundle.mcpServers();
     if (servers.length > 0) {
-      const mcpPath = join(root, '.mcp.json');
-      let existing: { mcpServers?: Record<string, unknown> } = {};
-      try {
-        existing = JSON.parse(await readFile(mcpPath, 'utf8')) as {
-          mcpServers?: Record<string, unknown>;
-        };
-      } catch {
-        existing = {};
+      const mcpPath = resolveInside(root, MCP_JSON);
+      const existing = await readMcpJson(root);
+      const entries = servers.map((s) => ({
+        server: s,
+        entry: toClaudeMcpEntry(s, scopedCredentials(bundle, s, resolved)),
+      }));
+      const inlinesSecrets = entries.some(
+        ({ server, entry }) =>
+          JSON.stringify(entry) !== JSON.stringify(toClaudeMcpEntry(server, {})),
+      );
+      const mcpServers: Record<string, unknown> = {
+        ...(existing?.servers ?? {}),
+        ...Object.fromEntries(entries.map(({ server, entry }) => [server.id, entry])),
+      };
+      await writeFile(
+        mcpPath,
+        JSON.stringify({ ...(existing?.doc ?? {}), mcpServers }, null, 2) + '\n',
+        { mode: inlinesSecrets ? 0o600 : 0o666 },
+      );
+      written.push(MCP_JSON);
+      if (inlinesSecrets) {
+        // writeFile's mode only applies on creation; tighten a pre-existing file too.
+        await chmod(mcpPath, 0o600);
+        notes.push(
+          '.mcp.json contains resolved credentials (written with mode 0600) — do not commit it; add it to .gitignore',
+        );
       }
-      const mcpServers: Record<string, unknown> = { ...(existing.mcpServers ?? {}) };
-      for (const s of servers) mcpServers[s.id] = toClaudeMcpEntry(s, resolved);
-      await mkdir(dirname(mcpPath), { recursive: true });
-      await writeFile(mcpPath, JSON.stringify({ ...existing, mcpServers }, null, 2) + '\n');
-      written.push('.mcp.json');
     }
 
-    for (const l of computePlan(bundle).lossiness) {
+    for (const l of plan.lossiness) {
       notes.push(`${l.action}: ${l.component} — ${l.issue}`);
     }
     return { written, notes };
   },
 
   async export({ root }: ExportOptions): Promise<Bundle> {
-    const brain = Brain.create({
-      name: 'captured-agent',
-      displayName: 'Captured Agent',
-      version: '0.1.0',
-      description: 'Captured from a Claude Code project.',
-      author: { name: 'unknown' },
-      license: 'CC0-1.0',
-      tags: [],
-    });
-
-    try {
-      brain.setPersona(await readFile(join(root, 'AGENTS.md'), 'utf8'));
-    } catch {
-      /* no AGENTS.md */
-    }
-
-    try {
-      for (const name of await readdir(join(root, '.claude', 'skills'))) {
-        try {
-          const md = await readFile(join(root, '.claude', 'skills', name, 'SKILL.md'), 'utf8');
-          brain.addSkill(name, md);
-        } catch {
-          /* not a skill dir */
-        }
-      }
-    } catch {
-      /* no skills */
-    }
-
-    try {
-      const parsed = JSON.parse(await readFile(join(root, '.mcp.json'), 'utf8')) as {
-        mcpServers?: Record<string, ClaudeMcpEntry>;
-      };
-      for (const [id, e] of Object.entries(parsed.mcpServers ?? {})) {
-        if (e.command) {
-          brain.addMcpServer({
-            id,
-            transport: 'stdio',
-            command: e.command,
-            args: e.args,
-            auth: { type: 'none' },
-            tools: { include: 'all' },
-          });
-          continue;
-        }
-        // http/sse: recover the credential REQUIREMENT from any auth header — never its value —
-        // so the captured brain stays functional + shareable (and the secret-scan stays clean).
-        const headers = e.headers ?? {};
-        const authzKey = Object.keys(headers).find((h) => h.toLowerCase() === 'authorization');
-        const otherKey = Object.keys(headers).find((h) => h.toLowerCase() !== 'authorization');
-        const ref = credRefFor(id);
-        let auth: Record<string, unknown> = { type: 'none' };
-        if (authzKey && /^Bearer\s/i.test(headers[authzKey] ?? '')) {
-          auth = { type: 'bearer', credentialRef: ref };
-        } else if (otherKey) {
-          auth = { type: 'header', headerName: otherKey, credentialRef: ref };
-        }
-        brain.addMcpServer({
-          id,
-          transport: e.type === 'sse' ? 'sse' : 'streamable-http',
-          url: e.url,
-          auth,
-          tools: { include: 'all' },
-        });
-        if (auth.type !== 'none') {
-          brain.addCredential({
-            ref,
-            label: `${id} credential`,
-            type: auth.type === 'bearer' ? 'bearer' : 'header',
-            consumedBy: [`mcp:${id}`],
-            required: true,
-            help: 'Re-supplied locally at install; captured from the source agent without its value.',
-          });
-        }
-      }
-    } catch {
-      /* no .mcp.json */
-    }
-
-    return brain.toBundle();
+    return exportClaudeCode(root);
   },
 };
 
 export { toClaudeMcpEntry };
+export { McpConfigParseError, CredentialScopeError } from './mcp.js';
+export { ManagedSectionError, MANAGED_BEGIN, MANAGED_END } from './agents-md.js';

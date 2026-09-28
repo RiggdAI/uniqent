@@ -52,8 +52,9 @@ export const MCP_CATALOG: McpCatalogEntry[] = [
     server: {
       id: 'fetch',
       transport: 'stdio',
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-fetch'],
+      // The official fetch server is a Python package (PyPI `mcp-server-fetch`); there is no npm build.
+      command: 'uvx',
+      args: ['mcp-server-fetch'],
       auth: { type: 'none' },
       tools: { include: 'all' },
       description: 'Web fetch MCP server',

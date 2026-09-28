@@ -184,8 +184,8 @@ export const api = {
     isNative ? soon() : post<HubSearch<SkillHubResult>>('/api/hub/skills/search', { query }),
   addHubMcp: (result: McpHubResult) =>
     isNative ? soon() : post<StudioState>('/api/hub/mcp/add', { result }),
-  addHubSkill: (url: string) =>
-    isNative ? soon() : post<StudioState>('/api/hub/skill/add', { url }),
+  addHubSkill: (url: string, name: string) =>
+    isNative ? soon() : post<StudioState>('/api/hub/skill/add', { url, name }),
   hubIndexes: () => (isNative ? soon() : get<{ indexes: string[] }>('/api/hub/indexes')),
   setHubIndexes: (urls: string[]) =>
     isNative ? soon() : post<{ indexes: string[] }>('/api/hub/indexes', { urls }),

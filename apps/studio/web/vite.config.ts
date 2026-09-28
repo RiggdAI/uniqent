@@ -10,5 +10,16 @@ export default defineConfig({
   base: './',
   plugins: [react()],
   build: { outDir: resolve(here, '../dist-web'), emptyOutDir: true },
-  server: { port: 5173, proxy: { '/api': 'http://localhost:4173' } },
+  server: {
+    port: 5173,
+    proxy: {
+      // The Studio API only answers its own origin (see src/server/guard.ts), so the dev proxy
+      // presents the dev page's requests as coming from the API server's origin.
+      '/api': {
+        target: 'http://localhost:4173',
+        changeOrigin: true,
+        headers: { origin: 'http://localhost:4173' },
+      },
+    },
+  },
 });

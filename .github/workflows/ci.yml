@@ -54,6 +54,59 @@ jobs:
 
       - run: pnpm test
 
+  # Install the packages the way npm users get them: `pnpm pack` every package (which rewrites
+  # workspace:^ ranges to real versions), install all tarballs together into a fresh npm
+  # project, and run the published `uniqent` bin end to end. Catches missing files/exports/deps
+  # in the tarballs that workspace links hide.
+  pack-smoke:
+    runs-on: ubuntu-latest
+    name: npm pack smoke (uniqent from tarballs)
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable pnpm (corepack)
+        run: |
+          npm install -g corepack@latest
+          corepack enable
+          corepack prepare --activate
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm build
+
+      - name: Pack every package
+        run: |
+          mkdir -p "$RUNNER_TEMP/tarballs"
+          for dir in packages/*/; do
+            (cd "$dir" && pnpm pack --pack-destination "$RUNNER_TEMP/tarballs")
+          done
+          ls -l "$RUNNER_TEMP/tarballs"
+
+      - name: Install the tarballs into a fresh npm project
+        working-directory: ${{ runner.temp }}
+        run: |
+          mkdir smoke && cd smoke
+          npm init -y
+          npm install --no-audit --no-fund "$RUNNER_TEMP"/tarballs/*.tgz
+
+      - name: uniqent --help
+        working-directory: ${{ runner.temp }}/smoke
+        run: npx --no-install uniqent --help
+
+      - name: uniqent try research-analyst (claude-code)
+        working-directory: ${{ runner.temp }}/smoke
+        run: |
+          root="$(mktemp -d)"
+          npx --no-install uniqent try research-analyst --target claude-code --root "$root" --yes
+          test -f "$root/AGENTS.md"
+          test -f "$root/.mcp.json"
+
   studio-rust:
     runs-on: macos-latest
     name: studio (cargo test + clippy)

@@ -3,8 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { dirname, extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { StudioSession } from './session.js';
-import { handleApi } from './api.js';
-import { isLocalApiRequest } from './guard.js';
+import { handleRawApi } from './api.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const webRoot = join(here, '../../dist-web');
@@ -46,20 +45,19 @@ const server = createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
 
     if (url.pathname.startsWith('/api')) {
-      if (!isLocalApiRequest(req.headers)) {
-        res.writeHead(403, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ error: 'forbidden: Uniqent Studio only serves local requests' }));
-        return;
-      }
       try {
-        let body: unknown = {};
-        if (method !== 'GET') {
-          const chunks: Buffer[] = [];
-          for await (const c of req) chunks.push(c as Buffer);
-          const raw = Buffer.concat(chunks).toString('utf8');
-          body = raw ? JSON.parse(raw) : {};
-        }
-        const { status, json } = await handleApi(session, method, url.pathname, body);
+        const chunks: Buffer[] = [];
+        if (method !== 'GET') for await (const c of req) chunks.push(c as Buffer);
+        const { status, json } = await handleRawApi(
+          session,
+          {
+            method,
+            path: url.pathname,
+            headers: req.headers,
+            body: Buffer.concat(chunks).toString('utf8'),
+          },
+          PORT,
+        );
         res.writeHead(status, { 'content-type': 'application/json' });
         res.end(JSON.stringify(json));
       } catch (e) {

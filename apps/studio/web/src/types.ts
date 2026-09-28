@@ -138,6 +138,8 @@ export interface McpNormalizePreview {
 export interface HubSearch<T> {
   results: T[];
   errors: Array<{ source: string; message: string }>;
+  /** Entries a hub found but could not represent, each with its reason. */
+  skipped: Array<{ source: string; name: string; reason: string }>;
 }
 
 export interface MemoryGraphNode {

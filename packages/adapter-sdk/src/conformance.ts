@@ -2,6 +2,7 @@ import { readdir, readFile, stat } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
 import type { Bundle } from '@uniqent/core';
 import type { Adapter } from './types.js';
+import { PathEscapeError, resolveInside } from './paths.js';
 
 const SECRET_PATTERNS: RegExp[] = [
   /\bsk-[A-Za-z0-9]{20,}/,
@@ -45,7 +46,8 @@ export interface ConformanceResult {
 /**
  * Run an adapter through the conformance contract against a sandbox `root`:
  * apply twice with dummy credentials and assert idempotency, no secret values on disk,
- * and that unsupported components are declared in `plan.lossiness` (no silent loss).
+ * every planned/written path inside `root`, and that unsupported components (tools, channels,
+ * tasks, episodic memory, runtime config) are represented or declared in `plan.lossiness`.
  */
 export async function runConformance(
   adapter: Adapter,
@@ -57,10 +59,28 @@ export async function runConformance(
   const plan = await adapter.plan(bundle, { root });
   const resolved = Object.fromEntries(plan.requiresCredentials.map((r) => [r, `test-${r}`]));
 
-  await adapter.apply(bundle, plan, resolved, { root });
+  const result1 = await adapter.apply(bundle, plan, resolved, { root });
   const after1 = await readTree(root);
-  await adapter.apply(bundle, plan, resolved, { root });
+  const result2 = await adapter.apply(bundle, plan, resolved, { root });
   const after2 = await readTree(root);
+
+  // Every planned and reported write must resolve inside root.
+  const escaped = [
+    ...new Set([...plan.writes.map((w) => w.path), ...result1.written, ...result2.written]),
+  ].filter((p) => {
+    try {
+      resolveInside(root, p);
+      return false;
+    } catch (err) {
+      if (err instanceof PathEscapeError) return true;
+      throw err;
+    }
+  });
+  checks.push({
+    name: 'all writes stay inside root',
+    pass: escaped.length === 0,
+    detail: escaped.join(', '),
+  });
 
   const idempotent =
     after1.size === after2.size && [...after1].every(([k, v]) => after2.get(k) === v);
@@ -88,6 +108,12 @@ export async function runConformance(
   ) {
     silent.push('channels');
   }
+  // Components with no registration list count as represented when a planned write names them.
+  const represented = (kw: string) => plan.writes.some((w) => w.summary.toLowerCase().includes(kw));
+  const accounted = (kw: string) => declared(kw) || represented(kw);
+  if (bundle.tasks().length > 0 && !accounted('task')) silent.push('tasks');
+  if (bundle.memoryEpisodic().length > 0 && !accounted('episodic')) silent.push('episodic memory');
+  if (bundle.runtime() !== undefined && !accounted('runtime')) silent.push('runtime config');
   checks.push({
     name: 'no silent loss of components',
     pass: silent.length === 0,

@@ -21,6 +21,7 @@ export function App() {
   const [exportMsg, setExportMsg] = useState('');
   const [error, setError] = useState('');
   const [brainOpen, setBrainOpen] = useState(false);
+  const [issuesOpen, setIssuesOpen] = useState(false);
   const [paletteCollapsed, setPaletteCollapsed] = useState(
     () => localStorage.getItem('uq.palette.collapsed') === '1',
   );
@@ -113,46 +114,55 @@ export function App() {
       </div>
 
       {graph.nodes.length <= 1 && (
-        <div className="pointer-events-none absolute inset-0 grid place-items-center">
-          <p className="text-sm text-muted-foreground">
-            Add components from the palette to build your brain
-          </p>
-        </div>
+        <p
+          data-testid="empty-hint"
+          className="pointer-events-none absolute inset-x-4 bottom-16 text-center text-sm text-muted-foreground"
+        >
+          Add components from the palette to build your brain
+        </p>
       )}
 
       {/* Floating header (bare, no box) */}
-      <header className="absolute inset-x-4 top-3 z-20 flex h-12 items-center justify-between">
-        <div className="flex items-center gap-2 text-base font-bold tracking-tight">
+      <header className="absolute inset-x-4 top-3 z-20 flex h-12 items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2 text-base font-bold tracking-tight">
           <span className="grid size-6 place-items-center rounded-md bg-primary text-xs text-primary-foreground">
             U
           </span>
-          Uniqent{' '}
+          <span className="hidden sm:inline">Uniqent</span>
           <span className="bg-gradient-to-r from-primary to-fuchsia-400 bg-clip-text text-transparent">
             Studio
           </span>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
           <span className="hidden text-sm text-muted-foreground sm:inline">
             {state.manifest.displayName}
           </span>
           <Button
             data-testid="brain-btn"
+            aria-label="Memory brain"
             variant="outline"
             size="sm"
             onClick={() => setBrainOpen(true)}
           >
-            <Brain className="size-4" /> Brain
+            <Brain className="size-4" /> <span className="hidden sm:inline">Brain</span>
           </Button>
           <Button
             data-testid="install-btn"
+            aria-label="Install"
             variant="outline"
             size="sm"
             onClick={() => setSelection('install')}
           >
-            <Rocket className="size-4" /> Install
+            <Rocket className="size-4" /> <span className="hidden sm:inline">Install</span>
           </Button>
-          <Button data-testid="export-btn" size="sm" disabled={busy} onClick={doExport}>
-            <Download className="size-4" /> Export
+          <Button
+            data-testid="export-btn"
+            aria-label="Export"
+            size="sm"
+            disabled={busy}
+            onClick={doExport}
+          >
+            <Download className="size-4" /> <span className="hidden sm:inline">Export</span>
           </Button>
         </div>
       </header>
@@ -177,7 +187,7 @@ export function App() {
 
       {/* Floating inspector */}
       {selection && (
-        <div className="absolute bottom-14 right-3 top-[4.25rem] z-10 w-80 overflow-hidden rounded-xl border bg-card/80 shadow-lg backdrop-blur">
+        <div className="absolute bottom-14 left-3 right-3 top-[4.25rem] z-10 overflow-hidden rounded-xl border bg-card/80 shadow-lg backdrop-blur sm:left-auto sm:w-80">
           <Inspector
             selection={selection}
             state={state}
@@ -191,14 +201,21 @@ export function App() {
       {/* Floating status bar (bare, no box) */}
       <footer
         data-testid="status-bar"
-        className="absolute inset-x-4 bottom-3 z-20 flex h-9 items-center gap-3 text-sm"
+        className="absolute inset-x-4 bottom-3 z-20 flex h-9 items-center gap-3 overflow-hidden whitespace-nowrap text-sm"
       >
-        <span
-          className={cn('flex items-center gap-1.5', v.ok ? 'text-success' : 'text-destructive')}
+        <button
+          type="button"
+          data-testid="issues-toggle"
+          disabled={v.ok}
+          onClick={() => setIssuesOpen((o) => !o)}
+          className={cn(
+            'flex items-center gap-1.5',
+            v.ok ? 'text-success' : 'text-destructive underline-offset-4 hover:underline',
+          )}
         >
           {v.ok ? <CheckCircle2 className="size-4" /> : <XCircle className="size-4" />}
           {v.ok ? 'valid' : `${v.errors.length} issue(s)`}
-        </span>
+        </button>
         <span className="text-muted-foreground">·</span>
         <span className={secrets === 0 ? 'text-muted-foreground' : 'text-destructive'}>
           {secrets} secrets
@@ -208,6 +225,30 @@ export function App() {
         {exportMsg && <span className="ml-auto truncate text-muted-foreground">{exportMsg}</span>}
         {error && <span className="ml-auto truncate text-destructive">{error}</span>}
       </footer>
+
+      {issuesOpen && !v.ok && (
+        <div
+          data-testid="issues-panel"
+          className="absolute bottom-14 left-3 z-30 max-h-72 w-[min(32rem,calc(100vw-1.5rem))] overflow-auto rounded-xl border bg-card/95 p-3 text-xs shadow-lg backdrop-blur"
+        >
+          <p className="mb-2 font-medium text-destructive">
+            The bundle is invalid — fix these before export or install:
+          </p>
+          <ul className="space-y-2">
+            {v.errors.map((e, i) => (
+              <li key={i} className="space-y-0.5">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="rounded bg-destructive/15 px-1.5 py-0.5 font-mono text-[10px] text-destructive">
+                    {e.code}
+                  </span>
+                  {e.path && <span className="font-mono text-muted-foreground">{e.path}</span>}
+                </div>
+                <p className="break-words">{e.message}</p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {brainOpen && (
         <Suspense fallback={null}>

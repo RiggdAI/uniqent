@@ -8,7 +8,7 @@ fn fixture(name: &str) -> Value {
 }
 
 fn apply_meta(s: &mut Session) {
-    s.set_meta(json!({"name":"fixture-brain","description":"A fixture brain for cross-impl tests","version":"1.2.3"}));
+    s.set_meta(json!({"name":"fixture-brain","description":"A fixture brain for cross-impl tests","version":"1.2.3"})).unwrap();
     s.set_targets(vec!["claude-code".into(), "hermes".into()]);
     s.set_persona("# Persona\n\nYou are the fixture.".into());
     s.set_readme("# Readme\n\nFixture readme.".into());
@@ -17,14 +17,16 @@ fn apply_meta(s: &mut Session) {
 fn apply_content(s: &mut Session) {
     s.add_mcp_catalog("github").unwrap();
     s.add_custom_mcp(json!({"id":"custom-api","name":"Custom API","transport":"streamable-http","url":"https://api.example.com/mcp","auth":{"type":"none"}})).unwrap();
-    s.add_custom_skill("fixture-skill", "# fixture-skill\n\nDoes fixture things.\n");
+    s.add_custom_skill("fixture-skill", "# fixture-skill\n\nDoes fixture things.\n")
+        .unwrap();
     s.add_channel_catalog("telegram").unwrap();
     s.add_task(json!({"name":"Nightly digest","cron":"0 9 * * *","prompt":"Summarize."}))
         .unwrap();
     s.add_fact(json!({"text":"Fixture prefers [[Rust]] #perf","importance":0.8}))
         .unwrap();
     s.add_fact(json!({"text":"plain fact"})).unwrap();
-    s.set_profile(json!({"name":"Fixture User","role":"Tester"}));
+    s.set_profile(json!({"name":"Fixture User","role":"Tester"}))
+        .unwrap();
     s.remove_mcp("custom-api");
     s.add_custom_mcp(json!({"id":"custom-api","name":"Custom API","transport":"streamable-http","url":"https://api.example.com/mcp","auth":{"type":"none"}})).unwrap();
 }
@@ -46,7 +48,7 @@ fn unknown_mcp_catalog_id_errors() {
 #[test]
 fn remove_skill_clears_it() {
     let mut s = Session::new();
-    s.add_custom_skill("my-skill", "# test");
+    s.add_custom_skill("my-skill", "# test").unwrap();
     s.remove_skill("my-skill");
     let state = s.state();
     let skills = state["manifest"]["components"]["skills"]
@@ -105,4 +107,41 @@ fn add_skill_catalog_unknown_name_errors() {
     let mut s = Session::new();
     let err = s.add_skill_catalog("nonexistent-skill").unwrap_err();
     assert!(err.contains("skill catalog name not found"));
+}
+
+#[test]
+fn removing_the_last_consumer_drops_its_credential() {
+    let mut s = Session::new();
+    s.add_mcp_catalog("github").unwrap();
+    assert_eq!(
+        s.state()["manifest"]["credentials"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    s.remove_mcp("github");
+    assert_eq!(s.state()["manifest"]["credentials"], json!([]));
+
+    s.add_channel_catalog("telegram").unwrap();
+    s.remove_channel("telegram");
+    assert_eq!(s.state()["manifest"]["credentials"], json!([]));
+}
+
+#[test]
+fn a_shared_credential_survives_until_its_last_consumer_goes() {
+    let mut s = Session::new();
+    for id in ["a", "b"] {
+        s.add_custom_mcp(json!({"id": id, "transport": "streamable-http",
+            "url": format!("https://{id}.example.com/mcp"),
+            "auth": {"type": "bearer", "credentialRef": "shared_token"}}))
+            .unwrap();
+    }
+    s.remove_mcp("a");
+    let creds = s.state()["manifest"]["credentials"].clone();
+    assert_eq!(creds.as_array().unwrap().len(), 1);
+    assert_eq!(creds[0]["ref"], "shared_token");
+    assert_eq!(creds[0]["consumedBy"], json!(["mcp:b"]));
+    s.remove_mcp("b");
+    assert_eq!(s.state()["manifest"]["credentials"], json!([]));
 }

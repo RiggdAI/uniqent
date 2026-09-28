@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::HashSet;
 use std::sync::OnceLock;
 
 use regex::Regex;
@@ -6,99 +6,46 @@ use serde_json::{json, Value};
 
 // ─── Secret detection helpers ─────────────────────────────────────────────────
 
-fn secret_name_re() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| {
-        Regex::new(r"(?i)(KEY|TOKEN|SECRET|PASSWORD|PASS|PAT|AUTH|APIKEY|ACCESS|CREDENTIAL)")
-            .unwrap()
-    })
-}
+use crate::core::secret_scan::is_likely_secret_value;
 
+/// Final name words that mark a credential (TS SECRET_NAME_WORDS). Env/header names put the noun
+/// last (GITHUB_TOKEN, X-API-Key, DB_PASSWORD), so PATH, AUTHOR_NAME or TOKEN_URL are not secrets.
+const SECRET_NAME_WORDS: [&str; 14] = [
+    "key",
+    "apikey",
+    "token",
+    "secret",
+    "password",
+    "passwd",
+    "pwd",
+    "pass",
+    "pat",
+    "auth",
+    "authorization",
+    "authentication",
+    "credential",
+    "credentials",
+];
+
+/// Whether an env var / header name denotes a credential, judged by its last word
+/// (camelCase is split first). Mirrors TS `isSecretName` in builder/src/mcp/normalize.ts.
 fn is_secret_name(name: &str) -> bool {
-    secret_name_re().is_match(name)
+    static CAMEL: OnceLock<Regex> = OnceLock::new();
+    let split = CAMEL
+        .get_or_init(|| Regex::new(r"([a-z0-9])([A-Z])").unwrap())
+        .replace_all(name, "${1}_${2}")
+        .to_lowercase();
+    split
+        .split(|c: char| !c.is_ascii_lowercase() && !c.is_ascii_digit())
+        .rfind(|w| !w.is_empty())
+        .is_some_and(|last| SECRET_NAME_WORDS.contains(&last))
 }
 
-fn placeholder_re() -> &'static Regex {
+/// An env value that already is a `${credentialRef:…}` placeholder (kept as-is).
+fn is_credential_ref(value: &str) -> bool {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"\$\{credentialRef:[^}]+\}").unwrap())
-}
-
-fn openai_re() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"sk-[A-Za-z0-9]{20,}").unwrap())
-}
-
-fn github_pat_re() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"gh[posru]_[A-Za-z0-9]{30,}").unwrap())
-}
-
-fn slack_re() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"xox[baprs]-[A-Za-z0-9\-]{10,}").unwrap())
-}
-
-fn aws_re() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"AKIA[0-9A-Z]{16}").unwrap())
-}
-
-fn privkey_re() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----").unwrap())
-}
-
-fn high_entropy_re() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"[A-Za-z0-9+/_=\-]{32,}").unwrap())
-}
-
-fn longest_unbroken_run(token: &str) -> usize {
-    token
-        .split(['/', '_', '+', '=', '.', '-'])
-        .map(|s| s.len())
-        .max()
-        .unwrap_or(0)
-}
-
-fn shannon_entropy(s: &str) -> f64 {
-    let len = s.len() as f64;
-    if len == 0.0 {
-        return 0.0;
-    }
-    let mut counts: HashMap<char, usize> = HashMap::new();
-    for ch in s.chars() {
-        *counts.entry(ch).or_insert(0) += 1;
-    }
-    counts.values().fold(0.0f64, |acc, &c| {
-        let p = c as f64 / len;
-        acc - p * p.log2()
-    })
-}
-
-fn is_likely_secret_value(value: &str) -> bool {
-    // Strip credentialRef placeholders
-    let cleaned = placeholder_re().replace_all(value, "").to_string();
-
-    // Known-prefix patterns
-    if openai_re().is_match(&cleaned)
-        || github_pat_re().is_match(&cleaned)
-        || slack_re().is_match(&cleaned)
-        || aws_re().is_match(&cleaned)
-        || privkey_re().is_match(&cleaned)
-    {
-        return true;
-    }
-
-    // High-entropy check
-    for m in high_entropy_re().find_iter(&cleaned) {
-        let token = m.as_str();
-        if longest_unbroken_run(token) >= 20 && shannon_entropy(token) >= 4.0 {
-            return true;
-        }
-    }
-
-    false
+    RE.get_or_init(|| Regex::new(r"^\$\{credentialRef:[^}]+\}$").unwrap())
+        .is_match(value)
 }
 
 // ─── ID / ref helpers ─────────────────────────────────────────────────────────
@@ -179,6 +126,12 @@ fn validate_mcp_server(server: &Value) -> Result<Value, String> {
         return Err("transport \"stdio\" requires a command".to_string());
     }
 
+    // auth: { type: none|bearer|header|oauth2, … }
+    match server["auth"]["type"].as_str() {
+        Some("none" | "bearer" | "header" | "oauth2") => {}
+        _ => return Err("auth.type must be none, bearer, header or oauth2".to_string()),
+    }
+
     // auth.type=header requires headerName
     if server["auth"]["type"].as_str() == Some("header")
         && server["auth"]["headerName"].as_str().is_none()
@@ -186,8 +139,78 @@ fn validate_mcp_server(server: &Value) -> Result<Value, String> {
         return Err("auth type \"header\" requires headerName".to_string());
     }
 
+    // args: string[]; env: Record<string, string>
+    if let Some(args) = server.get("args") {
+        if !args
+            .as_array()
+            .is_some_and(|a| a.iter().all(Value::is_string))
+        {
+            return Err("args must be an array of strings".to_string());
+        }
+    }
+    if let Some(env) = server.get("env") {
+        if !env
+            .as_object()
+            .is_some_and(|m| m.values().all(Value::is_string))
+        {
+            return Err("env values must be strings".to_string());
+        }
+    }
+
     let _ = id;
-    Ok(server.clone())
+    // Like zod, keep only the schema's keys.
+    let mut out = serde_json::Map::new();
+    for key in [
+        "id",
+        "transport",
+        "url",
+        "command",
+        "args",
+        "env",
+        "auth",
+        "tools",
+        "description",
+    ] {
+        if let Some(v) = server.get(key) {
+            out.insert(key.to_string(), v.clone());
+        }
+    }
+    Ok(Value::Object(out))
+}
+
+/// Replace every secret env value (by name or by value) with a `${credentialRef:…}` placeholder
+/// and record its requirement; existing placeholders are kept. Mirrors TS `liftEnv`.
+fn lift_env(
+    id: &str,
+    raw_env: &serde_json::Map<String, Value>,
+    creds: &mut Vec<Value>,
+) -> serde_json::Map<String, Value> {
+    let mut env = serde_json::Map::new();
+    for (k, v) in raw_env {
+        let Some(vs) = v.as_str() else { continue };
+        if is_credential_ref(vs) {
+            env.insert(k.clone(), json!(vs));
+        } else if is_secret_name(k) || is_likely_secret_value(vs) {
+            let r = format!("{id}_{}", ref_suffix(k));
+            env.insert(k.clone(), json!(format!("${{credentialRef:{r}}}")));
+            creds.push(cred_for(&r, k, id));
+        } else {
+            env.insert(k.clone(), json!(vs));
+        }
+    }
+    env
+}
+
+/// `base`, or `base-2`, `base-3`, … — the first id not yet taken (then marks it taken).
+fn unique_id(base: &str, taken: &mut HashSet<String>) -> String {
+    let mut id = base.to_string();
+    let mut n = 2;
+    while taken.contains(&id) {
+        id = format!("{base}-{n}");
+        n += 1;
+    }
+    taken.insert(id.clone());
+    id
 }
 
 fn push_validated(server: Value, creds: Vec<Value>, out: &mut Value) {
@@ -226,14 +249,18 @@ fn auth_header_re() -> &'static Regex {
 fn map_one(id: &str, raw: &Value, out: &mut Value) {
     let mut creds: Vec<Value> = Vec::new();
     let description = raw["description"].as_str().map(|s| s.to_string());
-    let has_url = raw["url"].as_str().is_some();
-    let has_command = raw["command"].as_str().is_some();
+    let has_url = raw["url"].as_str().is_some_and(|u| !u.is_empty());
+    let has_command = raw["command"].as_str().is_some_and(|c| !c.is_empty());
     let is_remote = has_url && !has_command;
 
     if is_remote {
         let url = raw["url"].as_str().unwrap();
 
-        let transport = if sse_url_re().is_match(url) || raw["transport"].as_str() == Some("sse") {
+        // `transport` is ours/Claude's; VS Code's mcp.json names it `type` ("http" | "sse").
+        let transport = if sse_url_re().is_match(url)
+            || raw["transport"].as_str() == Some("sse")
+            || raw["type"].as_str() == Some("sse")
+        {
             "sse"
         } else {
             "streamable-http"
@@ -289,6 +316,12 @@ fn map_one(id: &str, raw: &Value, out: &mut Value) {
         push_validated(server, creds, out);
     } else {
         // stdio path
+        let Some(command) = raw["command"].as_str().filter(|c| !c.is_empty()) else {
+            out["lossiness"].as_array_mut().unwrap().push(json!(format!(
+                "skipped server \"{id}\": it has neither a command nor a url"
+            )));
+            return;
+        };
         let args: Vec<Value> = raw["args"]
             .as_array()
             .map(|arr| {
@@ -298,22 +331,8 @@ fn map_one(id: &str, raw: &Value, out: &mut Value) {
             })
             .unwrap_or_default();
 
-        let mut env = serde_json::Map::new();
-        if let Some(env_obj) = raw["env"].as_object() {
-            for (k, v) in env_obj {
-                if let Some(vs) = v.as_str() {
-                    if is_secret_name(k) || is_likely_secret_value(vs) {
-                        let r = format!("{id}_{}", ref_suffix(k));
-                        env.insert(k.clone(), json!(format!("${{credentialRef:{r}}}")));
-                        creds.push(cred_for(&r, k, id));
-                    } else {
-                        env.insert(k.clone(), json!(vs));
-                    }
-                }
-            }
-        }
-
-        let command = raw["command"].as_str().unwrap_or("npx");
+        let empty_env = serde_json::Map::new();
+        let env = lift_env(id, raw["env"].as_object().unwrap_or(&empty_env), &mut creds);
 
         let mut server = json!({
             "id": id,
@@ -370,22 +389,40 @@ pub fn normalize_mcp_config(input: &Value) -> Value {
         for (k, v) in obj {
             attempt[k] = v.clone();
         }
-        if let Ok(validated) = validate_mcp_server(&attempt) {
-            out["servers"].as_array_mut().unwrap().push(validated);
+        if let Ok(mut validated) = validate_mcp_server(&attempt) {
+            // Secrets are still lifted from canonical-shaped input.
+            let mut creds: Vec<Value> = Vec::new();
+            if let Some(raw_env) = validated.get("env").and_then(Value::as_object).cloned() {
+                let sid = validated["id"].as_str().unwrap_or("").to_string();
+                validated["env"] = Value::Object(lift_env(&sid, &raw_env, &mut creds));
+            }
+            push_validated(validated, creds, &mut out);
             return out;
         }
         // Falls through on validation failure
     }
 
-    // mcpServers object
-    if let Some(mcp_servers) = input["mcpServers"].as_object() {
-        // Clone to avoid borrow issues
-        let entries: Vec<(String, Value)> = mcp_servers
-            .iter()
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect();
+    let mut taken: HashSet<String> = HashSet::new();
+    // Claude/Cursor `mcpServers` map, or VS Code's `servers` map (same per-server shape).
+    // Mirrors TS `obj.mcpServers ?? (Array.isArray(obj.servers) ? undefined : obj.servers)`.
+    let server_map = match obj.get("mcpServers").filter(|v| !v.is_null()) {
+        Some(v) => Some(v),
+        None => obj.get("servers").filter(|v| !v.is_null() && !v.is_array()),
+    };
+    // JS `Object.entries` on an object (or an array, keyed by index).
+    let entries: Option<Vec<(String, Value)>> = match server_map {
+        Some(Value::Object(m)) => Some(m.iter().map(|(k, v)| (k.clone(), v.clone())).collect()),
+        Some(Value::Array(a)) => Some(
+            a.iter()
+                .enumerate()
+                .map(|(i, v)| (i.to_string(), v.clone()))
+                .collect(),
+        ),
+        _ => None,
+    };
+    if let Some(entries) = entries {
         for (name, raw) in entries {
-            let id = slugify_id(&name);
+            let id = unique_id(&slugify_id(&name), &mut taken);
             let raw_obj = if raw.is_null() { json!({}) } else { raw };
             map_one(&id, &raw_obj, &mut out);
         }
@@ -396,12 +433,14 @@ pub fn normalize_mcp_config(input: &Value) -> Value {
     if let Some(servers) = input["servers"].as_array() {
         let servers: Vec<Value> = servers.to_vec();
         for raw in servers {
-            let id = raw["id"]
+            let base = raw["id"]
                 .as_str()
                 .filter(|s| !s.is_empty())
                 .map(slugify_id)
                 .unwrap_or_else(|| "mcp-server".to_string());
-            map_one(&id, &raw, &mut out);
+            let id = unique_id(&base, &mut taken);
+            let raw_obj = if raw.is_null() { json!({}) } else { raw };
+            map_one(&id, &raw_obj, &mut out);
         }
         return out;
     }
@@ -451,7 +490,12 @@ mod tests {
         assert!(is_secret_name("BRAVE_API_KEY"));
         assert!(is_secret_name("API_TOKEN"));
         assert!(is_secret_name("OPENAI_API_KEY"));
+        assert!(is_secret_name("xApiKey"));
         assert!(!is_secret_name("LANG"));
+        assert!(!is_secret_name("PATH"));
+        assert!(!is_secret_name("AUTHOR_NAME"));
+        assert!(!is_secret_name("MEMORY_FILE_PATH"));
+        assert!(!is_secret_name("TOKEN_URL"));
     }
 
     #[test]

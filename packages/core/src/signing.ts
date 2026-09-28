@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import * as ed from '@noble/ed25519';
 import { Bundle, PATHS } from './bundle.js';
 import { canonicalDigest } from './digest.js';
@@ -23,6 +24,19 @@ export interface VerifyResult {
   valid: boolean;
   reason?: string;
   publicKey?: string;
+}
+
+/**
+ * Short, human-comparable id for a signer: the first 16 hex chars of sha256 over the raw
+ * 32-byte Ed25519 public key (given as 64 hex chars, as in signature.json).
+ */
+export function publicKeyFingerprint(publicKeyHex: string): string {
+  if (!/^[0-9a-f]{64}$/i.test(publicKeyHex)) {
+    throw new TypeError(
+      `publicKeyFingerprint expects a 64-char hex Ed25519 public key, got ${JSON.stringify(publicKeyHex)}`,
+    );
+  }
+  return createHash('sha256').update(fromHex(publicKeyHex)).digest('hex').slice(0, 16);
 }
 
 export async function generateKeypair(): Promise<Keypair> {

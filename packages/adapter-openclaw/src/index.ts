@@ -1,9 +1,8 @@
-import { mkdir, writeFile, readFile, readdir } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { chmod, mkdir, stat, writeFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { dirname, isAbsolute, join, relative } from 'node:path';
 import type { Bundle } from '@uniqent/core';
-import { resolvePlaceholders } from '@uniqent/core';
-import { Brain, stripMemoryMarkup } from '@uniqent/builder';
-import type { McpServer } from '@uniqent/spec';
+import { requiredCredentialRefs, resolveInside } from '@uniqent/adapter-sdk';
 import type {
   Adapter,
   DetectResult,
@@ -14,92 +13,286 @@ import type {
   Lossiness,
   ResolvedCredentials,
 } from '@uniqent/adapter-sdk';
+import {
+  configuredBootstrapMaxChars,
+  configuredWorkspace,
+  isJson5Only,
+  mapChannels,
+  mcpCredentialRefs,
+  mergeConfig,
+  objectAt,
+  parseConfig,
+  serializeConfig,
+  toOpenClawMcp,
+} from './config.js';
+import type { JsonObject } from './config.js';
+import { envName, mergeEnvFile } from './env.js';
+import { exportOpenClaw } from './export.js';
+import { isNotFound, readOptional, readOptionalBytes } from './fs.js';
+import {
+  agentsBody,
+  DEFAULT_BOOTSTRAP_MAX_CHARS,
+  memoryBody,
+  resolveWorkspace,
+  soulBody,
+  userBody,
+  withManagedSection,
+} from './workspace.js';
 
-function requiredCreds(bundle: Bundle): string[] {
-  const refs = new Set<string>();
-  for (const s of bundle.mcpServers()) if (s.auth.credentialRef) refs.add(s.auth.credentialRef);
-  for (const c of bundle.channels()) if (c.credentialRef) refs.add(c.credentialRef);
-  return [...refs];
+export { ManagedSectionError, MANAGED_BEGIN, MANAGED_END } from './workspace.js';
+export { OpenClawConfigError } from './config.js';
+export { EnvValueEncodingError, InvalidEnvNameError } from './env.js';
+
+/**
+ * OpenClaw adapter. `root` is the OpenClaw STATE DIR (`~/.openclaw`, or `$OPENCLAW_STATE_DIR`):
+ * - `<root>/openclaw.json` — merged (never overwritten): `mcp.servers.<id>` and mappable
+ *   `channels.<kind>` only, with `${VAR}` credential references (see ./config.ts)
+ * - `<root>/.env` — the credential values, merged, mode 0600 (see ./env.ts)
+ * - the agent workspace (`agents.defaults.workspace`, else `<root>/workspace`): managed sections
+ *   in SOUL.md / AGENTS.md / USER.md / MEMORY.md, plus `skills/` (see ./workspace.ts)
+ */
+
+/** A credential the install needs has no resolved value. */
+export class MissingCredentialError extends Error {
+  constructor(readonly refs: string[]) {
+    super(
+      `missing credential value(s) for ${refs.join(', ')}: openclaw.json would reference an unset ` +
+        'env var and OpenClaw refuses to load such a config; resolve every credential before apply()',
+    );
+    this.name = 'MissingCredentialError';
+  }
 }
 
-function computePlan(bundle: Bundle): InstallPlan {
-  const writes = [];
-  if (bundle.persona() !== undefined) writes.push({ path: 'SOUL.md', summary: 'identity / soul' });
-  if (
-    bundle.memoryFacts().length > 0 ||
-    bundle.memoryEpisodic().length > 0 ||
-    bundle.memoryProfile()
+/** Two credential refs map to the same env var name. */
+export class EnvNameCollisionError extends Error {
+  constructor(
+    readonly envVar: string,
+    readonly refs: string[],
   ) {
-    writes.push({ path: 'MEMORY.md', summary: 'memory + user profile' });
+    super(
+      `credential refs ${refs.join(' and ')} both map to env var ${envVar}; rename one in the bundle`,
+    );
+    this.name = 'EnvNameCollisionError';
+  }
+}
+
+interface FileWrite {
+  abs: string;
+  display: string;
+  summary: string;
+  content: string | Uint8Array;
+}
+
+/** Everything install derives from the bundle + current on-disk state, before any write. */
+interface Draft {
+  files: FileWrite[];
+  lossiness: Lossiness[];
+  mcpRegistrations: string[];
+  channelRegistrations: string[];
+  /** Refs whose values go into `.env`. */
+  credentialRefs: string[];
+  /** Refs openclaw.json references via `${VAR}`; each must be resolved. */
+  referencedRefs: string[];
+  envPath: string;
+}
+
+function displayPath(root: string, abs: string): string {
+  const rel = relative(root, abs);
+  return rel.startsWith('..') || isAbsolute(rel) ? abs : rel;
+}
+
+function sameJson(a: JsonObject | undefined, b: JsonObject): boolean {
+  return a !== undefined && JSON.stringify(a) === JSON.stringify(b);
+}
+
+async function draftInstall(bundle: Bundle, root: string): Promise<Draft> {
+  const configPath = resolveInside(root, 'openclaw.json');
+  const raw = await readOptional(configPath);
+  const existing = raw === undefined ? {} : parseConfig(configPath, raw);
+  const workspace = resolveWorkspace(root, configuredWorkspace(configPath, existing));
+  const maxChars = configuredBootstrapMaxChars(configPath, existing) ?? DEFAULT_BOOTSTRAP_MAX_CHARS;
+  const files: FileWrite[] = [];
+  const lossiness: Lossiness[] = [];
+
+  const sections: Array<[string, string | undefined, string]> = [
+    ['SOUL.md', soulBody(bundle), 'persona (managed section)'],
+    ['AGENTS.md', agentsBody(bundle), 'policies (managed section)'],
+    ['USER.md', userBody(bundle), 'user profile (managed section)'],
+    ['MEMORY.md', memoryBody(bundle), 'memory facts (managed section)'],
+  ];
+  for (const [name, body, summary] of sections) {
+    if (body === undefined) continue;
+    const abs = resolveInside(workspace, name);
+    const content = withManagedSection(abs, await readOptional(abs), body);
+    files.push({ abs, display: displayPath(root, abs), summary, content });
+    if (content.length > maxChars)
+      lossiness.push({
+        component: `workspace ${name}`,
+        issue: `${content.length} chars exceeds OpenClaw's per-file bootstrap limit (agents.defaults.bootstrapMaxChars = ${maxChars}); OpenClaw truncates it when injecting into the prompt.`,
+        action: 'truncated',
+      });
   }
   for (const path of bundle.list()) {
-    if (path.startsWith('skills/')) writes.push({ path, summary: 'skill file' });
-  }
-  const servers = bundle.mcpServers();
-  const channels = bundle.channels();
-  const tasks = bundle.tasks();
-  if (servers.length || channels.length || tasks.length) {
-    writes.push({ path: 'openclaw.json', summary: 'mcp + channels + tasks' });
+    if (!path.startsWith('skills/')) continue;
+    const bytes = bundle.get(path);
+    if (bytes === undefined) continue;
+    const abs = resolveInside(workspace, path);
+    const prior = await readOptionalBytes(abs);
+    if (prior !== undefined && !Buffer.from(prior).equals(Buffer.from(bytes)))
+      lossiness.push({
+        component: `skill ${path}`,
+        issue: 'replaces an existing, different workspace skill file.',
+        action: 'transformed',
+      });
+    files.push({ abs, display: displayPath(root, abs), summary: 'skill file', content: bytes });
   }
 
-  const lossiness: Lossiness[] = [];
-  if (bundle.tools().length > 0) {
+  const servers = bundle.mcpServers();
+  const existingServers =
+    objectAt(
+      configPath,
+      objectAt(configPath, existing, 'mcp', 'mcp') ?? {},
+      'servers',
+      'mcp.servers',
+    ) ?? {};
+  const mcpEntries: Record<string, JsonObject> = {};
+  for (const s of servers) {
+    const entry = toOpenClawMcp(s);
+    mcpEntries[s.id] = entry;
+    const prior = objectAt(configPath, existingServers, s.id, `mcp.servers.${s.id}`);
+    if (prior !== undefined && !sameJson(prior, entry))
+      lossiness.push({
+        component: `mcp:${s.id}`,
+        issue: `replaces your existing mcp.servers.${s.id} entry in openclaw.json.`,
+        action: 'transformed',
+      });
+    if (s.auth.type === 'oauth2')
+      lossiness.push({
+        component: `mcp:${s.id}`,
+        issue:
+          'registered with auth: "oauth"; complete the sign-in through OpenClaw (a bundle credential is not wired into the server).',
+        action: 'transformed',
+      });
+    if (s.tools.include !== 'all' && s.tools.include.length === 0)
+      lossiness.push({
+        component: `mcp:${s.id}`,
+        issue:
+          'empty tool allowlist; registered with enabled: false (OpenClaw toolFilter.include needs >= 1 entry).',
+        action: 'transformed',
+      });
+  }
+
+  const channelEntries: Record<string, JsonObject> = {};
+  const channelRegistrations: string[] = [];
+  for (const { channel, fields, reason } of mapChannels(bundle.channels())) {
+    if (fields === undefined) {
+      lossiness.push({
+        component: `channel:${channel.id}`,
+        issue: `${reason}.`,
+        action: 'dropped',
+      });
+      continue;
+    }
+    channelEntries[channel.kind] = fields;
+    channelRegistrations.push(channel.id);
+    if (channel.config && Object.keys(channel.config).length > 0)
+      lossiness.push({
+        component: `channel:${channel.id}`,
+        issue: `channel config (${Object.keys(channel.config).join(', ')}) is not mapped; set it under channels.${channel.kind} yourself.`,
+        action: 'dropped',
+      });
+  }
+
+  if (servers.length > 0 || channelRegistrations.length > 0) {
+    const merged = mergeConfig(configPath, existing, mcpEntries, channelEntries);
+    files.push({
+      abs: configPath,
+      display: displayPath(root, configPath),
+      summary: raw === undefined ? 'new config: mcp + channels' : 'merge mcp + channels',
+      content: serializeConfig(merged),
+    });
+    if (raw !== undefined && isJson5Only(raw))
+      lossiness.push({
+        component: 'openclaw.json',
+        issue:
+          'your config uses JSON5 syntax (comments, trailing commas, unquoted keys); it is rewritten as plain JSON, so comments are not preserved.',
+        action: 'transformed',
+      });
+  }
+
+  if (bundle.memoryEpisodic().length > 0)
     lossiness.push({
-      component: 'tools',
-      issue: 'OpenClaw native tool model differs; dropped.',
+      component: 'memory episodic',
+      issue: `${bundle.memoryEpisodic().length} episodic item(s) not installed; Uniqent only writes curated memory to MEMORY.md.`,
       action: 'dropped',
     });
-  }
+  if (bundle.tasks().length > 0)
+    lossiness.push({
+      component: 'tasks',
+      issue:
+        'OpenClaw cron jobs live in the gateway-managed job store (openclaw cron), not openclaw.json; recreate them with `openclaw cron add`.',
+      action: 'dropped',
+    });
+  if (bundle.tools().length > 0)
+    lossiness.push({
+      component: 'tools',
+      issue: 'OpenClaw has no per-brain tool declarations; dropped.',
+      action: 'dropped',
+    });
+  if (bundle.runtime() !== undefined)
+    lossiness.push({
+      component: 'runtime config',
+      issue:
+        'model/autonomy/tool allowlist are global OpenClaw settings (agents.defaults, tools.*) and are not changed by an install.',
+      action: 'dropped',
+    });
 
   return {
-    writes,
-    mcpRegistrations: servers.map((s) => s.id),
-    channelRegistrations: channels.map((c) => c.id),
+    files,
     lossiness,
-    requiresCredentials: requiredCreds(bundle),
+    mcpRegistrations: servers.map((s) => s.id),
+    channelRegistrations,
+    credentialRefs: requiredCredentialRefs(bundle, ['mcp', 'channel']),
+    referencedRefs: [
+      ...new Set([
+        ...servers.flatMap(mcpCredentialRefs),
+        ...bundle.channels().flatMap((c) => {
+          const ref = c.credentialRef;
+          return ref !== undefined && channelRegistrations.includes(c.id) ? [ref] : [];
+        }),
+      ]),
+    ],
+    envPath: resolveInside(root, '.env'),
   };
 }
 
-function buildSoulMd(bundle: Bundle): string {
-  const persona = bundle.persona() ?? '';
-  const policies = bundle.policies();
-  return policies ? `${persona.trim()}\n\n## Policies\n\n${policies.trim()}\n` : persona;
+/** `.env` values keyed by env var name; throws on a missing value or a name collision. */
+function envValues(draft: Draft, resolved: ResolvedCredentials): Record<string, string> {
+  const refs = [...new Set([...draft.credentialRefs, ...draft.referencedRefs])];
+  const missing = refs.filter((ref) => !resolved[ref]);
+  if (missing.length > 0) throw new MissingCredentialError(missing);
+  const byName = new Map<string, string>();
+  const values: Record<string, string> = {};
+  for (const ref of refs) {
+    const name = envName(ref);
+    const other = byName.get(name);
+    if (other !== undefined) throw new EnvNameCollisionError(name, [other, ref]);
+    byName.set(name, ref);
+    values[name] = resolved[ref] as string;
+  }
+  return values;
 }
 
-function buildMemoryMd(bundle: Bundle): string {
-  const parts: string[] = ['# Memory', ''];
-  for (const f of bundle.memoryFacts()) parts.push(`- ${stripMemoryMarkup(f.text)}`);
-  const profile = bundle.memoryProfile();
-  if (profile && Object.keys(profile).length > 0) {
-    parts.push('', '## User profile', '');
-    for (const [k, v] of Object.entries(profile)) {
-      parts.push(`- ${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`);
-    }
-  }
-  return parts.join('\n') + '\n';
+async function writeOut(abs: string, content: string | Uint8Array): Promise<void> {
+  await mkdir(dirname(abs), { recursive: true });
+  await writeFile(abs, content);
 }
 
-/** Translate an MCP server to OpenClaw's openclaw.json form, inlining resolved credentials. */
-function toOpenClawMcp(server: McpServer, resolved: ResolvedCredentials): Record<string, unknown> {
-  const entry: Record<string, unknown> = { transport: server.transport };
-  if (server.transport === 'stdio') {
-    entry.command = server.command;
-    if (server.args) entry.args = server.args;
-    if (server.env) {
-      const env: Record<string, string> = {};
-      for (const [k, v] of Object.entries(server.env)) env[k] = resolvePlaceholders(v, resolved);
-      entry.env = env;
-    }
-  } else {
-    entry.url = server.url;
-    const value = server.auth.credentialRef ? resolved[server.auth.credentialRef] : undefined;
-    if (value) {
-      if (server.auth.type === 'bearer') entry.headers = { Authorization: `Bearer ${value}` };
-      else if (server.auth.type === 'header' && server.auth.headerName)
-        entry.headers = { [server.auth.headerName]: value };
-    }
-  }
-  return entry;
+/** Write an owner-only (0600) file; chmod also tightens a pre-existing file. */
+async function writeSecret(abs: string, content: string): Promise<void> {
+  await mkdir(dirname(abs), { recursive: true });
+  await writeFile(abs, content, { mode: 0o600 });
+  await chmod(abs, 0o600);
 }
 
 export const openClawAdapter: Adapter = {
@@ -107,11 +300,31 @@ export const openClawAdapter: Adapter = {
   displayName: 'OpenClaw',
 
   async detect({ root }): Promise<DetectResult> {
-    return { present: true, configRoot: root ?? process.env.OPENCLAW_STATE_DIR ?? process.cwd() };
+    const configRoot = root ?? process.env.OPENCLAW_STATE_DIR ?? join(homedir(), '.openclaw');
+    try {
+      await stat(join(configRoot, 'openclaw.json'));
+      return { present: true, configRoot };
+    } catch (err) {
+      if (isNotFound(err)) return { present: false, configRoot };
+      throw err;
+    }
   },
 
-  async plan(bundle: Bundle): Promise<InstallPlan> {
-    return computePlan(bundle);
+  async plan(bundle: Bundle, { root }: InstallOptions): Promise<InstallPlan> {
+    const draft = await draftInstall(bundle, root);
+    const writes = draft.files.map((f) => ({ path: f.display, summary: f.summary }));
+    if (draft.credentialRefs.length > 0)
+      writes.push({
+        path: displayPath(root, draft.envPath),
+        summary: 'credential values (mode 0600)',
+      });
+    return {
+      writes,
+      mcpRegistrations: draft.mcpRegistrations,
+      channelRegistrations: draft.channelRegistrations,
+      lossiness: draft.lossiness,
+      requiresCredentials: draft.credentialRefs,
+    };
   },
 
   async apply(
@@ -120,78 +333,32 @@ export const openClawAdapter: Adapter = {
     resolved: ResolvedCredentials,
     { root }: InstallOptions,
   ): Promise<InstallResult> {
+    // Compute every output (and fail on any missing credential) before touching the disk.
+    const draft = await draftInstall(bundle, root);
+    const values = envValues(draft, resolved);
+    const envContent =
+      Object.keys(values).length > 0
+        ? mergeEnvFile(await readOptional(draft.envPath), values)
+        : undefined;
+
     const written: string[] = [];
-    const write = async (rel: string, data: string | Uint8Array) => {
-      const target = join(root, rel);
-      await mkdir(dirname(target), { recursive: true });
-      await writeFile(target, data);
-      written.push(rel);
-    };
-
-    if (bundle.persona() !== undefined) await write('SOUL.md', buildSoulMd(bundle));
-    if (
-      bundle.memoryFacts().length > 0 ||
-      bundle.memoryEpisodic().length > 0 ||
-      bundle.memoryProfile()
-    ) {
-      await write('MEMORY.md', buildMemoryMd(bundle));
+    for (const f of draft.files) {
+      await writeOut(f.abs, f.content);
+      written.push(f.display);
     }
-    for (const path of bundle.list()) {
-      if (!path.startsWith('skills/')) continue;
-      const bytes = bundle.get(path);
-      if (bytes) await write(path, bytes);
+    const notes = draft.lossiness.map((l) => `${l.action}: ${l.component} — ${l.issue}`);
+    if (envContent !== undefined) {
+      await writeSecret(draft.envPath, envContent);
+      const envDisplay = displayPath(root, draft.envPath);
+      written.push(envDisplay);
+      notes.push(
+        `credentials stored in ${envDisplay} (mode 0600) as ${Object.keys(values).join(', ')}`,
+      );
     }
-
-    const servers = bundle.mcpServers();
-    const channels = bundle.channels();
-    const tasks = bundle.tasks();
-    if (servers.length || channels.length || tasks.length) {
-      const config: Record<string, unknown> = { soul: 'SOUL.md', memory: 'MEMORY.md' };
-      const mcpServers: Record<string, unknown> = {};
-      for (const s of servers) mcpServers[s.id] = toOpenClawMcp(s, resolved);
-      config.mcpServers = mcpServers;
-      config.channels = channels.map((c) => {
-        const ch: Record<string, unknown> = { id: c.id, kind: c.kind };
-        const token = c.credentialRef ? resolved[c.credentialRef] : undefined;
-        if (token) ch.token = token;
-        return ch;
-      });
-      config.tasks = tasks;
-      await write('openclaw.json', JSON.stringify(config, null, 2) + '\n');
-    }
-
-    const notes = computePlan(bundle).lossiness.map(
-      (l) => `${l.action}: ${l.component} — ${l.issue}`,
-    );
     return { written, notes };
   },
 
   async export({ root }: ExportOptions): Promise<Bundle> {
-    const brain = Brain.create({
-      name: 'captured-openclaw-agent',
-      displayName: 'Captured OpenClaw Agent',
-      version: '0.1.0',
-      description: 'Captured from an OpenClaw setup.',
-      author: { name: 'unknown' },
-      license: 'CC0-1.0',
-      tags: [],
-    });
-    try {
-      brain.setPersona(await readFile(join(root, 'SOUL.md'), 'utf8'));
-    } catch {
-      /* none */
-    }
-    try {
-      for (const name of await readdir(join(root, 'skills'))) {
-        try {
-          brain.addSkill(name, await readFile(join(root, 'skills', name, 'SKILL.md'), 'utf8'));
-        } catch {
-          /* not a skill */
-        }
-      }
-    } catch {
-      /* none */
-    }
-    return brain.toBundle();
+    return exportOpenClaw(root);
   },
 };

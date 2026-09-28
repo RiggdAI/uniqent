@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateKeypair, sign, verify } from '../src/signing';
+import { generateKeypair, sign, verify, publicKeyFingerprint } from '../src/signing';
 import { SecretScanError } from '../src/errors';
 import { makeValidBundle } from './helpers';
 
@@ -31,5 +31,13 @@ describe('signing', () => {
     const b = makeValidBundle();
     b.set('notes.md', 'sk-abcdefghijklmnopqrstuvwxyz0123456789');
     await expect(sign(b, privateKey)).rejects.toBeInstanceOf(SecretScanError);
+  });
+
+  it('fingerprints the signer public key returned by verify', async () => {
+    const { privateKey, publicKey } = await generateKeypair();
+    const v = await verify(await sign(makeValidBundle(), privateKey));
+    expect(v.publicKey).toBe(publicKey);
+    expect(publicKeyFingerprint(publicKey)).toMatch(/^[0-9a-f]{16}$/);
+    expect(() => publicKeyFingerprint('not-hex')).toThrow(TypeError);
   });
 });

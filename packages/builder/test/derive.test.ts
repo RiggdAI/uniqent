@@ -26,15 +26,26 @@ describe('derivePermissions', () => {
     expect(p.autonomy).toBe('suggest');
   });
 
-  it('override wins over derived values', () => {
+  it('declared permissions only widen the derived scope; runtime autonomy wins', () => {
     const p = derivePermissions(
-      [],
+      [stdioServer],
       [],
       { autonomy: 'auto' },
-      { filesystem: { read: ['~/x'], write: [] }, autonomy: 'manual' },
+      {
+        filesystem: { read: ['~/x'], write: [] },
+        network: { endpoints: ['extra.example.com'] },
+        autonomy: 'manual',
+        spawnsProcesses: false,
+      },
     );
-    expect(p.autonomy).toBe('manual');
+    expect(p.autonomy).toBe('auto');
     expect(p.filesystem.read).toEqual(['~/x']);
+    expect(p.network.endpoints).toEqual(['extra.example.com']);
+    expect(p.spawnsProcesses).toBe(true);
+  });
+
+  it('uses the declared autonomy when the runtime sets none', () => {
+    expect(derivePermissions([], [], undefined, { autonomy: 'manual' }).autonomy).toBe('manual');
   });
 });
 

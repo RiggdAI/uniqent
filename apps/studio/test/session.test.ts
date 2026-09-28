@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { StudioSession } from '../src/server/session';
 import { unpack, validateBundle, verify } from '@uniqent/core';
+import { InvalidBrainMetaError } from '@uniqent/builder';
 
 function fromBase64(b64: string): Uint8Array {
   return Uint8Array.from(Buffer.from(b64, 'base64'));
@@ -333,9 +334,15 @@ describe('StudioSession', () => {
     }
   });
 
+  it('rejects invalid meta without changing the brain', () => {
+    const s = new StudioSession();
+    expect(() => s.setMeta({ name: 'Not A Slug' })).toThrow(InvalidBrainMetaError);
+    expect(s.state().manifest.name).toBe('my-brain');
+  });
+
   it('refuses to install an invalid brain', async () => {
     const s = new StudioSession();
-    s.setMeta({ name: 'Not A Slug' }); // invalid manifest name → validation fails
+    s.setPersona(`token: ghp_${'a1B2c3D4e5'.repeat(4)}`); // a planted secret fails validation
     const root = mkdtempSync(join(tmpdir(), 'uniqent-inv-'));
     try {
       await expect(s.install('claude-code', root, {})).rejects.toThrow(/invalid/);

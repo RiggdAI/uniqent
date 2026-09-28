@@ -1,9 +1,12 @@
 {
   "name": "@uniqent/adapter-claude-code",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Uniqent adapter that installs a .uniqent brain into Claude Code.",
   "license": "Apache-2.0",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {

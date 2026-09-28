@@ -30,7 +30,7 @@ npm i -g @uniqent/cli      # or use: npx @uniqent/cli <command>
 | `search <query>`                       | Search a registry index (`--registry <url>` or `UNIQENT_REGISTRY`) and list matching bundles.                                                             |
 | `hub <mcp\|skills> <query>`            | Search MCP server hubs (MCP Registry, Smithery) or skill hubs (GitHub) for servers and skills to add to a brain.                                          |
 | `export`                               | Capture an existing framework setup (Claude Code, Hermes, or OpenClaw) back into a canonical `.uniqent` bundle, scrubbing secrets to credential refs.     |
-| `import-vault <dir>`                   | Capture an Obsidian / second-brain vault folder (markdown notes, `[[links]]`, `#tags`) into a signed `.uniqent` bundle.                                   |
+| `import-vault <dir>`                   | Capture an Obsidian / second-brain vault folder (markdown notes, `[[links]]`, `#tags`) into a `.uniqent` bundle (`--sign` / `--key <k>` to sign it).      |
 | `publish-memory <pack.json\|notes.md>` | Publish a memory pack to a hosted hub (default `uniqent.ai`). Accepts a structured `.json` pack or freeform markdown.                                     |
 | `keygen`                               | Generate an Ed25519 keypair for signing bundles. Writes a `uniqent.key.json` file — keep it out of git.                                                   |
 | `sign <file.uniqent>`                  | Sign a packed bundle with a keypair written by `keygen`.                                                                                                  |
@@ -76,6 +76,12 @@ uniqent install my-brain.uniqent \
   --cred OPENAI_API_KEY=sk-... \
   --yes
 ```
+
+Credentials come from `--cred <ref>=<value>`, `UNIQENT_CRED_<REF>`, or a hidden prompt on an
+interactive terminal. When stdin is not a terminal (CI, pipes) nothing is prompted: pass every
+required `--cred` and `--yes`. `--dry-run` prints the plan — files, each MCP server's command or
+URL, lossiness, and the signer's key fingerprint — and writes nothing. A bundle whose signature
+is invalid is always refused; `--allow-unsigned` only admits unsigned bundles.
 
 **Install directly from a URL (no registry needed):**
 

@@ -1,9 +1,50 @@
-import type { StudioSession } from './session.js';
-import type { BrainMeta } from '@uniqent/builder';
+import type { IncomingHttpHeaders } from 'node:http';
+import type { z } from 'zod';
+import { DuplicateMemoryIdError, InvalidBrainMetaError } from '@uniqent/builder';
+import { DuplicateMcpServerError, DuplicateSkillError, type StudioSession } from './session.js';
+import { hasJsonContentType, isLocalApiRequest } from './guard.js';
+import {
+  AvatarBody,
+  CustomMcpBody,
+  CustomSkillBody,
+  ExportBody,
+  HubIndexesBody,
+  HubMcpAddBody,
+  HubSkillAddBody,
+  IdBody,
+  InstallBody,
+  InstallPlanBody,
+  McpImportBody,
+  MemoryBody,
+  MemoryHubAddBody,
+  MemoryHubPublishBody,
+  MemoryHubSearchBody,
+  MemoryImportBody,
+  MetaBody,
+  NameBody,
+  PersonaBody,
+  ProfileBody,
+  QueryBody,
+  ReadmeBody,
+  TargetsBody,
+  TaskBody,
+  TextBody,
+  UrlBody,
+  VaultImportBody,
+  VaultPreviewBody,
+} from './schemas.js';
 
 export interface ApiResponse {
   status: number;
   json: unknown;
+}
+
+/** One API request as the HTTP server received it, before any checks. */
+export interface RawApiRequest {
+  method: string;
+  path: string;
+  headers: IncomingHttpHeaders;
+  body: string;
 }
 
 const ok = (json: unknown): ApiResponse => ({ status: 200, json });
@@ -11,6 +52,67 @@ const fail = (status: number, message: string): ApiResponse => ({
   status,
   json: { error: message },
 });
+/** A session error as a response: a duplicate is 409 Conflict, anything else `status`. */
+const failWith = (e: unknown, status: number): ApiResponse =>
+  fail(
+    e instanceof DuplicateSkillError ||
+      e instanceof DuplicateMemoryIdError ||
+      e instanceof DuplicateMcpServerError
+      ? 409
+      : status,
+    (e as Error).message,
+  );
+
+/** A request body that failed its route schema; carries a message per offending field. */
+class RequestBodyError extends Error {
+  readonly fields: Record<string, string>;
+  constructor(route: string, issues: z.ZodIssue[]) {
+    const fields: Record<string, string> = {};
+    for (const i of issues) {
+      const key = i.path.length > 0 ? i.path.join('.') : '(body)';
+      fields[key] = fields[key] ? `${fields[key]}; ${i.message}` : i.message;
+    }
+    super(
+      `invalid request body for ${route}: ${Object.entries(fields)
+        .map(([k, m]) => `${k}: ${m}`)
+        .join('; ')}`,
+    );
+    this.name = 'RequestBodyError';
+    this.fields = fields;
+  }
+}
+
+/**
+ * Guard, parse and route one raw API request. Only Studio's own page may call the API (exact
+ * Host + Origin), and every mutating call must be `application/json` (see guard.ts).
+ */
+export async function handleRawApi(
+  session: StudioSession,
+  req: RawApiRequest,
+  port: number,
+): Promise<ApiResponse> {
+  if (!isLocalApiRequest(req.headers, port)) {
+    return fail(403, 'forbidden: Uniqent Studio only serves requests from its own page');
+  }
+  let body: unknown = {};
+  if (req.method !== 'GET') {
+    if (!hasJsonContentType(req.headers)) {
+      return fail(
+        415,
+        `${req.method} ${req.path} requires Content-Type: application/json (got ${req.headers['content-type'] ?? 'none'})`,
+      );
+    }
+    if (req.body) {
+      try {
+        body = JSON.parse(req.body);
+      } catch (e) {
+        if (!(e instanceof SyntaxError)) throw e;
+        return fail(400, `request body is not valid JSON: ${e.message}`);
+      }
+    }
+  }
+  return handleApi(session, req.method, req.path, body);
+}
 
 /** Pure request → session mapping; unit-testable without a socket. */
 export async function handleApi(
@@ -19,31 +121,56 @@ export async function handleApi(
   path: string,
   body: unknown,
 ): Promise<ApiResponse> {
-  const b = (body ?? {}) as Record<string, unknown>;
+  try {
+    return await route(session, method, path, body);
+  } catch (e) {
+    if (!(e instanceof RequestBodyError)) throw e;
+    return { status: 400, json: { error: e.message, fields: e.fields } };
+  }
+}
+
+async function route(
+  session: StudioSession,
+  method: string,
+  path: string,
+  body: unknown,
+): Promise<ApiResponse> {
+  /** Validate the body against the route's schema; throws RequestBodyError (→ 400). */
+  const parse = <S extends z.ZodTypeAny>(schema: S): z.output<S> => {
+    const r = schema.safeParse(body ?? {});
+    if (!r.success) throw new RequestBodyError(`${method} ${path}`, r.error.issues);
+    return r.data as z.output<S>;
+  };
 
   if (method === 'GET' && path === '/api/state') return ok(session.state());
   if (method === 'GET' && path === '/api/catalog') return ok(session.catalog());
 
   if (method === 'POST' && path === '/api/meta') {
-    session.setMeta(b as Partial<BrainMeta>);
+    const meta = parse(MetaBody);
+    try {
+      session.setMeta(meta);
+    } catch (e) {
+      if (!(e instanceof InvalidBrainMetaError)) throw e;
+      return { status: 400, json: { error: e.message, fields: { [e.field]: e.message } } };
+    }
     return ok(session.state());
   }
   if (method === 'POST' && path === '/api/targets') {
-    session.setTargets(Array.isArray(b.targets) ? (b.targets as string[]) : []);
+    session.setTargets(parse(TargetsBody).targets);
     return ok(session.state());
   }
   if (method === 'POST' && path === '/api/persona') {
-    session.setPersona(typeof b.persona === 'string' ? b.persona : '');
+    session.setPersona(parse(PersonaBody).persona);
     return ok(session.state());
   }
   if (method === 'POST' && path === '/api/readme') {
-    session.setReadme(typeof b.readme === 'string' ? b.readme : '');
+    session.setReadme(parse(ReadmeBody).readme);
     return ok(session.state());
   }
   if (method === 'POST' && path === '/api/avatar') {
-    if (typeof b.dataUrl !== 'string') return fail(400, 'dataUrl is required');
+    const { dataUrl } = parse(AvatarBody);
     try {
-      session.setAvatar(b.dataUrl);
+      session.setAvatar(dataUrl);
       return ok(session.state());
     } catch (e) {
       return fail(400, (e as Error).message);
@@ -54,21 +181,22 @@ export async function handleApi(
     return ok(session.state());
   }
   if (method === 'POST' && path === '/api/memory') {
-    if (typeof b.text !== 'string' || b.text.length === 0)
-      return fail(400, 'memory text is required');
-    session.addFact({
-      text: b.text,
-      importance: typeof b.importance === 'number' ? b.importance : undefined,
-      visibility: b.visibility === 'personal' ? 'personal' : undefined,
-    });
+    const b = parse(MemoryBody);
+    session.addFact({ text: b.text, importance: b.importance, visibility: b.visibility });
     return ok(session.state());
   }
   if (method === 'POST' && path === '/api/memory/import') {
-    if (Array.isArray(b.items)) {
-      session.importItems(b.items as Array<Record<string, unknown>>);
-    } else if (typeof b.markdown === 'string') {
+    const b = parse(MemoryImportBody);
+    if (b.items !== undefined) {
+      try {
+        session.importItems(b.items);
+      } catch (e) {
+        if (!(e instanceof DuplicateMemoryIdError)) throw e;
+        return fail(409, e.message);
+      }
+    } else if (b.markdown !== undefined) {
       session.importMarkdown(b.markdown);
-    } else if (typeof b.text === 'string') {
+    } else if (b.text !== undefined) {
       session.importLines(b.text);
     }
     return ok(session.state());
@@ -77,22 +205,20 @@ export async function handleApi(
     return ok(session.memoryGraph());
   }
   if (method === 'POST' && path === '/api/memory/preview') {
-    return ok(session.previewMemoryImport(typeof b.text === 'string' ? b.text : ''));
+    return ok(session.previewMemoryImport(parse(TextBody).text));
   }
   if (method === 'POST' && path === '/api/memory/vault/preview') {
-    if (typeof b.dir !== 'string' || !b.dir.trim())
-      return fail(400, 'vault folder path is required');
+    const { dir } = parse(VaultPreviewBody);
     try {
-      return ok(await session.previewVault(b.dir.trim()));
+      return ok(await session.previewVault(dir));
     } catch (e) {
       return fail(400, `cannot read vault: ${(e as Error).message}`);
     }
   }
   if (method === 'POST' && path === '/api/memory/vault/import') {
-    if (typeof b.dir !== 'string' || !b.dir.trim())
-      return fail(400, 'vault folder path is required');
+    const b = parse(VaultImportBody);
     try {
-      const stats = await session.importVaultDir(b.dir.trim(), {
+      const stats = await session.importVaultDir(b.dir, {
         persona: b.persona !== false,
         profile: b.profile !== false,
       });
@@ -102,29 +228,22 @@ export async function handleApi(
     }
   }
   if (method === 'POST' && path === '/api/memory/hub/search') {
-    return ok(
-      await session.searchMemoryHub(
-        typeof b.query === 'string' ? b.query : '',
-        typeof b.registry === 'string' ? b.registry : undefined,
-      ),
-    );
+    const b = parse(MemoryHubSearchBody);
+    return ok(await session.searchMemoryHub(b.query, b.registry));
   }
   if (method === 'POST' && path === '/api/memory/hub/publish') {
-    if (typeof b.token !== 'string' || !b.token) return fail(400, 'token is required');
+    const b = parse(MemoryHubPublishBody);
     try {
-      const result = await session.publishMemoryPack(
-        b.token,
-        typeof b.registry === 'string' ? b.registry : undefined,
-      );
+      const result = await session.publishMemoryPack(b.token, b.registry);
       return ok({ result });
     } catch (e) {
       return fail(502, (e as Error).message);
     }
   }
   if (method === 'POST' && path === '/api/memory/hub/add') {
-    if (typeof b.slug !== 'string' || !b.slug) return fail(400, 'slug is required');
+    const b = parse(MemoryHubAddBody);
     try {
-      await session.addMemoryPack(b.slug, typeof b.registry === 'string' ? b.registry : undefined);
+      await session.addMemoryPack(b.slug, b.registry);
       return ok(session.state());
     } catch (e) {
       return fail(502, (e as Error).message);
@@ -134,7 +253,7 @@ export async function handleApi(
     return ok({ profile: session.getProfile() });
   }
   if (method === 'POST' && path === '/api/profile') {
-    session.setProfile((b.profile ?? {}) as Record<string, unknown>);
+    session.setProfile(parse(ProfileBody).profile);
     return ok(session.state());
   }
   if (method === 'POST' && path === '/api/reset') {
@@ -163,24 +282,29 @@ export async function handleApi(
   }
 
   if (method === 'POST' && path === '/api/skill/custom') {
-    if (typeof b.name !== 'string' || !b.name.trim()) return fail(400, 'skill name is required');
-    session.addCustomSkill(b.name.trim(), typeof b.skillMd === 'string' ? b.skillMd : '');
-    return ok(session.state());
+    const b = parse(CustomSkillBody);
+    try {
+      session.addCustomSkill(b.name, b.skillMd);
+      return ok(session.state());
+    } catch (e) {
+      return failWith(e, 400);
+    }
   }
 
   if (method === 'POST' && path === '/api/skill/url') {
-    if (typeof b.url !== 'string' || !b.url.trim()) return fail(400, 'url is required');
+    const { url } = parse(UrlBody);
     try {
-      await session.importSkillFromUrl(b.url.trim());
+      await session.importSkillFromUrl(url);
       return ok(session.state());
     } catch (e) {
-      return fail(400, (e as Error).message);
+      return failWith(e, 400);
     }
   }
 
   if (method === 'POST' && path === '/api/mcp/custom') {
+    const server = parse(CustomMcpBody);
     try {
-      session.addCustomMcp(b);
+      session.addCustomMcp(server);
       return ok(session.state());
     } catch (e) {
       return fail(400, (e as Error).message);
@@ -188,24 +312,23 @@ export async function handleApi(
   }
 
   if (method === 'POST' && path === '/api/mcp/import') {
-    if (!Array.isArray(b.servers)) return fail(400, 'servers[] is required');
+    const { servers } = parse(McpImportBody);
     try {
-      session.importMcpServers(b.servers as Array<Record<string, unknown>>);
+      session.importMcpServers(servers);
       return ok(session.state());
     } catch (e) {
-      return fail(400, (e as Error).message);
+      return failWith(e, 400);
     }
   }
 
   if (method === 'POST' && path === '/api/mcp/paste') {
-    if (typeof b.text !== 'string') return fail(400, 'text is required');
-    return ok(session.previewPastedMcp(b.text));
+    return ok(session.previewPastedMcp(parse(TextBody).text));
   }
 
   if (method === 'POST' && path === '/api/mcp/paste/add') {
-    if (typeof b.text !== 'string') return fail(400, 'text is required');
+    const { text } = parse(TextBody);
     try {
-      session.addPastedMcp(b.text);
+      session.addPastedMcp(text);
       return ok(session.state());
     } catch (e) {
       return fail(400, (e as Error).message);
@@ -213,11 +336,11 @@ export async function handleApi(
   }
 
   if (method === 'POST' && path === '/api/mcp/remove') {
-    if (typeof b.id === 'string') session.removeMcp(b.id);
+    session.removeMcp(parse(IdBody).id);
     return ok(session.state());
   }
   if (method === 'POST' && path === '/api/skill/remove') {
-    if (typeof b.name === 'string') session.removeSkill(b.name);
+    session.removeSkill(parse(NameBody).name);
     return ok(session.state());
   }
 
@@ -231,40 +354,35 @@ export async function handleApi(
     }
   }
   if (method === 'POST' && path === '/api/channel/remove') {
-    if (typeof b.id === 'string') session.removeChannel(b.id);
+    session.removeChannel(parse(IdBody).id);
     return ok(session.state());
   }
 
   if (method === 'POST' && path === '/api/task/add') {
-    session.addTask(b as Parameters<StudioSession['addTask']>[0]);
+    session.addTask(parse(TaskBody));
     return ok(session.state());
   }
   if (method === 'POST' && path === '/api/task/remove') {
-    if (typeof b.id === 'string') session.removeTask(b.id);
+    session.removeTask(parse(IdBody).id);
     return ok(session.state());
   }
 
   if (method === 'POST' && path === '/api/export') {
-    return ok(await session.export({ sign: b.sign === true }));
+    return ok(await session.export({ sign: parse(ExportBody).sign }));
   }
 
   if (method === 'POST' && path === '/api/install/plan') {
-    if (typeof b.target !== 'string' || typeof b.root !== 'string' || !b.root.trim()) {
-      return fail(400, 'target and root are required');
-    }
+    const b = parse(InstallPlanBody);
     try {
-      return ok(await session.installPlan(b.target, b.root.trim()));
+      return ok(await session.installPlan(b.target, b.root));
     } catch (e) {
       return fail(400, (e as Error).message);
     }
   }
   if (method === 'POST' && path === '/api/install') {
-    if (typeof b.target !== 'string' || typeof b.root !== 'string' || !b.root.trim()) {
-      return fail(400, 'target and root are required');
-    }
+    const b = parse(InstallBody);
     try {
-      const creds = (b.creds ?? {}) as Record<string, string>;
-      return ok(await session.install(b.target, b.root.trim(), creds));
+      return ok(await session.install(b.target, b.root, b.creds));
     } catch (e) {
       return fail(400, (e as Error).message);
     }
@@ -274,39 +392,40 @@ export async function handleApi(
     return ok({ indexes: session.listHubIndexUrls() });
   }
   if (method === 'POST' && path === '/api/hub/indexes') {
-    const urls = Array.isArray(b.urls) ? (b.urls as string[]) : [];
-    return ok({ indexes: session.setHubIndexUrls(urls) });
+    return ok({ indexes: session.setHubIndexUrls(parse(HubIndexesBody).urls) });
   }
   if (method === 'POST' && path === '/api/hub/mcp/search') {
+    const { query } = parse(QueryBody);
     try {
-      return ok(await session.searchHubMcp(typeof b.query === 'string' ? b.query : ''));
+      return ok(await session.searchHubMcp(query));
     } catch (e) {
       return fail(502, (e as Error).message);
     }
   }
   if (method === 'POST' && path === '/api/hub/skills/search') {
+    const { query } = parse(QueryBody);
     try {
-      return ok(await session.searchHubSkills(typeof b.query === 'string' ? b.query : ''));
+      return ok(await session.searchHubSkills(query));
     } catch (e) {
       return fail(502, (e as Error).message);
     }
   }
   if (method === 'POST' && path === '/api/hub/mcp/add') {
-    if (!b.result || typeof b.result !== 'object') return fail(400, 'result is required');
+    const { result } = parse(HubMcpAddBody);
     try {
-      session.addMcpHubResult(b.result as Parameters<StudioSession['addMcpHubResult']>[0]);
+      session.addMcpHubResult(result);
       return ok(session.state());
     } catch (e) {
       return fail(400, (e as Error).message);
     }
   }
   if (method === 'POST' && path === '/api/hub/skill/add') {
-    if (typeof b.url !== 'string' || !b.url.trim()) return fail(400, 'url is required');
+    const { url, name } = parse(HubSkillAddBody);
     try {
-      await session.importSkillFromUrl(b.url.trim());
+      await session.importHubSkill(url, name);
       return ok(session.state());
     } catch (e) {
-      return fail(400, (e as Error).message);
+      return failWith(e, 400);
     }
   }
 

@@ -1,4 +1,5 @@
 import type { SourceError } from './aggregate.js';
+import { hubFetch } from './http.js';
 
 /**
  * The memory hub: pull shareable memory packs from a hosted registry (uniqent.ai) into a brain.
@@ -29,7 +30,7 @@ export async function searchMemoryHub(
 ): Promise<MemoryHubSearch> {
   try {
     const url = `${base(registry)}/api/v1/memory?q=${encodeURIComponent(query)}`;
-    const res = await fetch(url, signal ? { signal } : undefined);
+    const res = await hubFetch('memory-hub', url, {}, signal);
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     const json = (await res.json()) as { packs?: Array<Partial<MemoryPackResult>> };
     const results = (json.packs ?? []).map((p) => ({
@@ -99,7 +100,7 @@ export async function fetchMemoryPack(
   signal?: AbortSignal,
 ): Promise<Array<{ kind: string; text: string }>> {
   const url = `${base(registry)}/api/v1/memory/${encodeURIComponent(slug)}`;
-  const res = await fetch(url, signal ? { signal } : undefined);
+  const res = await hubFetch('memory-hub', url, {}, signal);
   if (!res.ok) throw new Error(`memory pack ${slug}: ${res.status} ${res.statusText}`);
   const json = (await res.json()) as { facts?: Array<{ kind: string; text: string }> };
   return json.facts ?? [];

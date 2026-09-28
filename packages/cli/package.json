@@ -1,9 +1,12 @@
 {
   "name": "@uniqent/cli",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "The `uniqent` CLI — inspect and install .uniqent bundles.",
   "license": "Apache-2.0",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "bin": {
     "uniqent": "./dist/bin.js"
   },

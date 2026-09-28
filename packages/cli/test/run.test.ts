@@ -171,7 +171,7 @@ describe('uniqent cli', () => {
       );
       expect(code).toBe(0);
       expect(existsSync(join(root, 'SOUL.md'))).toBe(true);
-      expect(existsSync(join(root, 'hermes.json'))).toBe(true);
+      expect(readFileSync(join(root, 'config.yaml'), 'utf8')).toContain('mcp_servers');
       expect(readFileSync(join(root, '.env'), 'utf8')).toContain(
         'GITHUB_PAT=ghp_demo000111222333444',
       );
@@ -340,18 +340,21 @@ describe('uniqent cli', () => {
   it('hub skills lists GitHub repos and isolates a down hub', async () => {
     const orig = globalThis.fetch;
     try {
-      globalThis.fetch = (async () =>
-        new Response(
-          JSON.stringify({
-            items: [
-              {
-                full_name: 'acme/triage-skill',
-                description: 'triage',
-                stargazers_count: 7,
-              },
-            ],
-          }),
-        )) as typeof fetch;
+      globalThis.fetch = (async (input: unknown) =>
+        String(input).startsWith('https://raw.githubusercontent.com/')
+          ? new Response('---\nname: triage-skill\ndescription: triage\n---\nTriage.\n')
+          : new Response(
+              JSON.stringify({
+                items: [
+                  {
+                    full_name: 'acme/triage-skill',
+                    default_branch: 'main',
+                    description: 'triage',
+                    stargazers_count: 7,
+                  },
+                ],
+              }),
+            )) as typeof fetch;
       const { io, logs } = capture();
       const code = await run(['hub', 'skills', 'triage'], io);
       expect(code).toBe(0);

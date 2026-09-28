@@ -40,6 +40,33 @@ export const PATHS = {
   runtime: 'setup/runtime.json',
 } as const;
 
+// C0 control characters and DEL. A newline in a path would make the canonical digest ambiguous.
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHAR_RE = /[\u0000-\u001f\u007f]/;
+
+const PATH_RULES: Array<{ reason: string; bad: (path: string) => boolean }> = [
+  { reason: 'is empty', bad: (p) => p.length === 0 },
+  { reason: 'is absolute', bad: (p) => p.startsWith('/') },
+  { reason: 'contains a backslash', bad: (p) => p.includes('\\') },
+  { reason: 'contains a control character', bad: (p) => CONTROL_CHAR_RE.test(p) },
+  {
+    reason: "contains an empty, '.' or '..' segment",
+    bad: (p) => p.split('/').some((seg) => seg === '' || seg === '.' || seg === '..'),
+  },
+];
+
+/**
+ * Assert a bundle-relative file path is safe and canonical: relative, '/'-separated, no empty,
+ * '.' or '..' segments, no backslashes, no control characters. Every path that enters a Bundle
+ * passes through here, so writers can join it under a root without escaping it and the canonical
+ * digest (`path\nhash\n` lines) stays unambiguous.
+ */
+export function assertBundlePath(path: string): void {
+  const rule = PATH_RULES.find((r) => r.bad(path));
+  if (rule)
+    throw new BundleFormatError(`invalid bundle path ${JSON.stringify(path)}: ${rule.reason}`);
+}
+
 export class Bundle {
   private readonly fileMap: Map<string, Uint8Array>;
 
@@ -52,6 +79,7 @@ export class Bundle {
   }
 
   static fromFiles(files: Map<string, Uint8Array>): Bundle {
+    for (const path of files.keys()) assertBundlePath(path);
     return new Bundle(new Map(files));
   }
 
@@ -69,6 +97,7 @@ export class Bundle {
   }
 
   set(path: string, content: Uint8Array | string): void {
+    assertBundlePath(path);
     this.fileMap.set(path, typeof content === 'string' ? enc.encode(content) : content);
   }
 

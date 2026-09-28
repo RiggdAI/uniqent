@@ -185,3 +185,82 @@ fn session_memory_graph_from_imported_facts() {
     let db = nodes.iter().find(|n| n["id"] == "tag:db").unwrap();
     assert_eq!(db["degree"], 2);
 }
+
+#[test]
+fn secret_scan_fixture_cases() {
+    use base64::Engine;
+    use std::collections::BTreeMap;
+    use uniqent_studio::core::bundle::Bundle;
+    use uniqent_studio::core::secret_scan::{is_likely_secret_value, scan_for_secrets};
+
+    let fixture_path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../fixtures/ports/secret-cases.json"
+    );
+    let raw = std::fs::read_to_string(fixture_path).expect("secret-cases.json readable");
+    let cases: Value = serde_json::from_str(&raw).expect("valid JSON");
+
+    for case in cases["values"].as_array().unwrap() {
+        let value = case["value"].as_str().unwrap();
+        let likely = case["likely"].as_bool().unwrap();
+        assert_eq!(is_likely_secret_value(value), likely, "value: {value:?}");
+    }
+
+    for case in cases["bundles"].as_array().unwrap() {
+        let name = case["name"].as_str().unwrap();
+        let mut files = BTreeMap::new();
+        for (path, f) in case["files"].as_object().unwrap() {
+            let bytes = match (f.get("text"), f.get("base64")) {
+                (Some(t), _) => t.as_str().unwrap().as_bytes().to_vec(),
+                (_, Some(b)) => base64::engine::general_purpose::STANDARD
+                    .decode(b.as_str().unwrap())
+                    .unwrap(),
+                _ => panic!("case {name}: file {path} has neither text nor base64"),
+            };
+            files.insert(path.clone(), bytes);
+        }
+        let bundle = Bundle::from_files(files).unwrap();
+        let actual: Vec<(String, String)> = scan_for_secrets(&bundle)
+            .into_iter()
+            .map(|f| (f.path, f.hint))
+            .collect();
+        let expected: Vec<(String, String)> = case["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|f| {
+                (
+                    f["path"].as_str().unwrap().to_string(),
+                    format!(
+                        "{}: {}",
+                        f["kind"].as_str().unwrap(),
+                        f["snippet"].as_str().unwrap()
+                    ),
+                )
+            })
+            .collect();
+        assert_eq!(actual, expected, "bundle case: {name}");
+    }
+}
+
+#[test]
+fn import_mcp_servers_batches_raw_servers_and_rejects_duplicate_ids() {
+    let mut s = Session::new();
+    let n = s
+        .import_mcp_servers(
+            json!([{"command": "node", "args": ["a.js"]}, {"command": "node", "args": ["b.js"]}]),
+        )
+        .unwrap();
+    assert_eq!(n, 2);
+    assert_eq!(
+        s.state()["manifest"]["components"]["mcp"],
+        json!(["mcp-server", "mcp-server-2"])
+    );
+
+    let mut s = Session::new();
+    let server =
+        json!({"id": "dup", "transport": "stdio", "command": "x", "auth": {"type": "none"}});
+    let err = s.import_mcp_servers(json!([server, server])).unwrap_err();
+    assert!(err.contains("share the id \"dup\""), "got: {err}");
+    assert_eq!(s.state()["manifest"]["components"]["mcp"], json!([]));
+}
