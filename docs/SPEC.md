@@ -46,6 +46,7 @@ The bundle manifest.
 
 ```json
 {
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "properties": {
     "specVersion": {
@@ -111,11 +112,13 @@ The bundle manifest.
           "properties": {
             "facts": {
               "type": "integer",
-              "minimum": 0
+              "minimum": 0,
+              "maximum": 9007199254740991
             },
             "episodic": {
               "type": "integer",
-              "minimum": 0
+              "minimum": 0,
+              "maximum": 9007199254740991
             },
             "hasProfile": {
               "type": "boolean"
@@ -338,8 +341,7 @@ The bundle manifest.
     "permissions",
     "compatibility"
   ],
-  "additionalProperties": false,
-  "$schema": "http://json-schema.org/draft-07/schema#"
+  "additionalProperties": false
 }
 ```
 
@@ -351,6 +353,7 @@ The install contract: what a bundle needs and what consumes it. Never a value.
 
 ```json
 {
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "properties": {
     "ref": {
@@ -410,8 +413,7 @@ The install contract: what a bundle needs and what consumes it. Never a value.
     "consumedBy",
     "required"
   ],
-  "additionalProperties": false,
-  "$schema": "http://json-schema.org/draft-07/schema#"
+  "additionalProperties": false
 }
 ```
 
@@ -423,6 +425,7 @@ The permission sheet shown before any write.
 
 ```json
 {
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "properties": {
     "filesystem": {
@@ -483,8 +486,7 @@ The permission sheet shown before any write.
     "autonomy",
     "spawnsProcesses"
   ],
-  "additionalProperties": false,
-  "$schema": "http://json-schema.org/draft-07/schema#"
+  "additionalProperties": false
 }
 ```
 
@@ -496,6 +498,7 @@ MCP server declarations (transport, auth type, tool allowlist, credentialRef).
 
 ```json
 {
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "properties": {
     "servers": {
@@ -530,6 +533,9 @@ MCP server declarations (transport, auth type, tool allowlist, credentialRef).
           },
           "env": {
             "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
             "additionalProperties": {
               "type": "string"
             }
@@ -598,8 +604,7 @@ MCP server declarations (transport, auth type, tool allowlist, credentialRef).
   "required": [
     "servers"
   ],
-  "additionalProperties": false,
-  "$schema": "http://json-schema.org/draft-07/schema#"
+  "additionalProperties": false
 }
 ```
 
@@ -611,6 +616,7 @@ One memory line (fact/decision/preference/milestone/episodic).
 
 ```json
 {
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "properties": {
     "id": {
@@ -635,7 +641,8 @@ One memory line (fact/decision/preference/milestone/episodic).
     },
     "createdAt": {
       "type": "string",
-      "format": "date-time"
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
     },
     "importance": {
       "type": "number",
@@ -643,12 +650,12 @@ One memory line (fact/decision/preference/milestone/episodic).
       "maximum": 1
     },
     "visibility": {
+      "default": "shareable",
       "type": "string",
       "enum": [
         "shareable",
         "personal"
-      ],
-      "default": "shareable"
+      ]
     },
     "tags": {
       "type": "array",
@@ -663,8 +670,7 @@ One memory line (fact/decision/preference/milestone/episodic).
     "text",
     "createdAt"
   ],
-  "additionalProperties": false,
-  "$schema": "http://json-schema.org/draft-07/schema#"
+  "additionalProperties": false
 }
 ```
 
@@ -676,9 +682,12 @@ Structured "who the user/agent is".
 
 ```json
 {
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
-  "additionalProperties": {},
-  "$schema": "http://json-schema.org/draft-07/schema#"
+  "propertyNames": {
+    "type": "string"
+  },
+  "additionalProperties": {}
 }
 ```
 
@@ -690,6 +699,7 @@ Messaging surfaces with credentialRefs.
 
 ```json
 {
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "properties": {
     "channels": {
@@ -718,6 +728,9 @@ Messaging surfaces with credentialRefs.
           },
           "config": {
             "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
             "additionalProperties": {}
           },
           "description": {
@@ -735,8 +748,7 @@ Messaging surfaces with credentialRefs.
   "required": [
     "channels"
   ],
-  "additionalProperties": false,
-  "$schema": "http://json-schema.org/draft-07/schema#"
+  "additionalProperties": false
 }
 ```
 
@@ -748,6 +760,7 @@ Native/built-in tool enablement.
 
 ```json
 {
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "properties": {
     "tools": {
@@ -764,6 +777,9 @@ Native/built-in tool enablement.
           },
           "config": {
             "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
             "additionalProperties": {}
           },
           "description": {
@@ -781,8 +797,7 @@ Native/built-in tool enablement.
   "required": [
     "tools"
   ],
-  "additionalProperties": false,
-  "$schema": "http://json-schema.org/draft-07/schema#"
+  "additionalProperties": false
 }
 ```
 
@@ -794,6 +809,7 @@ An automation: trigger + action.
 
 ```json
 {
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "properties": {
     "id": {
@@ -805,7 +821,7 @@ An automation: trigger + action.
       "minLength": 1
     },
     "trigger": {
-      "anyOf": [
+      "oneOf": [
         {
           "type": "object",
           "properties": {
@@ -869,6 +885,9 @@ An automation: trigger + action.
         },
         "params": {
           "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
           "additionalProperties": {}
         }
       },
@@ -891,8 +910,7 @@ An automation: trigger + action.
     "action",
     "enabled"
   ],
-  "additionalProperties": false,
-  "$schema": "http://json-schema.org/draft-07/schema#"
+  "additionalProperties": false
 }
 ```
 
@@ -904,6 +922,7 @@ Model/provider prefs, defaults, autonomy, tool allowlist.
 
 ```json
 {
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "properties": {
     "model": {
@@ -934,11 +953,13 @@ Model/provider prefs, defaults, autonomy, tool allowlist.
     },
     "defaults": {
       "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
       "additionalProperties": {}
     }
   },
-  "additionalProperties": false,
-  "$schema": "http://json-schema.org/draft-07/schema#"
+  "additionalProperties": false
 }
 ```
 
@@ -950,6 +971,7 @@ Detached Ed25519 signature over a canonical digest.
 
 ```json
 {
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "properties": {
     "algorithm": {
@@ -974,7 +996,8 @@ Detached Ed25519 signature over a canonical digest.
     },
     "signedAt": {
       "type": "string",
-      "format": "date-time"
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
     }
   },
   "required": [
@@ -985,7 +1008,6 @@ Detached Ed25519 signature over a canonical digest.
     "signature",
     "signedAt"
   ],
-  "additionalProperties": false,
-  "$schema": "http://json-schema.org/draft-07/schema#"
+  "additionalProperties": false
 }
 ```

@@ -5,8 +5,7 @@
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { zodToJsonSchema } from 'zod-to-json-schema';
-import { buildJsonSchema, SCHEMA_REGISTRY, SPEC_VERSION } from '../src/index.js';
+import { buildJsonSchema, SCHEMA_REGISTRY, SPEC_VERSION, schemaFor } from '../src/index.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const schemaPath = resolve(here, '../schema/uniqent.schema.json');
@@ -97,9 +96,9 @@ for (const name of Object.keys(SCHEMA_REGISTRY)) {
   lines.push(`- [\`${name}\`](#${name.toLowerCase()}) — ${d.file} — ${d.summary}`);
 }
 lines.push('');
-for (const [name, schema] of Object.entries(SCHEMA_REGISTRY)) {
+for (const name of Object.keys(SCHEMA_REGISTRY)) {
   const d = DOCS[name];
-  const single = zodToJsonSchema(schema, { $refStrategy: 'none' });
+  const single = schemaFor(name);
   lines.push(`### ${name}`);
   lines.push('');
   lines.push(`*File:* \`${d.file}\``);

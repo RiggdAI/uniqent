@@ -24,7 +24,7 @@ export const McpServer = z
     url: z.string().url().optional(),
     command: z.string().optional(),
     args: z.array(z.string()).optional(),
-    env: z.record(z.string()).optional(),
+    env: z.record(z.string(), z.string()).optional(),
     auth: McpAuth,
     tools: z.object({
       /** Allowlist: "all" or an explicit list of tool names. */
