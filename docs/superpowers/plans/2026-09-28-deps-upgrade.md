@@ -36,9 +36,11 @@
 ### Task 0: Capture the baseline
 
 **Files:**
+
 - Create (gitignored): `.playwright-mcp/baseline/*` (screenshots, hashes, schema copy)
 
 **Interfaces:**
+
 - Produces: `.playwright-mcp/baseline/fixtures.sha256`, `.playwright-mcp/baseline/uniqent.schema.json`, `.playwright-mcp/baseline/SPEC.md`, `.playwright-mcp/baseline/studio-*.png`, `.playwright-mcp/baseline/app-size.txt` — later tasks compare against these.
 
 - [ ] **Step 1: Confirm `.playwright-mcp/` is gitignored**
@@ -80,6 +82,7 @@ No commit (baseline files are gitignored).
 ### Task 1: Toolchain — pnpm, TypeScript 6.0, ESLint 10, Vitest 5, Prettier, tsx, @types/node
 
 **Files:**
+
 - Modify: `package.json` (root: `packageManager`, devDependencies)
 - Modify: `tsconfig.base.json`
 - Modify: `eslint.config.js` (only if ESLint 10 requires)
@@ -88,6 +91,7 @@ No commit (baseline files are gitignored).
 - Modify: any source file Prettier reformats
 
 **Interfaces:**
+
 - Produces: a green tree on the new toolchain; later tasks assume `tsc` 6.0.x, Vitest 5 and ESLint 10.
 
 - [ ] **Step 1: Bump pnpm**
@@ -129,7 +133,11 @@ import tseslint from 'typescript-eslint';
 import { defineConfig } from 'eslint/config';
 
 export default defineConfig(
-  { ignores: [/* unchanged list */] },
+  {
+    ignores: [
+      /* unchanged list */
+    ],
+  },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   /* the two existing rule blocks, unchanged */
@@ -159,6 +167,7 @@ git commit -m "build: upgrade toolchain (pnpm 12, TypeScript 6.0, ESLint 10, Vit
 ### Task 2: Zod 4 and spec generation
 
 **Files:**
+
 - Modify: `packages/spec/package.json` (zod 4, remove `zod-to-json-schema`)
 - Modify: `packages/spec/src/jsonSchema.ts`, `packages/spec/scripts/gen.ts`
 - Modify: `packages/spec/src/mcp.ts:27` (single-argument `z.record`)
@@ -168,6 +177,7 @@ git commit -m "build: upgrade toolchain (pnpm 12, TypeScript 6.0, ESLint 10, Vit
 - Test: `packages/spec/test/jsonSchema.test.ts`
 
 **Interfaces:**
+
 - Consumes: Task 0 `.playwright-mcp/baseline/uniqent.schema.json`.
 - Produces: `buildJsonSchema(): Record<string, unknown>` and `SCHEMA_REGISTRY` with unchanged names; `schemaFor(name: string): Record<string, unknown>` in `jsonSchema.ts` (used by `gen.ts` for per-schema SPEC.md blocks).
 
@@ -220,7 +230,8 @@ export const SCHEMA_REGISTRY: Record<string, z.ZodType> = {
 /** One named schema as a standalone draft-07 JSON Schema (all refs inlined). */
 export function schemaFor(name: string): Record<string, unknown> {
   const schema = SCHEMA_REGISTRY[name];
-  if (!schema) throw new Error(`unknown schema "${name}" (known: ${Object.keys(SCHEMA_REGISTRY).join(', ')})`);
+  if (!schema)
+    throw new Error(`unknown schema "${name}" (known: ${Object.keys(SCHEMA_REGISTRY).join(', ')})`);
   return z.toJSONSchema(schema, { target: 'draft-7', io: 'input' }) as Record<string, unknown>;
 }
 
@@ -251,7 +262,7 @@ In `packages/spec/scripts/gen.ts`, replace the `zod-to-json-schema` import and t
 ```ts
 import { buildJsonSchema, SCHEMA_REGISTRY, SPEC_VERSION, schemaFor } from '../src/index.js';
 // …
-  const single = schemaFor(name);
+const single = schemaFor(name);
 ```
 
 Export `schemaFor` from `packages/spec/src/index.ts` if `jsonSchema.ts` exports are not already re-exported with `export *`.
@@ -271,18 +282,35 @@ const [a, b] = process.argv.slice(2).map((p) => JSON.parse(readFileSync(p, 'utf8
 const facts = (node, path, out) => {
   if (!node || typeof node !== 'object') return out;
   const f = {};
-  for (const k of ['type', 'required', 'enum', 'pattern', 'const', 'minimum', 'maximum', 'minLength', 'maxLength', 'minItems', 'additionalProperties'])
+  for (const k of [
+    'type',
+    'required',
+    'enum',
+    'pattern',
+    'const',
+    'minimum',
+    'maximum',
+    'minLength',
+    'maxLength',
+    'minItems',
+    'additionalProperties',
+  ])
     if (k in node) f[k] = JSON.stringify(Array.isArray(node[k]) ? [...node[k]].sort() : node[k]);
   if (node.properties) f.properties = Object.keys(node.properties).sort().join(',');
   if (Object.keys(f).length) out.set(path, f);
   for (const [k, v] of Object.entries(node)) if (k !== '$schema') facts(v, `${path}/${k}`, out);
   return out;
 };
-const fa = facts(a, '', new Map()), fb = facts(b, '', new Map());
+const fa = facts(a, '', new Map()),
+  fb = facts(b, '', new Map());
 let diffs = 0;
 for (const p of new Set([...fa.keys(), ...fb.keys()])) {
-  const x = JSON.stringify(fa.get(p) ?? null), y = JSON.stringify(fb.get(p) ?? null);
-  if (x !== y) { diffs++; console.log(p, '\n  old', x, '\n  new', y); }
+  const x = JSON.stringify(fa.get(p) ?? null),
+    y = JSON.stringify(fb.get(p) ?? null);
+  if (x !== y) {
+    diffs++;
+    console.log(p, '\n  old', x, '\n  new', y);
+  }
 }
 console.log(`${diffs} difference(s)`);
 ```
@@ -309,12 +337,14 @@ git commit -m "build: upgrade to Zod 4 and generate JSON Schema with z.toJSONSch
 ### Task 3: Crypto and Rust — `@noble/ed25519` 3, Tauri 2.12, ed25519-dalek 3, sha2 0.11, base64 0.23
 
 **Files:**
+
 - Modify: `packages/core/package.json`, `packages/core/src/signing.ts:42-46`
 - Modify: `apps/studio/src-tauri/Cargo.toml`, `apps/studio/src-tauri/Cargo.lock`
 - Modify: `apps/studio/src-tauri/src/core/signing.rs:21` (key generation), `src/core/digest.rs` (only if sha2 0.11 breaks it), `src/session.rs` (only if base64 0.23 breaks it)
 - Modify: `apps/studio/package.json` (`@tauri-apps/api`, `@tauri-apps/cli`)
 
 **Interfaces:**
+
 - Consumes: Task 0 `fixtures.sha256`.
 - Produces: unchanged public APIs — `generateKeypair()`, `sign()`, `verify()` (TS) and the Rust `signing` module functions keep their signatures.
 
@@ -398,6 +428,7 @@ git commit -m "build: upgrade crypto and Tauri (noble ed25519 3, Tauri 2.12, ed2
 ### Task 4: Studio UI stack — Vite 8, React 19.3, Tailwind 4, Tiptap 3, xyflow, radix, lucide, force-graph
 
 **Files:**
+
 - Modify: `apps/studio/package.json`
 - Modify: `apps/studio/web/vite.config.ts`
 - Modify: `apps/studio/web/src/index.css`
@@ -406,6 +437,7 @@ git commit -m "build: upgrade crypto and Tauri (noble ed25519 3, Tauri 2.12, ed2
 - Modify: `apps/studio/web/src/components/ui/rich-editor.tsx` (only if Tiptap 3 / tiptap-markdown 0.9 APIs differ)
 
 **Interfaces:**
+
 - Consumes: Task 0 screenshots and `app-size.txt`.
 - Produces: a Studio that looks identical to the baseline.
 
@@ -447,7 +479,11 @@ Preserve v3 defaults the design relies on by adding to `index.css` (Tailwind's d
 
 ```css
 @layer base {
-  *, ::after, ::before, ::backdrop, ::file-selector-button {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
     border-color: var(--color-gray-200, currentColor);
   }
 }
@@ -493,11 +529,13 @@ git commit -m "build(studio): upgrade UI stack (Vite 8, React 19.3, Tailwind 4, 
 ### Task 5: Sweep the remainder and prove the release path
 
 **Files:**
+
 - Modify: remaining `package.json` files (`tar-stream`, `yaml`, `json5`, `@types/*`, anything else reported)
 - Modify: `pnpm-lock.yaml`
 - Modify: `CLAUDE.md` ("Repo conventions" line on TypeScript/pnpm versions)
 
 **Interfaces:**
+
 - Consumes: all previous tasks.
 - Produces: `pnpm -r outdated` lists only the documented pins.
 
