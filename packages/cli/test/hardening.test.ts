@@ -198,3 +198,20 @@ describe('cli hardening', () => {
     }
   });
 });
+
+describe('unsupported spec version', () => {
+  it('tells the user to upgrade uniqent when a bundle declares a newer specVersion', async () => {
+    const { readableMessage } = await import('../src/display');
+    const b = brain();
+    b.set(PATHS.manifest, JSON.stringify({ ...b.manifest(), specVersion: '0.2' }));
+    let message = '';
+    try {
+      b.manifest();
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    expect(readableMessage(message)).toEqual([
+      'unsupported spec version "0.2" (this uniqent reads "0.1"); upgrade uniqent',
+    ]);
+  });
+});

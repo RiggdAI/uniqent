@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Manifest, McpServer, CredentialRequirement, MemoryItem } from '../src/index';
+import { Manifest, McpServer, CredentialRequirement, MemoryItem, Signature } from '../src/index';
 
 /** A representative, schema-valid manifest used as the positive fixture. */
 const VALID_MANIFEST = {
@@ -232,5 +232,35 @@ describe('suggestedPrompts', () => {
 
   it('is optional', () => {
     expect(Manifest.parse(base).suggestedPrompts).toBeUndefined();
+  });
+});
+
+describe('UTC datetimes (createdAt, signedAt)', () => {
+  const item = (createdAt: string) => ({ id: 'f1', kind: 'fact', text: 't', createdAt });
+  const sig = (signedAt: string) => ({
+    algorithm: 'ed25519',
+    publicKey: 'a'.repeat(64),
+    digestAlgorithm: 'sha256',
+    digest: 'b'.repeat(64),
+    signature: 'c'.repeat(128),
+    signedAt,
+  });
+
+  it('keeps accepting every form spec 0.1 accepted, including minute precision', () => {
+    for (const t of ['2026-01-01T09:30Z', '2026-01-01T09:30:05Z', '2026-01-01T09:30:05.123Z']) {
+      expect(MemoryItem.safeParse(item(t)).success, t).toBe(true);
+      expect(Signature.safeParse(sig(t)).success, t).toBe(true);
+    }
+  });
+
+  it('rejects non-UTC, impossible and free-text dates', () => {
+    for (const t of [
+      '2026-01-01T09:30:05+02:00',
+      '2026-13-01T09:30Z',
+      '2026-02-30T09:30Z',
+      'yesterday',
+    ]) {
+      expect(MemoryItem.safeParse(item(t)).success, t).toBe(false);
+    }
   });
 });

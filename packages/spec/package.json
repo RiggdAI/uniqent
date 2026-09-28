@@ -1,6 +1,6 @@
 {
   "name": "@uniqent/spec",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "The canonical .uniqent bundle schema (source of truth).",
   "license": "Apache-2.0",
   "type": "module",

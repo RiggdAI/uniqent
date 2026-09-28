@@ -2,6 +2,7 @@ import { isAbsolute } from 'node:path';
 import { z } from 'zod';
 import {
   CredentialRequirement,
+  IsoUtcDateTime,
   Manifest,
   McpServer,
   MemoryItem,
@@ -62,7 +63,7 @@ const ImportItem = z.object({
   text: z.string(),
   id: z.string().optional(),
   kind: MemoryKind.optional(),
-  createdAt: z.string().datetime().optional(),
+  createdAt: IsoUtcDateTime.optional(),
   importance: Importance,
   visibility: Visibility.optional(),
 });

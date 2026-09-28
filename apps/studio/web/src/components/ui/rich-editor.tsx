@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useEditor, EditorContent, type Editor } from '@tiptap/react';
+import { useEditor, useEditorState, EditorContent, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Markdown, type MarkdownStorage } from 'tiptap-markdown';
 import { Bold, Italic, Heading1, Heading2, List, ListOrdered, Code, Quote } from 'lucide-react';
@@ -35,6 +35,7 @@ function ToolBtn({
       type="button"
       title={label}
       aria-label={label}
+      aria-pressed={active}
       // preventDefault keeps the editor selection when clicking a toolbar button
       onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
@@ -61,7 +62,11 @@ export function RichEditor({
 }) {
   const editor = useEditor({
     immediatelyRender: false,
-    extensions: [StarterKit, Markdown.configure({ html: false, linkify: true })],
+    // Underline has no markdown form (html:false would drop it on save), so it is not offered.
+    extensions: [
+      StarterKit.configure({ underline: false }),
+      Markdown.configure({ html: false, linkify: true }),
+    ],
     content: value,
     onUpdate: ({ editor }: { editor: Editor }) => onChange(editor.storage.markdown.getMarkdown()),
     editorProps: {
@@ -84,59 +89,83 @@ export function RichEditor({
   if (!editor) return null;
   return (
     <div className="rounded-md border border-input bg-transparent transition-colors focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/40">
-      <div className="flex flex-wrap items-center gap-0.5 border-b px-1.5 py-1">
-        <ToolBtn
-          icon={Bold}
-          label="Bold"
-          active={editor.isActive('bold')}
-          onClick={() => editor.chain().focus().toggleBold().run()}
-        />
-        <ToolBtn
-          icon={Italic}
-          label="Italic"
-          active={editor.isActive('italic')}
-          onClick={() => editor.chain().focus().toggleItalic().run()}
-        />
-        <span className="mx-0.5 h-4 w-px bg-border" />
-        <ToolBtn
-          icon={Heading1}
-          label="Heading 1"
-          active={editor.isActive('heading', { level: 1 })}
-          onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-        />
-        <ToolBtn
-          icon={Heading2}
-          label="Heading 2"
-          active={editor.isActive('heading', { level: 2 })}
-          onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-        />
-        <span className="mx-0.5 h-4 w-px bg-border" />
-        <ToolBtn
-          icon={List}
-          label="Bullet list"
-          active={editor.isActive('bulletList')}
-          onClick={() => editor.chain().focus().toggleBulletList().run()}
-        />
-        <ToolBtn
-          icon={ListOrdered}
-          label="Numbered list"
-          active={editor.isActive('orderedList')}
-          onClick={() => editor.chain().focus().toggleOrderedList().run()}
-        />
-        <ToolBtn
-          icon={Quote}
-          label="Quote"
-          active={editor.isActive('blockquote')}
-          onClick={() => editor.chain().focus().toggleBlockquote().run()}
-        />
-        <ToolBtn
-          icon={Code}
-          label="Code block"
-          active={editor.isActive('codeBlock')}
-          onClick={() => editor.chain().focus().toggleCodeBlock().run()}
-        />
-      </div>
+      <Toolbar editor={editor} />
       <EditorContent editor={editor} />
+    </div>
+  );
+}
+
+/**
+ * Formatting buttons. Tiptap 3 no longer re-renders on every transaction, so the toolbar
+ * subscribes to exactly the marks/nodes it shows — buttons follow the caret. Mounted only once
+ * the editor exists (useEditor with immediatelyRender:false starts as null).
+ */
+function Toolbar({ editor }: { editor: Editor }) {
+  const active = useEditorState({
+    editor,
+    selector: ({ editor: e }) => ({
+      bold: e.isActive('bold'),
+      italic: e.isActive('italic'),
+      h1: e.isActive('heading', { level: 1 }),
+      h2: e.isActive('heading', { level: 2 }),
+      bulletList: e.isActive('bulletList'),
+      orderedList: e.isActive('orderedList'),
+      blockquote: e.isActive('blockquote'),
+      codeBlock: e.isActive('codeBlock'),
+    }),
+  });
+  return (
+    <div className="flex flex-wrap items-center gap-0.5 border-b px-1.5 py-1">
+      <ToolBtn
+        icon={Bold}
+        label="Bold"
+        active={active.bold}
+        onClick={() => editor.chain().focus().toggleBold().run()}
+      />
+      <ToolBtn
+        icon={Italic}
+        label="Italic"
+        active={active.italic}
+        onClick={() => editor.chain().focus().toggleItalic().run()}
+      />
+      <span className="mx-0.5 h-4 w-px bg-border" />
+      <ToolBtn
+        icon={Heading1}
+        label="Heading 1"
+        active={active.h1}
+        onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+      />
+      <ToolBtn
+        icon={Heading2}
+        label="Heading 2"
+        active={active.h2}
+        onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+      />
+      <span className="mx-0.5 h-4 w-px bg-border" />
+      <ToolBtn
+        icon={List}
+        label="Bullet list"
+        active={active.bulletList}
+        onClick={() => editor.chain().focus().toggleBulletList().run()}
+      />
+      <ToolBtn
+        icon={ListOrdered}
+        label="Numbered list"
+        active={active.orderedList}
+        onClick={() => editor.chain().focus().toggleOrderedList().run()}
+      />
+      <ToolBtn
+        icon={Quote}
+        label="Quote"
+        active={active.blockquote}
+        onClick={() => editor.chain().focus().toggleBlockquote().run()}
+      />
+      <ToolBtn
+        icon={Code}
+        label="Code block"
+        active={active.codeBlock}
+        onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+      />
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { IsoUtcDateTime } from './common.js';
 
 /** Detached signature over a canonical digest of bundle contents — signature.json. */
 export const Signature = z.object({
@@ -11,6 +12,6 @@ export const Signature = z.object({
   digest: z.string().min(1),
   /** The detached signature over `digest`. */
   signature: z.string().min(1),
-  signedAt: z.string().datetime(),
+  signedAt: IsoUtcDateTime,
 });
 export type Signature = z.infer<typeof Signature>;
