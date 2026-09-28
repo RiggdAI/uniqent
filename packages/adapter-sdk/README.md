@@ -101,16 +101,16 @@ The harness runs three assertions:
 
 ### Key types
 
-| Type                  | Purpose                                                                                                   |
+| Type | Purpose |
 | --------------------- | --------------------------------------------------------------------------------------------------------- | --------- | --------------- |
-| `DetectResult`        | Returned by `detect` — whether the framework is present, its version, and the config root.                |
-| `InstallOptions`      | `{ root: string }` — the framework project root passed to `plan` and `apply`.                             |
-| `ExportOptions`       | `{ root: string }` — the framework project root passed to `export`.                                       |
-| `InstallPlan`         | Dry-run output: `writes`, `mcpRegistrations`, `channelRegistrations`, `lossiness`, `requiresCredentials`. |
-| `Lossiness`           | A single loss record: `{ component, issue, action }` where `action` is `'truncated'                       | 'dropped' | 'transformed'`. |
-| `ResolvedCredentials` | `Record<string, string>` — credential ref → real value map, resolved locally before `apply`.              |
-| `InstallResult`       | `{ written: string[], notes: string[] }` — paths written and any human-readable notes.                    |
-| `ConformanceResult`   | `{ ok: boolean, checks: ConformanceCheck[] }` — returned by `runConformance`.                             |
+| `DetectResult` | Returned by `detect` — whether the framework is present, its version, and the config root. |
+| `InstallOptions` | `{ root: string }` — the framework project root passed to `plan` and `apply`. |
+| `ExportOptions` | `{ root: string }` — the framework project root passed to `export`. |
+| `InstallPlan` | Dry-run output: `writes`, `mcpRegistrations`, `channelRegistrations`, `lossiness`, `requiresCredentials`. |
+| `Lossiness` | A single loss record: `{ component, issue, action }` where `action` is `'truncated'                       | 'dropped' | 'transformed'`. |
+| `ResolvedCredentials` | `Record<string, string>` — credential ref → real value map, resolved locally before `apply`. |
+| `InstallResult` | `{ written: string[], notes: string[] }` — paths written and any human-readable notes. |
+| `ConformanceResult` | `{ ok: boolean, checks: ConformanceCheck[] }` — returned by `runConformance`. |
 
 ## Where this fits
 

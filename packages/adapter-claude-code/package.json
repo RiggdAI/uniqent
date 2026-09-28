@@ -30,7 +30,7 @@
     "@uniqent/spec": "workspace:^"
   },
   "devDependencies": {
-    "vitest": "^3.0.0"
+    "vitest": "^5.0.2"
   },
   "publishConfig": {
     "access": "public"

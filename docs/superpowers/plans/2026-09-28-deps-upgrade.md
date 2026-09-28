@@ -134,9 +134,7 @@ import { defineConfig } from 'eslint/config';
 
 export default defineConfig(
   {
-    ignores: [
-      /* unchanged list */
-    ],
+    ignores: [/* unchanged list */],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
