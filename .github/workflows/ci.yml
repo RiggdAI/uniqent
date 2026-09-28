@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The toolchain (pnpm 11) needs Node >= 22.13; test the supported lines.
+        # The toolchain (pnpm 12, TypeScript 6) runs on Node >= 22.13; test the supported lines.
         node-version: [22, 24]
     name: build (node ${{ matrix.node-version }})
     env:
