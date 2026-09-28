@@ -13,6 +13,7 @@ import type {
   VaultImport,
 } from './types';
 import { api, isNative } from './api';
+import { canPublish } from './publish';
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
 import { Textarea } from './components/ui/textarea';
@@ -1767,20 +1768,25 @@ function MemoryHubPanel({ apply }: { apply: (p: Promise<StudioState>) => void })
         <Label>Publish this brain's memory</Label>
         <p className="text-xs text-muted-foreground">
           Share this brain's <b>shareable</b> facts as a pack on the hub (personal memory never
-          leaves). Needs a publish token.
+          leaves).{' '}
+          {isNative
+            ? 'Uses your `uniqent login` token unless you paste one.'
+            : 'Needs a publish token.'}
         </p>
         <div className="flex gap-2">
           <Input
             data-testid="memory-hub-token"
             type="password"
-            placeholder="publish token"
+            placeholder={
+              isNative ? 'publish token (optional — uses uniqent login)' : 'publish token'
+            }
             value={token}
             onChange={(e) => setToken(e.target.value)}
           />
           <Button
             data-testid="memory-hub-publish"
             onClick={() => publish()}
-            disabled={publishing || token.trim().length === 0}
+            disabled={publishing || !canPublish(token, isNative)}
           >
             {publishing ? 'Publishing…' : 'Publish'}
           </Button>

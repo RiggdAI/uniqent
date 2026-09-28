@@ -112,3 +112,69 @@ fn registry_token_reads_the_cli_store_and_fails_loudly_on_corruption() {
     let err = token_from_store("{not json", "https://uniqent.ai").unwrap_err();
     assert!(err.contains("credentials.json"), "{err}");
 }
+
+fn stdio_with_env_secret() -> serde_json::Value {
+    json!({"id":"srv","transport":"stdio","command":"npx","args":["-y","srv-mcp@1.0.0"],
+           "env":{"SRV_API_KEY":"${credentialRef:srv_api_key}"},
+           "auth":{"type":"none"},"tools":{"include":"all"}})
+}
+
+#[test]
+fn hub_credentials_export_in_the_spec_shape_with_their_consumers() {
+    let mut s = Session::new();
+    // No `help` (MCP Registry env vars often have no description) and consumedBy declared.
+    s.add_mcp_hub_result(
+        stdio_with_env_secret(),
+        vec![json!({"ref":"srv_api_key","label":"SRV_API_KEY","type":"envVar",
+                    "consumedBy":["mcp:srv"],"required":true})],
+    )
+    .unwrap();
+    let cred = &s.state()["manifest"]["credentials"][0];
+    assert_eq!(cred["consumedBy"], json!(["mcp:srv"]));
+    assert!(cred.get("help").is_none(), "absent help must stay absent, got {cred}");
+    assert!(cred.get("oauth").is_none(), "absent oauth must stay absent, got {cred}");
+}
+
+#[test]
+fn env_placeholders_count_as_consumers_like_the_ts_builder() {
+    let mut s = Session::new();
+    s.add_mcp_hub_result(
+        stdio_with_env_secret(),
+        vec![json!({"ref":"srv_api_key","label":"SRV_API_KEY","type":"envVar",
+                    "consumedBy":[],"required":true})],
+    )
+    .unwrap();
+    assert_eq!(
+        s.state()["manifest"]["credentials"][0]["consumedBy"],
+        json!(["mcp:srv"])
+    );
+}
+
+#[test]
+fn oauth_details_survive_into_the_manifest() {
+    let mut s = Session::new();
+    s.add_mcp_hub_result(
+        json!({"id":"o","transport":"streamable-http","url":"https://o.example/mcp",
+               "auth":{"type":"oauth2","credentialRef":"o_oauth"},"tools":{"include":"all"}}),
+        vec![json!({"ref":"o_oauth","label":"O","type":"oauth2","consumedBy":["mcp:o"],
+                    "required":true,"help":"Sign in at o.example",
+                    "oauth":{"authorizationUrl":"https://o.example/auth"}})],
+    )
+    .unwrap();
+    let cred = &s.state()["manifest"]["credentials"][0];
+    assert_eq!(cred["help"], json!("Sign in at o.example"));
+    assert_eq!(cred["oauth"], json!({"authorizationUrl":"https://o.example/auth"}));
+}
+
+#[test]
+fn an_explicit_null_help_is_rejected_like_zod() {
+    let mut s = Session::new();
+    let err = s
+        .add_mcp_hub_result(
+            stdio_with_env_secret(),
+            vec![json!({"ref":"srv_api_key","label":"L","type":"envVar",
+                        "consumedBy":["mcp:srv"],"required":true,"help":null})],
+        )
+        .unwrap_err();
+    assert!(err.contains("help"), "{err}");
+}

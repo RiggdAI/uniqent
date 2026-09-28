@@ -33,15 +33,27 @@ import type {
 
 const fetchFn: FetchFn = (input, init) => tauriFetch(input, init);
 
-const readVault = (dir: string) => invoke<VaultFile[]>('read_vault', { dir });
+/**
+ * invoke() rejects with the Rust command's plain error string; rethrow it as an Error (same
+ * message) so every panel's `(e as Error).message` shows it.
+ */
+async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+  try {
+    return await invoke<T>(cmd, args);
+  } catch (e) {
+    throw e instanceof Error ? e : new Error(String(e));
+  }
+}
+
+const readVault = (dir: string) => call<VaultFile[]>('read_vault', { dir });
 
 export async function hubMcp(query: string): Promise<HubSearch<McpHubResult>> {
-  const jsonIndexUrls = await invoke<string[]>('hub_indexes');
+  const jsonIndexUrls = await call<string[]>('hub_indexes');
   return searchMcpHubs(query, defaultMcpSources({ fetch: fetchFn, jsonIndexUrls }));
 }
 
 export async function hubSkills(query: string): Promise<HubSearch<SkillHubResult>> {
-  const jsonIndexUrls = await invoke<string[]>('hub_indexes');
+  const jsonIndexUrls = await call<string[]>('hub_indexes');
   return searchSkillHubs(
     query,
     defaultSkillSources({ fetch: fetchFn, jsonIndexUrls, githubToken: undefined }),
@@ -49,7 +61,7 @@ export async function hubSkills(query: string): Promise<HubSearch<SkillHubResult
 }
 
 export function addHubMcp(result: McpHubResult): Promise<StudioState> {
-  return invoke<StudioState>('add_mcp_hub_result', {
+  return call<StudioState>('add_mcp_hub_result', {
     server: result.entry.server,
     credentials: result.credentials,
   });
@@ -57,20 +69,20 @@ export function addHubMcp(result: McpHubResult): Promise<StudioState> {
 
 export async function addHubSkill(url: string, name: string): Promise<StudioState> {
   const skillMd = await fetchSkillMd(fetchFn, url, undefined);
-  return invoke<StudioState>('add_custom_skill', { name, skillMd });
+  return call<StudioState>('add_custom_skill', { name, skillMd });
 }
 
 export async function importSkillFromUrl(url: string): Promise<StudioState> {
   const skillMd = await fetchSkillMd(fetchFn, url, undefined);
-  return invoke<StudioState>('add_custom_skill', { name: skillNameFor(url, skillMd), skillMd });
+  return call<StudioState>('add_custom_skill', { name: skillNameFor(url, skillMd), skillMd });
 }
 
 export async function hubIndexes(): Promise<{ indexes: string[] }> {
-  return { indexes: await invoke<string[]>('hub_indexes') };
+  return { indexes: await call<string[]>('hub_indexes') };
 }
 
 export async function setHubIndexes(urls: string[]): Promise<{ indexes: string[] }> {
-  return { indexes: await invoke<string[]>('set_hub_indexes', { urls }) };
+  return { indexes: await call<string[]>('set_hub_indexes', { urls }) };
 }
 
 export async function previewVault(
@@ -88,9 +100,9 @@ export async function importVaultDir(
   opts: { persona: boolean; profile: boolean },
 ): Promise<{ state: StudioState; stats: VaultImport['stats'] }> {
   const result = importVault(await readVault(dir));
-  if (result.persona && opts.persona) await invoke('set_persona', { persona: result.persona });
-  if (result.profile && opts.profile) await invoke('set_profile', { profile: result.profile });
-  const state = await invoke<StudioState>('import_memory', {
+  if (result.persona && opts.persona) await call('set_persona', { persona: result.persona });
+  if (result.profile && opts.profile) await call('set_profile', { profile: result.profile });
+  const state = await call<StudioState>('import_memory', {
     payload: {
       items: result.items.map((it) => ({ text: it.text, kind: it.kind, source: it.source })),
     },
@@ -109,7 +121,7 @@ export async function addMemoryPack(slug: string, registry: string): Promise<Stu
     slug,
     undefined,
   );
-  return invoke<StudioState>('import_memory', {
+  return call<StudioState>('import_memory', {
     payload: { items: facts.map((f) => ({ text: f.text, kind: f.kind })) },
   });
 }
@@ -119,14 +131,14 @@ export async function publishMemory(
   registry: string,
 ): Promise<{ result: { slug: string; factCount: number; url?: string; persisted?: boolean } }> {
   const reg = registry || DEFAULT_MEMORY_REGISTRY;
-  const token = typedToken || (await invoke<string | null>('registry_token', { registry: reg }));
+  const token = typedToken || (await call<string | null>('registry_token', { registry: reg }));
   if (!token) {
     throw new Error(`not signed in to ${reg}: run \`uniqent login\` or paste a publish token`);
   }
-  const pack = await invoke<MemoryPackUpload>('publish_payload');
+  const pack = await call<MemoryPackUpload>('publish_payload');
   return { result: await publishMemoryPack(fetchFn, reg, token, pack, undefined) };
 }
 
 export function chooseFolder(): Promise<string | null> {
-  return invoke<string | null>('pick_folder');
+  return call<string | null>('pick_folder');
 }

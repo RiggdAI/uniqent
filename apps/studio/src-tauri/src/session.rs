@@ -175,10 +175,14 @@ fn validate_credential(c: &Value) -> Result<(), String> {
     if !c["required"].is_boolean() {
         return Err("required must be a boolean".into());
     }
-    if !(c["help"].is_null() || c["help"].is_string()) {
-        return Err("help must be a string".into());
+    // Optional fields must be absent or well-typed: an explicit null fails zod, so reject it here.
+    if c.get("help").is_some_and(|h| !h.is_string()) {
+        return Err(format!("help must be a string when present, got {}", c["help"]));
     }
-    if !c["oauth"].is_null() && ty != "oauth2" {
+    if c.get("oauth").is_some_and(|o| !o.is_object()) {
+        return Err(format!("oauth must be an object when present, got {}", c["oauth"]));
+    }
+    if c.get("oauth").is_some() && ty != "oauth2" {
         return Err("oauth details are only allowed when type is \"oauth2\"".into());
     }
     Ok(())
@@ -441,8 +445,13 @@ impl Session {
     /// and channels whose credentialRef names it (e.g. `["channel:slack", "mcp:github"]`).
     fn live_consumers(&self, cred_ref: &str) -> Vec<String> {
         let mut consumers: Vec<String> = Vec::new();
+        // A server consumes a ref via auth or a ${credentialRef:…} placeholder (env, headers, args),
+        // like syncedCredentials in packages/builder/src/brain.ts.
+        let placeholder = format!("${{credentialRef:{cred_ref}}}");
         for server in &self.mcp {
-            if server["auth"]["credentialRef"].as_str() == Some(cred_ref) {
+            if server["auth"]["credentialRef"].as_str() == Some(cred_ref)
+                || server.to_string().contains(&placeholder)
+            {
                 if let Some(sid) = server["id"].as_str() {
                     consumers.push(format!("mcp:{sid}"));
                 }
@@ -740,17 +749,21 @@ impl Session {
             .credentials
             .iter()
             .map(|cred| {
-                let mut consumed_by = self.live_consumers(cred["ref"].as_str().unwrap_or(""));
-                consumed_by.sort();
-
-                json!({
+                // Declared + live consumers; optional fields only when present (the TS schema
+                // rejects null for them).
+                let mut out = json!({
                     "ref": cred["ref"],
                     "label": cred["label"],
                     "type": cred["type"],
-                    "consumedBy": consumed_by,
+                    "consumedBy": self.consumers_of(cred),
                     "required": cred["required"],
-                    "help": cred["help"]
-                })
+                });
+                for key in ["help", "oauth"] {
+                    if let Some(v) = cred.get(key).filter(|v| !v.is_null()) {
+                        out[key] = v.clone();
+                    }
+                }
+                out
             })
             .collect();
 

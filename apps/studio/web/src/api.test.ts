@@ -247,6 +247,14 @@ describe('api shim (native)', () => {
     expect(result.factCount).toBe(1);
   });
 
+  it('turns Rust string rejections into Errors the panels can show', async () => {
+    invokeMock.mockRejectedValue('/x was not chosen in this session; use "Choose folder…"');
+    const { api } = await import('./api');
+    const err = await api.previewVault('/x').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toMatch(/not chosen in this session/);
+  });
+
   it('says to log in when publishing without any token', async () => {
     invokeMock.mockImplementation(async (cmd: string) => (cmd === 'registry_token' ? null : null));
     const { api } = await import('./api');
