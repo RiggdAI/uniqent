@@ -23,8 +23,12 @@ getrandom = "0.4"
 time = { version = "0.3", features = ["formatting"] }
 hex = "0.4"
 regex = "1"
+tauri-plugin-dialog = "2"
 
 [profile.release]
 lto = true
 codegen-units = 1
 strip = true
+
+[dev-dependencies]
+tempfile = "3.27.0"
