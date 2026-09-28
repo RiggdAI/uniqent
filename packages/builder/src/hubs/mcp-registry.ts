@@ -3,7 +3,7 @@ import type { CredentialRequirement, McpServer } from '@uniqent/spec';
 import { McpServer as McpServerSchema } from '@uniqent/spec';
 import type { CatalogSource, McpHubResult, SkippedHubEntry, SourceResults } from './types.js';
 import { slugifyId } from './types.js';
-import { hubFetchJson } from './http.js';
+import { hubFetchJson, type FetchFn } from './http.js';
 import { isSecretName, refSuffix } from '../mcp/normalize.js';
 
 const ENDPOINT = 'https://registry.modelcontextprotocol.io/v0/servers';
@@ -378,12 +378,13 @@ export function mapRegistryResponse(json: unknown): SourceResults<McpHubResult> 
 }
 
 export interface McpRegistryOptions {
+  fetch: FetchFn;
   endpoint?: string;
   limit?: number;
 }
 
 /** The official Model Context Protocol registry (latest version of each server). No auth. */
-export function mcpRegistrySource(opts: McpRegistryOptions = {}): CatalogSource {
+export function mcpRegistrySource(opts: McpRegistryOptions): CatalogSource {
   const endpoint = opts.endpoint ?? ENDPOINT;
   const limit = opts.limit ?? 30;
   return {
@@ -391,7 +392,7 @@ export function mcpRegistrySource(opts: McpRegistryOptions = {}): CatalogSource 
     label: 'MCP Registry',
     async searchMcp(query: string, signal?: AbortSignal): Promise<SourceResults<McpHubResult>> {
       const url = `${endpoint}?search=${encodeURIComponent(query)}&version=latest&limit=${limit}`;
-      return mapRegistryResponse(await hubFetchJson('MCP Registry', url, {}, signal));
+      return mapRegistryResponse(await hubFetchJson(opts.fetch, 'MCP Registry', url, {}, signal));
     },
   };
 }

@@ -9,6 +9,9 @@ export interface SecretFinding {
 type Hit = { kind: string; snippet: string };
 
 const strictUtf8 = new TextDecoder('utf-8', { fatal: true });
+// One char per byte, so known token formats are still found inside binary assets. (WHATWG maps
+// 'latin1' to windows-1252; only bytes 0x80–0x9F differ from ISO-8859-1, and token formats are ASCII.)
+const latin1 = new TextDecoder('latin1');
 
 /** Known secret formats, matched anywhere (including inside URLs and binary files). */
 const PREFIX_PATTERNS: Array<{ kind: string; re: RegExp }> = [
@@ -205,7 +208,7 @@ export function scanForSecrets(bundle: Bundle): SecretFinding[] {
     const text = decodeText(bytes);
     if (text === undefined) {
       // Binary asset (e.g. an avatar): entropy is meaningless, but known formats can't hide in it.
-      record(detectKnownFormat(Buffer.from(bytes).toString('latin1')));
+      record(detectKnownFormat(latin1.decode(bytes)));
       continue;
     }
 

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { CredentialRequirement, McpServer } from '@uniqent/spec';
 import type { CatalogSource, McpHubResult, SkillHubResult, SourceResults } from './types.js';
-import { hubFetchJson } from './http.js';
+import { hubFetchJson, type FetchFn } from './http.js';
 
 /**
  * A "hub is just a hosted JSON file" source — the same zero-service pattern as the bundle registry.
@@ -48,9 +48,14 @@ export function mapJsonIndexMcp(index: JsonIndex): McpHubResult[] {
   }));
 }
 
-export function jsonIndexSource(url: string, label = 'JSON index'): CatalogSource {
+export function jsonIndexSource(opts: {
+  fetch: FetchFn;
+  url: string;
+  label: string;
+}): CatalogSource {
+  const { url, label } = opts;
   async function load(signal?: AbortSignal): Promise<JsonIndex> {
-    const parsed = JsonIndex.safeParse(await hubFetchJson(label, url, {}, signal));
+    const parsed = JsonIndex.safeParse(await hubFetchJson(opts.fetch, label, url, {}, signal));
     if (!parsed.success) {
       throw new Error(`${label}: ${url} is not a valid hub index: ${parsed.error.message}`);
     }

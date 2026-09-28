@@ -586,7 +586,7 @@ async function hub(args: string[], io: CliIo): Promise<number> {
   if (kind === 'mcp') {
     const { results, errors } = await searchMcpHubs(
       query,
-      defaultMcpSources({ jsonIndexUrls: indexes }),
+      defaultMcpSources({ fetch, jsonIndexUrls: indexes }),
     );
     if (flags.json) {
       io.log(JSON.stringify(results, null, 2));
@@ -611,7 +611,11 @@ async function hub(args: string[], io: CliIo): Promise<number> {
   if (kind === 'skills') {
     const { results, errors } = await searchSkillHubs(
       query,
-      defaultSkillSources({ jsonIndexUrls: indexes }),
+      defaultSkillSources({
+        fetch,
+        jsonIndexUrls: indexes,
+        githubToken: process.env.GITHUB_TOKEN,
+      }),
     );
     if (flags.json) {
       io.log(JSON.stringify(results, null, 2));
@@ -987,7 +991,7 @@ async function publishMemoryCmd(args: string[], io: CliIo): Promise<number> {
   }
 
   try {
-    const r = await publishMemoryPack(registry, token, pack);
+    const r = await publishMemoryPack(fetch, registry, token, pack, undefined);
     io.log(
       `published ${r.slug} (${r.factCount} fact(s))${r.url ? ` → ${r.url}` : ''}${r.persisted === false ? ' (stored, not indexed)' : ''}`,
     );
@@ -1030,7 +1034,7 @@ async function publishCmd(args: string[], io: CliIo): Promise<number> {
   }
 
   try {
-    const r = await publishBundle(registry, token, bytes);
+    const r = await publishBundle(fetch, registry, token, bytes, undefined);
     io.log(
       `published ${r.name}@${r.version}${r.signed ? ' (signed)' : ''}${r.persisted === false ? ' (stored, not indexed)' : ''}${r.url ? ` → ${r.url}` : ''}`,
     );

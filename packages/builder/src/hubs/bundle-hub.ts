@@ -1,3 +1,5 @@
+import type { FetchFn } from './http.js';
+
 /**
  * Publish a packed .uniqent bundle to a hosted registry's `POST /api/v1/bundles`
  * (bearer-token gated). `registry` is the SITE base (e.g. https://uniqent.ai), not an
@@ -16,23 +18,29 @@ export interface BundlePublishResult {
 }
 
 export async function publishBundle(
+  fetchFn: FetchFn,
   registry: string,
   token: string,
   bytes: Uint8Array,
-  signal?: AbortSignal,
+  signal: AbortSignal | undefined,
 ): Promise<BundlePublishResult> {
   if (!token) throw new Error('a publish token is required');
-  const res = await fetch(`${base(registry)}/api/v1/bundles`, {
+  const url = `${base(registry)}/api/v1/bundles`;
+  const res = await fetchFn(url, {
     method: 'POST',
     headers: { 'content-type': 'application/octet-stream', authorization: `Bearer ${token}` },
     body: bytes,
     ...(signal ? { signal } : {}),
   });
-  const json = (await res.json().catch(() => ({}))) as Partial<BundlePublishResult> & {
-    error?: string;
-  };
+  const text = await res.text();
+  let json: Partial<BundlePublishResult> & { error?: string };
+  try {
+    json = JSON.parse(text) as Partial<BundlePublishResult> & { error?: string };
+  } catch (e) {
+    throw new Error(`publish to ${url} failed: ${res.status} ${text.slice(0, 300)}`, { cause: e });
+  }
   if (!res.ok || json.ok === false)
-    throw new Error(json.error ?? `${res.status} ${res.statusText}`);
+    throw new Error(json.error ?? `publish to ${url} failed: ${res.status} ${text.slice(0, 300)}`);
   return {
     ok: json.ok ?? true,
     name: json.name ?? '',

@@ -14,6 +14,7 @@ import {
   defaultMcpSources,
   defaultSkillSources,
   type CatalogSource,
+  type FetchFn,
 } from '../src/index.js';
 import { Brain } from '../src/index.js';
 
@@ -25,12 +26,14 @@ const smitheryFixture = JSON.parse(fixture('smithery.json'));
 const githubSearchFixture = JSON.parse(fixture('github-skills-search.json'));
 const githubSkillMd = fixture('github-skill-SKILL.md.txt');
 
-const origFetch = globalThis.fetch;
 afterEach(() => {
-  globalThis.fetch = origFetch;
   vi.restoreAllMocks();
-  vi.unstubAllEnvs();
 });
+
+/** A fetch that must never be called (source construction only). */
+const noFetch: FetchFn = async (input) => {
+  throw new Error(`unexpected fetch ${input}`);
+};
 
 describe('MCP Registry mapper', () => {
   const { results, skipped } = mapRegistryResponse(registryFixture);
@@ -157,7 +160,7 @@ describe('Smithery mapper', () => {
 describe('GitHub skills source', () => {
   it('emits only repos whose SKILL.md exists, named and described from its frontmatter', async () => {
     const calls: string[] = [];
-    globalThis.fetch = (async (input: unknown) => {
+    const f: FetchFn = (async (input: unknown) => {
       const url = String(input);
       calls.push(url);
       if (url.startsWith('https://api.github.com/')) {
@@ -167,8 +170,10 @@ describe('GitHub skills source', () => {
         return new Response(githubSkillMd);
       }
       return new Response('404: Not Found', { status: 404 });
-    }) as typeof fetch;
-    const { results } = await githubSkillsSource({}).searchSkills!('triage');
+    }) as FetchFn;
+    const { results } = await githubSkillsSource({ fetch: f, token: undefined }).searchSkills!(
+      'triage',
+    );
     expect(results).toEqual([
       {
         source: 'github',
@@ -185,13 +190,14 @@ describe('GitHub skills source', () => {
   });
 
   it('explains a rate-limit 403 with status, body, and the GITHUB_TOKEN hint', async () => {
-    vi.stubEnv('GITHUB_TOKEN', '');
-    globalThis.fetch = (async () =>
+    const f: FetchFn = (async () =>
       new Response('{"message":"API rate limit exceeded"}', {
         status: 403,
         headers: { 'x-ratelimit-remaining': '0' },
-      })) as typeof fetch;
-    const { errors } = await searchSkillHubs('x', [githubSkillsSource({})]);
+      })) as FetchFn;
+    const { errors } = await searchSkillHubs('x', [
+      githubSkillsSource({ fetch: f, token: undefined }),
+    ]);
     expect(errors[0]?.message).toMatch(/403/);
     expect(errors[0]?.message).toMatch(/API rate limit exceeded/);
     expect(errors[0]?.message).toMatch(/10 requests\/min.*GITHUB_TOKEN/);
@@ -200,9 +206,13 @@ describe('GitHub skills source', () => {
 
 describe('default sources', () => {
   it('assembles MCP + skill source sets including any JSON indexes (no GitHub MCP guessing)', () => {
-    const mcp = defaultMcpSources({ jsonIndexUrls: ['https://hub/index.json'] });
+    const mcp = defaultMcpSources({ fetch: noFetch, jsonIndexUrls: ['https://hub/index.json'] });
     expect(mcp.map((s) => s.id)).toEqual(['mcp-registry', 'smithery', 'json-index']);
-    const skills = defaultSkillSources();
+    const skills = defaultSkillSources({
+      fetch: noFetch,
+      jsonIndexUrls: [],
+      githubToken: undefined,
+    });
     expect(skills.map((s) => s.id)).toEqual(['github']);
   });
 });
@@ -210,11 +220,11 @@ describe('default sources', () => {
 describe('hub source over fetch', () => {
   it('mcpRegistrySource asks for the latest versions and maps the response', async () => {
     let called = '';
-    globalThis.fetch = (async (input: unknown) => {
+    const f: FetchFn = (async (input: unknown) => {
       called = String(input);
       return new Response(JSON.stringify(registryFixture));
-    }) as typeof fetch;
-    const src = mcpRegistrySource({ limit: 5 });
+    }) as FetchFn;
+    const src = mcpRegistrySource({ fetch: f, limit: 5 });
     const out = await src.searchMcp!('filesystem');
     expect(called).toContain('search=filesystem');
     expect(called).toContain('version=latest');
@@ -244,8 +254,8 @@ describe('hub source over fetch', () => {
   };
 
   it('jsonIndexSource filters mcp + skills by query', async () => {
-    globalThis.fetch = (async () => new Response(JSON.stringify(index))) as typeof fetch;
-    const src = jsonIndexSource('https://hub/index.json');
+    const f: FetchFn = (async () => new Response(JSON.stringify(index))) as FetchFn;
+    const src = jsonIndexSource({ fetch: f, url: 'https://hub/index.json', label: 'JSON index' });
     expect((await src.searchMcp!('acme')).results.length).toBe(1);
     const skills = (await src.searchSkills!('triage')).results;
     expect(skills.map((s) => s.name)).toEqual(['triage']);
@@ -254,10 +264,9 @@ describe('hub source over fetch', () => {
 
   it('jsonIndexSource rejects an index that does not match the schema', async () => {
     const bad = { mcp: [{ ...index.mcp[0], server: { id: 'acme', transport: 'stdio' } }] };
-    globalThis.fetch = (async () => new Response(JSON.stringify(bad))) as typeof fetch;
-    await expect(jsonIndexSource('https://hub/index.json').searchMcp!('')).rejects.toThrow(
-      /not a valid hub index/,
-    );
+    const f: FetchFn = (async () => new Response(JSON.stringify(bad))) as FetchFn;
+    const src = jsonIndexSource({ fetch: f, url: 'https://hub/index.json', label: 'JSON index' });
+    await expect(src.searchMcp!('')).rejects.toThrow(/not a valid hub index/);
   });
 });
 
@@ -300,11 +309,11 @@ describe('aggregator isolation', () => {
     const realTimeout = AbortSignal.timeout.bind(AbortSignal);
     vi.spyOn(AbortSignal, 'timeout').mockImplementation(() => realTimeout(20));
     vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    globalThis.fetch = ((_input: unknown, init?: RequestInit) =>
+    const f: FetchFn = ((_input: unknown, init?: RequestInit) =>
       new Promise((_resolve, reject) => {
         init?.signal?.addEventListener('abort', () => reject(init.signal?.reason));
-      })) as typeof fetch;
-    const { results, errors } = await searchMcpHubs('x', [good, mcpRegistrySource({})]);
+      })) as FetchFn;
+    const { results, errors } = await searchMcpHubs('x', [good, mcpRegistrySource({ fetch: f })]);
     expect(results.length).toBeGreaterThan(0);
     expect(errors).toHaveLength(1);
     expect(errors[0]?.source).toBe('mcp-registry');

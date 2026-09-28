@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { CredentialRequirement } from '@uniqent/spec';
 import type { CatalogSource, McpHubResult, SkippedHubEntry, SourceResults } from './types.js';
 import { slugifyId } from './types.js';
-import { hubFetchJson } from './http.js';
+import { hubFetchJson, type FetchFn } from './http.js';
 
 const ENDPOINT = 'https://registry.smithery.ai/servers';
 const CRED_REF = 'smithery_api_key';
@@ -81,14 +81,14 @@ export function mapSmitheryResponse(json: unknown): SourceResults<McpHubResult> 
   return { results, skipped };
 }
 
-export function smitherySource(opts: { endpoint?: string } = {}): CatalogSource {
+export function smitherySource(opts: { fetch: FetchFn; endpoint?: string }): CatalogSource {
   const endpoint = opts.endpoint ?? ENDPOINT;
   return {
     id: SOURCE,
     label: 'Smithery',
     async searchMcp(query: string, signal?: AbortSignal): Promise<SourceResults<McpHubResult>> {
       const url = `${endpoint}?q=${encodeURIComponent(query)}`;
-      return mapSmitheryResponse(await hubFetchJson('Smithery', url, {}, signal));
+      return mapSmitheryResponse(await hubFetchJson(opts.fetch, 'Smithery', url, {}, signal));
     },
   };
 }

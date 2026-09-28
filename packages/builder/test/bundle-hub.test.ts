@@ -1,12 +1,10 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { publishBundle } from '../src/hubs/bundle-hub.js';
 
-afterEach(() => vi.unstubAllGlobals());
-
 function stubFetch(status: number, body: unknown) {
-  const fn = vi.fn(async () => new Response(JSON.stringify(body), { status }));
-  vi.stubGlobal('fetch', fn);
-  return fn;
+  return vi.fn(
+    async (_url: string, _init: RequestInit) => new Response(JSON.stringify(body), { status }),
+  );
 }
 
 describe('publishBundle', () => {
@@ -20,7 +18,13 @@ describe('publishBundle', () => {
       persisted: true,
     });
     const bytes = new Uint8Array([1, 2, 3]);
-    const res = await publishBundle('https://uniqent.ai/', 'unq_live_abc', bytes);
+    const res = await publishBundle(
+      fetchFn,
+      'https://uniqent.ai/',
+      'unq_live_abc',
+      bytes,
+      undefined,
+    );
 
     expect(res).toEqual({
       ok: true,
@@ -41,22 +45,23 @@ describe('publishBundle', () => {
   });
 
   it('throws the server error message on non-ok', async () => {
-    stubFetch(409, { error: 'namespace owned by another publisher' });
-    await expect(publishBundle('https://uniqent.ai', 't', new Uint8Array())).rejects.toThrow(
-      'namespace owned by another publisher',
-    );
+    const f = stubFetch(409, { error: 'namespace owned by another publisher' });
+    await expect(
+      publishBundle(f, 'https://uniqent.ai', 't', new Uint8Array(), undefined),
+    ).rejects.toThrow('namespace owned by another publisher');
   });
 
   it('throws the server error message on 200 {ok: false}', async () => {
-    stubFetch(200, { ok: false, error: 'rejected' });
-    await expect(publishBundle('https://uniqent.ai', 't', new Uint8Array())).rejects.toThrow(
-      /rejected/,
-    );
+    const f = stubFetch(200, { ok: false, error: 'rejected' });
+    await expect(
+      publishBundle(f, 'https://uniqent.ai', 't', new Uint8Array(), undefined),
+    ).rejects.toThrow(/rejected/);
   });
 
   it('requires a token', async () => {
-    await expect(publishBundle('https://uniqent.ai', '', new Uint8Array())).rejects.toThrow(
-      /token/,
-    );
+    const f = stubFetch(200, {});
+    await expect(
+      publishBundle(f, 'https://uniqent.ai', '', new Uint8Array(), undefined),
+    ).rejects.toThrow(/token/);
   });
 });

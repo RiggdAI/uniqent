@@ -13,6 +13,14 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./hubs": {
+      "types": "./dist/hubs-entry.d.ts",
+      "default": "./dist/hubs-entry.js"
+    },
+    "./memory": {
+      "types": "./dist/memory-entry.d.ts",
+      "default": "./dist/memory-entry.js"
     }
   },
   "files": [

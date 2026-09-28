@@ -8,3 +8,4 @@ export * from './json-index.js';
 export * from './memory-hub.js';
 export * from './defaults.js';
 export * from './bundle-hub.js';
+export * from './skill-url.js';
