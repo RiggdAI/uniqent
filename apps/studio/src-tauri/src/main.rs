@@ -6,6 +6,7 @@ use uniqent_studio::session::Session;
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState {
             session: Mutex::new(Session::new()),

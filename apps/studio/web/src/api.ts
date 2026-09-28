@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import * as native from './native';
 
 import type {
   StudioState,
@@ -17,10 +18,16 @@ import type {
   VaultImport,
 } from './types';
 
-const isNative = typeof (globalThis as Record<string, unknown>).__TAURI_INTERNALS__ !== 'undefined';
+export const isNative =
+  typeof (globalThis as Record<string, unknown>).__TAURI_INTERNALS__ !== 'undefined';
 
-const SOON = 'not yet available in the native app — coming in a later phase';
-const soon = () => Promise.reject(new Error(SOON));
+/** Install-to-agent lands in the native app in Phase 4; the CLI already does it. */
+const phase4 = () =>
+  Promise.reject(
+    new Error(
+      'installing into an agent from the native app arrives in Phase 4 — for now use `uniqent install <file> --target <framework>`',
+    ),
+  );
 
 async function unwrap<T>(res: Response): Promise<T> {
   const json = (await res.json()) as T & { error?: string };
@@ -144,49 +151,71 @@ export const api = {
       ? invoke<ExportResult>('export', { sign })
       : post<ExportResult>('/api/export', { sign }),
 
-  // ── Phase 3b/4 stubs (hubs, publish, vault, install — coming later) ───────
+  // ── Phase 3b: hubs, publish, vault, skill-from-URL (native: shared TS logic + Rust) ────
   memoryHub: (query: string, registry?: string) =>
-    isNative ? soon() : post<MemoryHubSearch>('/api/memory/hub/search', { query, registry }),
+    isNative
+      ? native.memoryHub(query, registry ?? '')
+      : post<MemoryHubSearch>('/api/memory/hub/search', { query, registry }),
   addMemoryPack: (slug: string, registry?: string) =>
-    isNative ? soon() : post<StudioState>('/api/memory/hub/add', { slug, registry }),
+    isNative
+      ? native.addMemoryPack(slug, registry ?? '')
+      : post<StudioState>('/api/memory/hub/add', { slug, registry }),
   publishMemory: (token: string, registry?: string) =>
     isNative
-      ? soon()
+      ? native.publishMemory(token, registry ?? '')
       : post<{ result: { slug: string; factCount: number; url?: string; persisted?: boolean } }>(
           '/api/memory/hub/publish',
           { token, registry },
         ),
   previewVault: (dir: string) =>
     isNative
-      ? soon()
+      ? native.previewVault(dir)
       : post<{ result: VaultImport; graph: MemoryGraph }>('/api/memory/vault/preview', { dir }),
   importVault: (dir: string, opts?: { persona?: boolean; profile?: boolean }) =>
     isNative
-      ? soon()
+      ? native.importVaultDir(dir, {
+          persona: opts?.persona !== false,
+          profile: opts?.profile !== false,
+        })
       : post<{ state: StudioState; stats: VaultImport['stats'] }>('/api/memory/vault/import', {
           dir,
           ...opts,
         }),
-  // importSkillFromUrl fetches a remote URL — stays stubbed until network phase
+  /** Native only: the OS folder picker (Rust grants read access to the chosen folder). */
+  chooseFolder: () =>
+    isNative
+      ? native.chooseFolder()
+      : Promise.reject(new Error('folder picking needs the native app; type the path instead')),
   importSkillFromUrl: (url: string) =>
-    isNative ? soon() : post<StudioState>('/api/skill/url', { url }),
+    isNative ? native.importSkillFromUrl(url) : post<StudioState>('/api/skill/url', { url }),
   addPastedMcp: (text: string) =>
     isNative
       ? invoke<StudioState>('add_pasted_mcp', { text })
       : post<StudioState>('/api/mcp/paste/add', { text }),
-  installPlan: (target: string, root: string) =>
-    isNative ? soon() : post<InstallPlan>('/api/install/plan', { target, root }),
-  install: (target: string, root: string, creds: Record<string, string>) =>
-    isNative ? soon() : post<InstallResult>('/api/install', { target, root, creds }),
   hubMcp: (query: string) =>
-    isNative ? soon() : post<HubSearch<McpHubResult>>('/api/hub/mcp/search', { query }),
+    isNative
+      ? native.hubMcp(query)
+      : post<HubSearch<McpHubResult>>('/api/hub/mcp/search', { query }),
   hubSkills: (query: string) =>
-    isNative ? soon() : post<HubSearch<SkillHubResult>>('/api/hub/skills/search', { query }),
+    isNative
+      ? native.hubSkills(query)
+      : post<HubSearch<SkillHubResult>>('/api/hub/skills/search', { query }),
   addHubMcp: (result: McpHubResult) =>
-    isNative ? soon() : post<StudioState>('/api/hub/mcp/add', { result }),
+    isNative ? native.addHubMcp(result) : post<StudioState>('/api/hub/mcp/add', { result }),
   addHubSkill: (url: string, name: string) =>
-    isNative ? soon() : post<StudioState>('/api/hub/skill/add', { url, name }),
-  hubIndexes: () => (isNative ? soon() : get<{ indexes: string[] }>('/api/hub/indexes')),
+    isNative
+      ? native.addHubSkill(url, name)
+      : post<StudioState>('/api/hub/skill/add', { url, name }),
+  hubIndexes: () =>
+    isNative ? native.hubIndexes() : get<{ indexes: string[] }>('/api/hub/indexes'),
   setHubIndexes: (urls: string[]) =>
-    isNative ? soon() : post<{ indexes: string[] }>('/api/hub/indexes', { urls }),
+    isNative
+      ? native.setHubIndexes(urls)
+      : post<{ indexes: string[] }>('/api/hub/indexes', { urls }),
+
+  // ── Phase 4: install into an agent ────────────────────────────────────────
+  installPlan: (target: string, root: string) =>
+    isNative ? phase4() : post<InstallPlan>('/api/install/plan', { target, root }),
+  install: (target: string, root: string, creds: Record<string, string>) =>
+    isNative ? phase4() : post<InstallResult>('/api/install', { target, root, creds }),
 };

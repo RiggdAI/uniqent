@@ -2,10 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const invokeMock = vi.fn();
 vi.mock('@tauri-apps/api/core', () => ({ invoke: (...a: unknown[]) => invokeMock(...a) }));
+const httpFetchMock = vi.fn();
+vi.mock('@tauri-apps/plugin-http', () => ({ fetch: (...a: unknown[]) => httpFetchMock(...a) }));
 
 describe('api shim (native)', () => {
   beforeEach(() => {
     invokeMock.mockReset();
+    httpFetchMock.mockReset();
     (globalThis as Record<string, unknown>).__TAURI_INTERNALS__ = {}; // native detection
     vi.resetModules();
   });
@@ -125,31 +128,130 @@ describe('api shim (native)', () => {
     expect(invokeMock).toHaveBeenCalledWith('get_profile');
   });
 
-  it('rejects unimplemented methods with the coming-soon message', async () => {
+  it('keeps install stubbed until Phase 4, with a pointer to the CLI', async () => {
     const { api } = await import('./api');
-    // Phase 3b/4 stubs — must ALL still reject in native
-    const SOON = /not yet available in the native app/;
-    await expect(api.memoryHub('query')).rejects.toThrow(SOON);
-    await expect(api.addMemoryPack('slug')).rejects.toThrow(SOON);
-    await expect(api.publishMemory('token')).rejects.toThrow(SOON);
-    await expect(api.previewVault('/path')).rejects.toThrow(SOON);
-    await expect(api.importVault('/path')).rejects.toThrow(SOON);
-    await expect(api.importSkillFromUrl('https://example.com/skill.md')).rejects.toThrow(SOON);
-    await expect(api.installPlan('target', '/root')).rejects.toThrow(SOON);
-    await expect(api.install('target', '/root', {})).rejects.toThrow(SOON);
-    await expect(api.hubMcp('query')).rejects.toThrow(SOON);
-    await expect(api.hubSkills('query')).rejects.toThrow(SOON);
-    await expect(
-      api.addHubMcp({
-        source: 'hub',
-        entry: { id: 'x', name: 'x', description: 'x', server: { transport: 'http' } },
-        credentials: [],
-      }),
-    ).rejects.toThrow(SOON);
-    await expect(api.addHubSkill('url', 'name')).rejects.toThrow(SOON);
-    await expect(api.hubIndexes()).rejects.toThrow(SOON);
-    await expect(api.setHubIndexes(['url'])).rejects.toThrow(SOON);
+    const PHASE4 = /Phase 4.*uniqent install/;
+    await expect(api.installPlan('target', '/root')).rejects.toThrow(PHASE4);
+    await expect(api.install('target', '/root', {})).rejects.toThrow(PHASE4);
     expect(invokeMock).not.toHaveBeenCalled();
+  });
+
+  it('has no Phase 3b "not yet available" stubs left', async () => {
+    const src = (await import('node:fs')).readFileSync(
+      new URL('./api.ts', import.meta.url),
+      'utf8',
+    );
+    expect(src).not.toMatch(/not yet available in the native app/);
+  });
+
+  it('adds a hub MCP result through add_mcp_hub_result with every credential', async () => {
+    invokeMock.mockResolvedValue({ manifest: {}, validation: { ok: true } });
+    const { api } = await import('./api');
+    await api.addHubMcp({
+      source: 'mcp-registry',
+      entry: { id: 'linear', name: 'Linear', description: '', server: { id: 'linear' } },
+      credentials: [{ ref: 'linear_token' }],
+    } as never);
+    expect(invokeMock).toHaveBeenCalledWith('add_mcp_hub_result', {
+      server: { id: 'linear' },
+      credentials: [{ ref: 'linear_token' }],
+    });
+  });
+
+  it('reads and writes hub indexes through Rust', async () => {
+    invokeMock.mockResolvedValue(['https://a.example/i.json']);
+    const { api } = await import('./api');
+    expect(await api.hubIndexes()).toEqual({ indexes: ['https://a.example/i.json'] });
+    expect(await api.setHubIndexes(['https://a.example/i.json'])).toEqual({
+      indexes: ['https://a.example/i.json'],
+    });
+    expect(invokeMock).toHaveBeenCalledWith('set_hub_indexes', {
+      urls: ['https://a.example/i.json'],
+    });
+  });
+
+  it('imports a skill from an https URL via the plugin fetch and names it from frontmatter', async () => {
+    httpFetchMock.mockResolvedValue(new Response('---\nname: triage\n---\nBody'));
+    invokeMock.mockResolvedValue({ manifest: {}, validation: { ok: true } });
+    const { api } = await import('./api');
+    await api.importSkillFromUrl('https://example.com/triage/SKILL.md');
+    expect(invokeMock).toHaveBeenCalledWith('add_custom_skill', {
+      name: 'triage',
+      skillMd: '---\nname: triage\n---\nBody',
+    });
+  });
+
+  it('refuses a non-https skill URL without fetching', async () => {
+    const { api } = await import('./api');
+    await expect(api.importSkillFromUrl('http://example.com/SKILL.md')).rejects.toThrow(/https/);
+    expect(httpFetchMock).not.toHaveBeenCalled();
+  });
+
+  it('previews a vault from Rust-read files with the shared parser', async () => {
+    invokeMock.mockImplementation(async (cmd: string) =>
+      cmd === 'read_vault'
+        ? [
+            { path: 'SOUL.md', content: 'I am Atlas.' },
+            { path: 'MEMORY.md', content: '- Uses Postgres' },
+          ]
+        : null,
+    );
+    const { api } = await import('./api');
+    const { result } = await api.previewVault('/picked/vault');
+    expect(invokeMock).toHaveBeenCalledWith('read_vault', { dir: '/picked/vault' });
+    expect(result.persona).toContain('Atlas');
+    expect(result.items.map((i) => i.text)).toContain('Uses Postgres');
+  });
+
+  it('imports a vault: persona, then items with their source', async () => {
+    invokeMock.mockImplementation(async (cmd: string) =>
+      cmd === 'read_vault'
+        ? [
+            { path: 'SOUL.md', content: 'I am Atlas.' },
+            { path: 'notes/db.md', content: '- Uses Postgres' },
+          ]
+        : { manifest: {}, validation: { ok: true } },
+    );
+    const { api } = await import('./api');
+    const { stats } = await api.importVault('/picked/vault', { persona: true, profile: true });
+    expect(invokeMock).toHaveBeenCalledWith('set_persona', { persona: 'I am Atlas.' });
+    const importCall = invokeMock.mock.calls.find(([cmd]) => cmd === 'import_memory');
+    expect(importCall?.[1]).toEqual({
+      payload: { items: [{ text: 'Uses Postgres', kind: 'fact', source: 'notes/db.md' }] },
+    });
+    expect(stats.items).toBe(1);
+  });
+
+  it('publishes with the stored login token when none is typed', async () => {
+    invokeMock.mockImplementation(async (cmd: string) =>
+      cmd === 'registry_token'
+        ? 'tok'
+        : cmd === 'publish_payload'
+          ? {
+              slug: 'b',
+              name: 'B',
+              description: '',
+              tags: [],
+              facts: [{ kind: 'fact', text: 't' }],
+            }
+          : null,
+    );
+    httpFetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ slug: 'b', factCount: 1 }), { status: 201 }),
+    );
+    const { api } = await import('./api');
+    const { result } = await api.publishMemory('', 'https://uniqent.ai');
+    const [url, init] = httpFetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://uniqent.ai/api/v1/memory');
+    expect((init.headers as Record<string, string>).authorization).toBe('Bearer tok');
+    expect(result.factCount).toBe(1);
+  });
+
+  it('says to log in when publishing without any token', async () => {
+    invokeMock.mockImplementation(async (cmd: string) => (cmd === 'registry_token' ? null : null));
+    const { api } = await import('./api');
+    await expect(api.publishMemory('', 'https://uniqent.ai')).rejects.toThrow(/uniqent login/);
+    expect(httpFetchMock).not.toHaveBeenCalled();
   });
 
   it('routes export through invoke with sign arg', async () => {

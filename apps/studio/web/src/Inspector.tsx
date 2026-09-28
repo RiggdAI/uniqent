@@ -12,7 +12,7 @@ import type {
   MemoryPackResult,
   VaultImport,
 } from './types';
-import { api } from './api';
+import { api, isNative } from './api';
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
 import { Textarea } from './components/ui/textarea';
@@ -291,6 +291,16 @@ function VaultImportPanel({ apply }: { apply: (p: Promise<StudioState>) => void 
   const [withProfile, setWithProfile] = useState(true);
   const [done, setDone] = useState<VaultImport['stats'] | null>(null);
 
+  async function chooseFolder(): Promise<void> {
+    setErr(null);
+    try {
+      const picked = await api.chooseFolder();
+      if (picked) setDir(picked);
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+  }
+
   async function doPreview(): Promise<void> {
     setBusy(true);
     setErr(null);
@@ -336,12 +346,29 @@ function VaultImportPanel({ apply }: { apply: (p: Promise<StudioState>) => void 
         notes become episodic).
       </p>
       <div className="flex items-center gap-2">
-        <Input
-          data-testid="vault-dir"
-          placeholder="/Users/you/Documents/MyVault"
-          value={dir}
-          onChange={(e) => setDir(e.target.value)}
-        />
+        {isNative ? (
+          <>
+            <Button
+              data-testid="vault-choose"
+              variant="outline"
+              size="sm"
+              disabled={busy}
+              onClick={chooseFolder}
+            >
+              Choose folder…
+            </Button>
+            <span data-testid="vault-dir" className="truncate text-xs text-muted-foreground">
+              {dir || 'No folder chosen'}
+            </span>
+          </>
+        ) : (
+          <Input
+            data-testid="vault-dir"
+            placeholder="/Users/you/Documents/MyVault"
+            value={dir}
+            onChange={(e) => setDir(e.target.value)}
+          />
+        )}
         <Button
           data-testid="vault-preview"
           variant="outline"
