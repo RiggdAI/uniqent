@@ -2,7 +2,9 @@
 
 **Date:** 2026-07-04
 **Repo:** `uniqent` (monorepo) — branch `feat/studio-native`
-**Status:** Approved design (umbrella spec; each phase gets its own plan)
+**Status:** Approved design (umbrella spec; each phase gets its own plan). Phases 3b and 4 are
+amended by [`2026-09-28-studio-native-ship-design.md`](2026-09-28-studio-native-ship-design.md)
+(hybrid logic instead of Rust-ported adapters/hubs; capture added).
 
 ## Problem
 
