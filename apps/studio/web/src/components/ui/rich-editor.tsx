@@ -1,10 +1,18 @@
 import { useEffect } from 'react';
 import { useEditor, EditorContent, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import { Markdown } from 'tiptap-markdown';
+import { Markdown, type MarkdownStorage } from 'tiptap-markdown';
 import { Bold, Italic, Heading1, Heading2, List, ListOrdered, Code, Quote } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { cn } from '../../lib/utils';
+
+// Tiptap 3 types extension storage through this interface; tiptap-markdown exports the shape
+// but does not register it.
+declare module '@tiptap/core' {
+  interface Storage {
+    markdown: MarkdownStorage;
+  }
+}
 
 /**
  * A WYSIWYG editor whose source of truth is MARKDOWN. It renders rich text for editing but
@@ -60,7 +68,7 @@ export function RichEditor({
       attributes: {
         'data-testid': testid ?? '',
         class:
-          'uq-rich-content uq-scroll min-h-[160px] max-h-[460px] overflow-auto px-3 py-2 text-sm leading-relaxed focus:outline-none',
+          'uq-rich-content uq-scroll min-h-[160px] max-h-[460px] overflow-auto px-3 py-2 text-sm leading-relaxed focus:outline-hidden',
       },
     },
   });
@@ -69,7 +77,8 @@ export function RichEditor({
   // the editor is focused so normalization round-trips never yank the caret mid-typing.
   useEffect(() => {
     if (!editor || editor.isFocused) return;
-    if (value !== editor.storage.markdown.getMarkdown()) editor.commands.setContent(value, false);
+    if (value !== editor.storage.markdown.getMarkdown())
+      editor.commands.setContent(value, { emitUpdate: false });
   }, [value, editor]);
 
   if (!editor) return null;
