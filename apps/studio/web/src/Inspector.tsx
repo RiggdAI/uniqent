@@ -1240,19 +1240,21 @@ function InstallPanel({ catalog }: { catalog: CatalogView }) {
 function HubIndexManager() {
   const [indexes, setIndexes] = useState<string[]>([]);
   const [url, setUrl] = useState('');
+  const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     api
       .hubIndexes()
       .then((r) => setIndexes(r.indexes))
-      .catch(() => {});
+      .catch((e: unknown) => setErr(errorText(e)));
   }, []);
 
   function save(next: string[]): void {
+    setErr(null);
     api
       .setHubIndexes(next)
       .then((r) => setIndexes(r.indexes))
-      .catch(() => {});
+      .catch((e: unknown) => setErr(errorText(e)));
   }
 
   return (
@@ -1305,6 +1307,11 @@ function HubIndexManager() {
             Add hub
           </Button>
         </div>
+        {err && (
+          <p data-testid="hub-index-error" className="text-xs text-destructive">
+            {err}
+          </p>
+        )}
       </div>
     </details>
   );
