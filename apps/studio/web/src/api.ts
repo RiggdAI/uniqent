@@ -1,5 +1,8 @@
 import { invoke } from '@tauri-apps/api/core';
+import type { TargetId } from '@uniqent/builder/brain';
+import type { Translation } from '@uniqent/adapter-sdk/pure';
 import * as native from './native';
+import { applyInstall, planInstall, previewInstall } from './install';
 
 import type {
   StudioState,
@@ -16,18 +19,15 @@ import type {
   ImportedMemoryItem,
   MemoryHubSearch,
   VaultImport,
+  FrameworkHomes,
 } from './types';
 
 export const isNative =
   typeof (globalThis as Record<string, unknown>).__TAURI_INTERNALS__ !== 'undefined';
 
-/** Install-to-agent lands in the native app in Phase 4; the CLI already does it. */
-const phase4 = () =>
-  Promise.reject(
-    new Error(
-      'installing into an agent from the native app arrives in Phase 4 — for now use `uniqent install <file> --target <framework>`',
-    ),
-  );
+/** Native-only features have no route on the old local server (the browser build). */
+const needsNative = <T>(what: string): Promise<T> =>
+  Promise.reject(new Error(`${what} needs the native app; use \`uniqent install\` from the CLI`));
 
 async function unwrap<T>(res: Response): Promise<T> {
   const json = (await res.json()) as T & { error?: string };
@@ -213,9 +213,21 @@ export const api = {
       ? native.setHubIndexes(urls)
       : post<{ indexes: string[] }>('/api/hub/indexes', { urls }),
 
-  // ── Phase 4: install into an agent ────────────────────────────────────────
-  installPlan: (target: string, root: string) =>
-    isNative ? phase4() : post<InstallPlan>('/api/install/plan', { target, root }),
-  install: (target: string, root: string, creds: Record<string, string>) =>
-    isNative ? phase4() : post<InstallResult>('/api/install', { target, root, creds }),
+  // ── Phase 4: install into an agent (pure adapters in the webview, file I/O in Rust) ──
+  installPlan: (target: TargetId, root: string) =>
+    isNative ? planInstall(target, root) : post<InstallPlan>('/api/install/plan', { target, root }),
+  /** The writes and notes the typed credentials produce, writing nothing (shown before confirming). */
+  installPreview: (target: TargetId, root: string, creds: Record<string, string>) =>
+    isNative
+      ? previewInstall(target, root, creds)
+      : needsNative<Translation>('reviewing install changes'),
+  install: (target: TargetId, root: string, creds: Record<string, string>) =>
+    isNative
+      ? applyInstall(target, root, creds)
+      : post<InstallResult>('/api/install', { target, root, creds }),
+  frameworkHomes: () =>
+    isNative ? native.frameworkHomes() : needsNative<FrameworkHomes>('finding agent frameworks'),
+  /** The project markers a picked folder holds (see targets.ts folderChoices). */
+  folderTargets: (dir: string) =>
+    isNative ? native.folderMarkers(dir) : needsNative<string[]>('inspecting a picked folder'),
 };

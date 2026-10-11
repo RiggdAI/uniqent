@@ -91,6 +91,20 @@ export interface InstallResult {
   notes: string[];
 }
 
+/** Rust `framework_homes`: where Hermes and OpenClaw live on this machine. */
+export interface FrameworkHomes {
+  home: string;
+  /** `error` (else null) says why a home is unusable; `present` is then false. */
+  targets: Array<{
+    id: 'hermes' | 'openclaw';
+    root: string;
+    present: boolean;
+    error: string | null;
+  }>;
+  /** `~/.claude` exists (Claude Code itself installs into a picked project folder). */
+  claudeCodeUser: boolean;
+}
+
 export interface TaskInput {
   name?: string;
   triggerType?: 'schedule' | 'event' | 'manual';

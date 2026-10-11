@@ -128,12 +128,11 @@ describe('api shim (native)', () => {
     expect(invokeMock).toHaveBeenCalledWith('get_profile');
   });
 
-  it('keeps install stubbed until Phase 4, with a pointer to the CLI', async () => {
+  it('installs natively: the session draft is validated before anything is read', async () => {
+    invokeMock.mockResolvedValue([]); // bundle_files: an empty draft has no manifest
     const { api } = await import('./api');
-    const PHASE4 = /Phase 4.*uniqent install/;
-    await expect(api.installPlan('target', '/root')).rejects.toThrow(PHASE4);
-    await expect(api.install('target', '/root', {})).rejects.toThrow(PHASE4);
-    expect(invokeMock).not.toHaveBeenCalled();
+    await expect(api.install('hermes', '/root', {})).rejects.toThrow(/brain is invalid/);
+    expect(invokeMock.mock.calls).toEqual([['bundle_files', undefined]]);
   });
 
   it('has no Phase 3b "not yet available" stubs left', async () => {
