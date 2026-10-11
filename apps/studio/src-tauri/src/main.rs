@@ -57,6 +57,11 @@ fn main() {
             // Folders
             commands::pick_folder,
             commands::read_vault,
+            commands::folder_markers,
+            // Install / capture I/O
+            commands::read_inputs,
+            commands::write_outputs,
+            commands::framework_homes,
         ])
         .run(tauri::generate_context!())
         .expect("error while running uniqent studio");

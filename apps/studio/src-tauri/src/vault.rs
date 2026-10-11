@@ -85,8 +85,9 @@ fn walk(
     Ok(())
 }
 
-/// Read one note without following a symlink (the walk's file_type check could be stale by now),
-/// insisting on a regular file and reading at most `max_bytes` (+1 to detect overflow).
+/// Read one file (a note, or an install/capture input) without following a symlink (a walk's
+/// file_type check could be stale by now), insisting on a regular file and reading at most
+/// `max_bytes` (+1 to detect overflow).
 pub fn read_note(path: &Path, rel: &str, max_bytes: u64) -> Result<Vec<u8>, String> {
     let mut options = std::fs::OpenOptions::new();
     options.read(true);
@@ -103,7 +104,7 @@ pub fn read_note(path: &Path, rel: &str, max_bytes: u64) -> Result<Vec<u8>, Stri
     }
     if meta.len() > max_bytes {
         return Err(format!(
-            "{rel} is {} bytes, over the {max_bytes} byte per-note limit",
+            "{rel} is {} bytes, over the {max_bytes} byte per-file limit",
             meta.len()
         ));
     }
@@ -113,7 +114,7 @@ pub fn read_note(path: &Path, rel: &str, max_bytes: u64) -> Result<Vec<u8>, Stri
         .map_err(|e| format!("cannot read {rel}: {e}"))?;
     if bytes.len() as u64 > max_bytes {
         return Err(format!(
-            "{rel} grew past the {max_bytes} byte per-note limit while reading"
+            "{rel} grew past the {max_bytes} byte per-file limit while reading"
         ));
     }
     Ok(bytes)

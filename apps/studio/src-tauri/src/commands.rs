@@ -290,3 +290,84 @@ pub async fn read_vault(
     let root = crate::vault::granted_dir(&s.granted_dirs.lock().unwrap(), &dir)?;
     crate::vault::walk_vault(&root, &crate::vault::DEFAULT_LIMITS)
 }
+
+// ── Install / capture I/O ───────────────────────────────────────────────────
+
+/// `root` canonicalized, if it is a folder picked this session or a framework home (or under one).
+fn allowed(s: &State<AppState>, root: &str) -> Result<PathBuf, String> {
+    let env = crate::fs_io::HomeEnv::from_process()?;
+    let homes: Vec<PathBuf> = crate::fs_io::framework_homes(&env)
+        .into_iter()
+        .map(|(_, p)| p)
+        .collect();
+    crate::fs_io::allowed_root(root, &s.granted_dirs.lock().unwrap(), &homes)
+}
+
+/// Async so a large read/write runs off the main thread (same reason as `read_vault`).
+#[tauri::command]
+pub async fn read_inputs(
+    s: State<'_, AppState>,
+    root: String,
+    files: Vec<String>,
+    finds: Vec<crate::fs_io::FindRequest>,
+) -> Result<Vec<crate::fs_io::ReadFile>, String> {
+    let root = allowed(&s, &root)?;
+    crate::fs_io::read_inputs(&root, &files, &finds, &crate::fs_io::DEFAULT_IO_LIMITS)
+}
+
+#[tauri::command]
+pub async fn write_outputs(
+    s: State<'_, AppState>,
+    root: String,
+    writes: Vec<crate::fs_io::OutputWrite>,
+) -> Result<Vec<String>, String> {
+    let root = allowed(&s, &root)?;
+    crate::fs_io::write_outputs(&root, &writes)
+}
+
+/// Hermes is present when its home is a dir; OpenClaw when its state dir holds `openclaw.json`.
+fn home_present(id: &str, root: &std::path::Path) -> Result<bool, String> {
+    let stat = |p: &std::path::Path| match std::fs::metadata(p) {
+        Ok(m) => Ok(Some(m)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(format!("cannot stat {}: {e}", p.display())),
+    };
+    match id {
+        "hermes" => Ok(stat(root)?.is_some_and(|m| m.is_dir())),
+        "openclaw" => Ok(stat(&root.join("openclaw.json"))?.is_some()),
+        other => Err(format!("no presence rule for framework \"{other}\"")),
+    }
+}
+
+/// `{ home, targets: [{ id, root, present }], claudeCodeUser }` (`claudeCodeUser`: `~/.claude` exists).
+#[tauri::command]
+pub fn framework_homes() -> Result<Value, String> {
+    let env = crate::fs_io::HomeEnv::from_process()?;
+    let targets = crate::fs_io::framework_homes(&env)
+        .into_iter()
+        .map(|(id, root)| {
+            let present = home_present(id, &root)?;
+            Ok(serde_json::json!({ "id": id, "root": root.to_string_lossy(), "present": present }))
+        })
+        .collect::<Result<Vec<Value>, String>>()?;
+    let claude = env.home.join(".claude");
+    let claude_code_user = claude
+        .try_exists()
+        .map_err(|e| format!("cannot stat {}: {e}", claude.display()))?;
+    Ok(serde_json::json!({
+        "home": env.home.to_string_lossy(),
+        "targets": targets,
+        "claudeCodeUser": claude_code_user,
+    }))
+}
+
+/// Which of `names` (single file/folder names) exist in a folder picked this session.
+#[tauri::command]
+pub fn folder_markers(
+    s: State<AppState>,
+    dir: String,
+    names: Vec<String>,
+) -> Result<Vec<String>, String> {
+    let dir = crate::vault::granted_dir(&s.granted_dirs.lock().unwrap(), &dir)?;
+    crate::fs_io::folder_markers(&dir, &names)
+}
