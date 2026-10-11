@@ -1,14 +1,36 @@
-import { readFile, readdir } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
-import { isLikelySecretValue } from '@uniqent/core';
-import type { Bundle } from '@uniqent/core';
-import { Brain } from '@uniqent/builder';
+import { isLikelySecretValue } from '@uniqent/core/pure';
+import type { Bundle } from '@uniqent/core/pure';
+import { Brain } from '@uniqent/builder/brain';
+import {
+  joinPath,
+  readText,
+  type InputRequest,
+  type ReadFiles,
+  type TargetContext,
+} from '@uniqent/adapter-sdk/pure';
 import { readManagedSection, stripManagedSection } from './agents-md.js';
 import { McpConfigParseError, parseMcpJson } from './mcp.js';
+import { AGENTS_MD, CLAUDE_MD, MCP_JSON, SKILLS_DIR } from './translate.js';
 
-async function readIfExists(path: string): Promise<string | undefined> {
-  return existsSync(path) ? readFile(path, 'utf8') : undefined;
+const SKILL_FILE = 'SKILL.md';
+const SKILL_RE = /^\.claude\/skills\/([^/]+)\/SKILL\.md$/;
+
+/** Files a capture reads: the three project files it maps, plus every SKILL.md under .claude/skills. */
+export function captureInputs(_read: ReadFiles, ctx: TargetContext): InputRequest {
+  return {
+    files: [AGENTS_MD, CLAUDE_MD, MCP_JSON].map((path) => ({ root: ctx.root, path })),
+    finds: [{ root: ctx.root, dir: SKILLS_DIR, fileName: SKILL_FILE, skipDirs: [] }],
+  };
+}
+
+/** Names of the skills Claude Code loads (`.claude/skills/<name>/SKILL.md`, depth 1), sorted. */
+function skillNames(read: ReadFiles, root: string): string[] {
+  const prefix = joinPath(root, ''); // "<root>/", keyed like readFromDisk's results
+  return [...read.keys()]
+    .filter((k) => k.startsWith(prefix))
+    .map((k) => SKILL_RE.exec(k.slice(prefix.length))?.[1])
+    .filter((name): name is string => name !== undefined)
+    .sort();
 }
 
 /** A stable credential-ref slug from an MCP server id (e.g. "com.x/gh" → "com-x-gh"). */
@@ -70,20 +92,21 @@ function optionalStringRecord(
  * The persona Claude Code actually loads: our managed AGENTS.md section when present, else the
  * user's own CLAUDE.md (minus our import section), else a plain AGENTS.md.
  */
-async function capturePersona(root: string): Promise<string | undefined> {
-  const agentsPath = join(root, 'AGENTS.md');
-  const agents = await readIfExists(agentsPath);
+function capturePersona(read: ReadFiles, root: string): string | undefined {
+  const agentsPath = joinPath(root, AGENTS_MD);
+  const agents = readText(read, root, AGENTS_MD);
   const managed = agents === undefined ? undefined : readManagedSection(agentsPath, agents);
   if (managed !== undefined) return managed;
-  const claudePath = join(root, 'CLAUDE.md');
-  const claude = await readIfExists(claudePath);
+  const claudePath = joinPath(root, CLAUDE_MD);
+  const claude = readText(read, root, CLAUDE_MD);
   const ownClaude = claude === undefined ? '' : stripManagedSection(claudePath, claude).trim();
   if (ownClaude) return ownClaude;
   return agents;
 }
 
 /** Capture an existing Claude Code project back into a canonical bundle (never a secret value). */
-export async function exportClaudeCode(root: string): Promise<Bundle> {
+export function capture(read: ReadFiles, ctx: TargetContext): Bundle {
+  const { root } = ctx;
   const brain = Brain.create({
     name: 'captured-agent',
     displayName: 'Captured Agent',
@@ -94,19 +117,15 @@ export async function exportClaudeCode(root: string): Promise<Bundle> {
     tags: [],
   });
 
-  const persona = await capturePersona(root);
+  const persona = capturePersona(read, root);
   if (persona !== undefined) brain.setPersona(persona);
 
-  const skillsDir = join(root, '.claude', 'skills');
-  if (existsSync(skillsDir)) {
-    for (const name of await readdir(skillsDir)) {
-      const md = await readIfExists(join(skillsDir, name, 'SKILL.md'));
-      if (md !== undefined) brain.addSkill(name, md);
-    }
-  }
+  // skillNames() only lists skills whose SKILL.md was read.
+  for (const name of skillNames(read, root))
+    brain.addSkill(name, readText(read, root, `${SKILLS_DIR}/${name}/${SKILL_FILE}`)!);
 
-  const mcpPath = join(root, '.mcp.json');
-  const mcpText = await readIfExists(mcpPath);
+  const mcpPath = joinPath(root, MCP_JSON);
+  const mcpText = readText(read, root, MCP_JSON);
   const servers = mcpText === undefined ? {} : parseMcpJson(mcpPath, mcpText).servers;
   for (const [id, e] of Object.entries(servers)) {
     const command = optionalString(mcpPath, id, 'command', e.command);
