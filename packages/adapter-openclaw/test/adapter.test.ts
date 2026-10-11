@@ -187,6 +187,32 @@ describe('openClawAdapter', () => {
     }
   });
 
+  it('reports replacing existing channel fields and .env values — once', async () => {
+    const root = tmp();
+    try {
+      writeFileSync(
+        join(root, 'openclaw.json'),
+        JSON.stringify({ channels: { telegram: { enabled: false, dmPolicy: 'pairing' } } }),
+      );
+      writeFileSync(join(root, '.env'), 'GITHUB_PAT=old\n');
+      const { plan, result } = await install(root);
+      expect(plan.lossiness).toContainEqual({
+        component: 'channel:telegram',
+        issue: 'replaces your existing channels.telegram.enabled in openclaw.json.',
+        action: 'transformed',
+      });
+      expect(result.notes).toContain(
+        'transformed: .env — replaces your existing, different value of GITHUB_PAT.',
+      );
+
+      const again = await install(root);
+      expect(again.plan.lossiness.filter((l) => l.action === 'transformed')).toEqual([]);
+      expect(again.result.notes.join('\n')).not.toContain('different value');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('writes into agents.defaults.workspace when configured', async () => {
     const root = tmp();
     const ws = tmp();

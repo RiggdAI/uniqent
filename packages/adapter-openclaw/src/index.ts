@@ -187,6 +187,7 @@ async function draftInstall(bundle: Bundle, root: string): Promise<Draft> {
       });
   }
 
+  const existingChannels = objectAt(configPath, existing, 'channels', 'channels') ?? {};
   const channelEntries: Record<string, JsonObject> = {};
   const channelRegistrations: string[] = [];
   for (const { channel, fields, reason } of mapChannels(bundle.channels())) {
@@ -200,6 +201,16 @@ async function draftInstall(bundle: Bundle, root: string): Promise<Draft> {
     }
     channelEntries[channel.kind] = fields;
     channelRegistrations.push(channel.id);
+    const prior = objectAt(configPath, existingChannels, channel.kind, `channels.${channel.kind}`);
+    const replaced = Object.keys(fields).filter(
+      (k) => prior?.[k] !== undefined && JSON.stringify(prior[k]) !== JSON.stringify(fields[k]),
+    );
+    if (replaced.length > 0)
+      lossiness.push({
+        component: `channel:${channel.id}`,
+        issue: `replaces your existing ${replaced.map((k) => `channels.${channel.kind}.${k}`).join(', ')} in openclaw.json.`,
+        action: 'transformed',
+      });
     if (channel.config && Object.keys(channel.config).length > 0)
       lossiness.push({
         component: `channel:${channel.id}`,
@@ -341,7 +352,7 @@ export const openClawAdapter: Adapter = {
     // Compute every output (and fail on any missing credential) before touching the disk.
     const draft = await draftInstall(bundle, root);
     const values = envValues(draft, resolved);
-    const envContent =
+    const envMerge =
       Object.keys(values).length > 0
         ? mergeEnvFile(await readOptional(draft.envPath), values)
         : undefined;
@@ -352,10 +363,14 @@ export const openClawAdapter: Adapter = {
       written.push(f.display);
     }
     const notes = draft.lossiness.map((l) => `${l.action}: ${l.component} — ${l.issue}`);
-    if (envContent !== undefined) {
-      await writeSecret(draft.envPath, envContent);
+    if (envMerge !== undefined) {
+      await writeSecret(draft.envPath, envMerge.content);
       const envDisplay = displayPath(root, draft.envPath);
       written.push(envDisplay);
+      if (envMerge.replaced.length > 0)
+        notes.push(
+          `transformed: ${envDisplay} — replaces your existing, different value of ${envMerge.replaced.join(', ')}.`,
+        );
       notes.push(
         `credentials stored in ${envDisplay} (mode 0600) as ${Object.keys(values).join(', ')}`,
       );

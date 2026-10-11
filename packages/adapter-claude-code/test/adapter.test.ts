@@ -348,6 +348,28 @@ describe('claudeCodeAdapter hardening', () => {
     }
   });
 
+  it('reports replacing an existing, different skill file — once', async () => {
+    const root = tmp();
+    try {
+      mkdirSync(join(root, '.claude/skills/code-review'), { recursive: true });
+      writeFileSync(join(root, '.claude/skills/code-review/SKILL.md'), 'my own review\n');
+      const bundle = makeBundle();
+      const plan = await claudeCodeAdapter.plan(bundle, { root });
+      expect(plan.lossiness).toContainEqual({
+        component: 'skill .claude/skills/code-review/SKILL.md',
+        issue: 'replaces an existing, different skill file.',
+        action: 'transformed',
+      });
+      await claudeCodeAdapter.apply(bundle, plan, creds, { root });
+      const again = await claudeCodeAdapter.plan(bundle, { root });
+      expect(again.lossiness.map((l) => l.component)).not.toContain(
+        'skill .claude/skills/code-review/SKILL.md',
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('injects a credential only into servers listed in its consumedBy', async () => {
     const b = emptyBrain();
     b.addMcpFromCatalog('github');

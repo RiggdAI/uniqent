@@ -8,7 +8,7 @@ import {
   type PlanWrite,
 } from '@uniqent/adapter-sdk';
 import { CHANNEL_TOKEN_ENV } from './channels.js';
-import { memoryLimits, mergeMcpServers } from './config.js';
+import { memoryLimits, mergeMcpServers, readMcpServers } from './config.js';
 import { envName } from './env.js';
 import { mcpCredentialRefs, toHermesMcp, unmappedAuth } from './mcp.js';
 import {
@@ -34,6 +34,8 @@ export interface HermesHome {
   user: string | undefined;
   config: string | undefined;
   env: string | undefined;
+  /** Existing files at the bundle's `skills/...` paths, keyed by bundle path. */
+  skills: Map<string, Uint8Array>;
 }
 
 export interface FileWrite {
@@ -169,6 +171,13 @@ export function translate(bundle: Bundle, home: HermesHome, root: string): Trans
   for (const [path, bytes] of bundle.entries()) {
     if (!path.startsWith(`${SKILLS_DIR}/`)) continue;
     skillTarget(root, path);
+    const prior = home.skills.get(path);
+    if (prior !== undefined && !Buffer.from(prior).equals(Buffer.from(bytes)))
+      lossiness.push({
+        component: `skill ${path}`,
+        action: 'transformed',
+        issue: 'replaces an existing, different skill file.',
+      });
     add(path, 'skill file', bytes);
   }
 
@@ -182,6 +191,7 @@ export function translate(bundle: Bundle, home: HermesHome, root: string): Trans
   };
 
   const servers = bundle.mcpServers();
+  const existingServers = readMcpServers(home.config);
   for (const s of servers) {
     const refs = mcpCredentialRefs(s);
     assertMcpCredentialScope(bundle, s.id, refs);
@@ -189,6 +199,13 @@ export function translate(bundle: Bundle, home: HermesHome, root: string): Trans
     const authLoss = unmappedAuth(s);
     if (authLoss !== undefined)
       lossiness.push({ component: `mcp:${s.id}`, action: 'dropped', issue: authLoss });
+    const prior = existingServers[s.id];
+    if (prior !== undefined && JSON.stringify(prior) !== JSON.stringify(toHermesMcp(s)))
+      lossiness.push({
+        component: `mcp:${s.id}`,
+        action: 'transformed',
+        issue: `replaces your existing, different mcp_servers.${s.id} entry in config.yaml.`,
+      });
   }
   if (servers.length > 0)
     add(
@@ -274,7 +291,7 @@ export function translate(bundle: Bundle, home: HermesHome, root: string): Trans
   if (env.length > 0)
     writes.push({
       path: ENV_FILE,
-      summary: `sets ${env.map((b) => b.key).join(', ')} (merged; existing lines kept, mode 0600)`,
+      summary: `sets ${env.map((b) => b.key).join(', ')} (merged; other lines kept, existing values of these keys replaced, mode 0600)`,
     });
 
   return {

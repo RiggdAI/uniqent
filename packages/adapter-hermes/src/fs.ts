@@ -13,6 +13,16 @@ export async function readOptional(path: string): Promise<string | undefined> {
   }
 }
 
+/** Read raw bytes; undefined only when the file does not exist (any other error is rethrown). */
+export async function readOptionalBytes(path: string): Promise<Uint8Array | undefined> {
+  try {
+    return await readFile(path);
+  } catch (err) {
+    if (isNotFound(err)) return undefined;
+    throw err;
+  }
+}
+
 /** Whether a path exists; any error other than "not found" is rethrown. */
 export async function exists(path: string): Promise<boolean> {
   try {

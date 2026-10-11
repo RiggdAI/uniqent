@@ -61,12 +61,23 @@ function encodeValue(envVar: string, value: string): string {
   throw new EnvValueEncodingError(envVar);
 }
 
+/** A merged dotenv text plus the existing keys whose assignment it changed. */
+export interface EnvMerge {
+  content: string;
+  replaced: string[];
+}
+
 /**
  * Merge `values` into an existing dotenv file's text: a line assigning one of the keys is
- * replaced in place, missing keys are appended, every other line (comments, other vars) is kept.
+ * replaced in place (listed in `replaced` when that changes it), missing keys are appended,
+ * every other line (comments, other vars) is kept.
  */
-export function mergeEnvFile(existing: string | undefined, values: Record<string, string>): string {
+export function mergeEnvFile(
+  existing: string | undefined,
+  values: Record<string, string>,
+): EnvMerge {
   const pending = new Map(Object.entries(values));
+  const replaced: string[] = [];
   const lines =
     existing === undefined || existing === '' ? [] : existing.replace(/\n$/, '').split('\n');
   const merged = lines.map((line) => {
@@ -74,8 +85,10 @@ export function mergeEnvFile(existing: string | undefined, values: Record<string
     const value = key === undefined ? undefined : pending.get(key);
     if (key === undefined || value === undefined) return line;
     pending.delete(key);
-    return `${key}=${encodeValue(key, value)}`;
+    const next = `${key}=${encodeValue(key, value)}`;
+    if (next !== line) replaced.push(key);
+    return next;
   });
   for (const [key, value] of pending) merged.push(`${key}=${encodeValue(key, value)}`);
-  return merged.join('\n') + '\n';
+  return { content: merged.join('\n') + '\n', replaced };
 }

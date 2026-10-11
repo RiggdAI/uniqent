@@ -180,6 +180,41 @@ describe('hermesAdapter.apply', () => {
     }
   });
 
+  it('reports replacing an existing, different MCP entry, skill and .env value — once', async () => {
+    const root = tmp();
+    try {
+      writeFileSync(
+        join(root, 'config.yaml'),
+        'mcp_servers:\n  github:\n    url: https://other.example/mcp\n',
+      );
+      mkdirSync(join(root, 'skills/triage'), { recursive: true });
+      writeFileSync(join(root, 'skills/triage/SKILL.md'), 'my own triage\n');
+      writeFileSync(join(root, '.env'), 'GITHUB_PAT=old\n');
+      const bundle = makeBrain(2).toBundle();
+      const plan = await hermesAdapter.plan(bundle, { root });
+      expect(plan.lossiness).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ component: 'mcp:github', action: 'transformed' }),
+          expect.objectContaining({
+            component: 'skill skills/triage/SKILL.md',
+            action: 'transformed',
+          }),
+        ]),
+      );
+      const result = await hermesAdapter.apply(bundle, plan, RESOLVED, { root });
+      expect(result.notes).toContain(
+        'transformed: .env — replaces your existing, different value of GITHUB_PAT.',
+      );
+
+      const again = await hermesAdapter.plan(bundle, { root });
+      expect(again.lossiness.filter((l) => l.action === 'transformed')).toEqual([]);
+      const rerun = await hermesAdapter.apply(bundle, again, RESOLVED, { root });
+      expect(rerun.notes.join('\n')).not.toContain('.env');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('resolves ${credentialRef:…} in stdio env to a ${ENV} ref backed by .env', async () => {
     const root = tmp();
     try {
