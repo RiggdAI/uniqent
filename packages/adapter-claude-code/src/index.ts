@@ -22,6 +22,7 @@ import {
   parseMcpJson,
   placeholderCredentials,
   scopedCredentials,
+  serverCredentialRefs,
   toClaudeMcpEntry,
 } from './mcp.js';
 import type { McpJsonFile } from './mcp.js';
@@ -209,6 +210,12 @@ export const claudeCodeAdapter: Adapter = {
   ): Promise<InstallResult> {
     // Re-plan against the current state: validates everything before the first write.
     const plan = await computePlan(bundle, root);
+    // Resolve every MCP entry (throws on a missing credential) before the first write too.
+    const servers = bundle.mcpServers();
+    const entries = servers.map((s) => ({
+      server: s,
+      entry: toClaudeMcpEntry(s, scopedCredentials(bundle, s, resolved)),
+    }));
     await mkdir(root, { recursive: true });
     const written: string[] = [];
     const notes: string[] = [];
@@ -238,18 +245,10 @@ export const claudeCodeAdapter: Adapter = {
       }
     }
 
-    const servers = bundle.mcpServers();
     if (servers.length > 0) {
       const mcpPath = resolveInside(root, MCP_JSON);
       const existing = await readMcpJson(root);
-      const entries = servers.map((s) => ({
-        server: s,
-        entry: toClaudeMcpEntry(s, scopedCredentials(bundle, s, resolved)),
-      }));
-      const inlinesSecrets = entries.some(
-        ({ server, entry }) =>
-          JSON.stringify(entry) !== JSON.stringify(toClaudeMcpEntry(server, {})),
-      );
+      const inlinesSecrets = servers.some((s) => serverCredentialRefs(s).length > 0);
       const mcpServers: Record<string, unknown> = {
         ...(existing?.servers ?? {}),
         ...Object.fromEntries(entries.map(({ server, entry }) => [server.id, entry])),
@@ -281,6 +280,6 @@ export const claudeCodeAdapter: Adapter = {
 };
 
 export { toClaudeMcpEntry };
-export { McpConfigParseError } from './mcp.js';
+export { McpConfigParseError, MissingCredentialError } from './mcp.js';
 export { CredentialScopeError } from '@uniqent/adapter-sdk';
 export { ManagedSectionError, MANAGED_BEGIN, MANAGED_END } from './agents-md.js';

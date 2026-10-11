@@ -15,7 +15,12 @@ import { Brain } from '@uniqent/builder';
 import { validateBundle, scanForSecrets } from '@uniqent/core';
 import type { Bundle } from '@uniqent/core';
 import { runConformance, PathEscapeError, type InstallPlan } from '@uniqent/adapter-sdk';
-import { claudeCodeAdapter, CredentialScopeError, McpConfigParseError } from '../src/index';
+import {
+  claudeCodeAdapter,
+  CredentialScopeError,
+  McpConfigParseError,
+  MissingCredentialError,
+} from '../src/index';
 
 function makeBundle() {
   const b = Brain.create({
@@ -370,6 +375,71 @@ describe('claudeCodeAdapter hardening', () => {
     await expect(claudeCodeAdapter.plan(bundle, { root: '/tmp/x' })).rejects.toBeInstanceOf(
       CredentialScopeError,
     );
+  });
+
+  it('resolves and scope-checks credentials in command, args and url', async () => {
+    const root = tmp();
+    try {
+      const b = emptyBrain();
+      b.addMcpServer({
+        id: 'search',
+        transport: 'stdio',
+        command: 'search-mcp',
+        args: ['--key', '${credentialRef:search_key}'],
+        auth: { type: 'none' },
+        tools: { include: 'all' },
+      });
+      b.addMcpServer({
+        id: 'remote',
+        transport: 'streamable-http',
+        url: 'https://mcp.example.com/?key=${credentialRef:remote_key}',
+        auth: { type: 'none' },
+        tools: { include: 'all' },
+      });
+      for (const ref of ['search_key', 'remote_key'])
+        b.addCredential({ ref, label: ref, type: 'apiKey', consumedBy: [], required: true });
+      const bundle = b.toBundle();
+      const plan = await claudeCodeAdapter.plan(bundle, { root });
+      await claudeCodeAdapter.apply(
+        bundle,
+        plan,
+        { search_key: 'search-value', remote_key: 'remote-value' },
+        { root },
+      );
+      const mcp = JSON.parse(readFileSync(join(root, '.mcp.json'), 'utf8'));
+      expect(mcp.mcpServers.search.args).toEqual(['--key', 'search-value']);
+      expect(mcp.mcpServers.remote.url).toBe('https://mcp.example.com/?key=remote-value');
+
+      // A ref used in args must be granted to that server, like one used in env.
+      const manifest = bundle.manifest();
+      bundle.set(
+        'uniqent.json',
+        JSON.stringify({
+          ...manifest,
+          credentials: manifest.credentials.map((c) => ({ ...c, consumedBy: ['mcp:remote'] })),
+        }),
+      );
+      await expect(claudeCodeAdapter.plan(bundle, { root })).rejects.toBeInstanceOf(
+        CredentialScopeError,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses to install an MCP server without its credential, before writing anything', async () => {
+    const root = tmp();
+    try {
+      const bundle = makeBundle();
+      const plan = await claudeCodeAdapter.plan(bundle, { root });
+      await expect(claudeCodeAdapter.apply(bundle, plan, {}, { root })).rejects.toBeInstanceOf(
+        MissingCredentialError,
+      );
+      expect(existsSync(join(root, '.mcp.json'))).toBe(false);
+      expect(existsSync(join(root, 'AGENTS.md'))).toBe(false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it('writes .mcp.json with mode 0600 when it inlines credentials, and says so', async () => {
