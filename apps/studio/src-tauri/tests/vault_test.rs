@@ -36,6 +36,29 @@ fn never_follows_symlinks_out_of_the_vault() {
     assert!(walk_vault(d.path(), &DEFAULT_LIMITS).unwrap().is_empty());
 }
 
+/// A note swapped for a symlink after the walk saw a regular file must not be followed.
+#[cfg(unix)]
+#[test]
+fn reading_a_note_refuses_a_symlink_and_reads_at_most_the_limit() {
+    use uniqent_studio::vault::read_note;
+    let outside = tmp();
+    fs::write(outside.path().join("secret.md"), "id_rsa").unwrap();
+    let d = tmp();
+    std::os::unix::fs::symlink(outside.path().join("secret.md"), d.path().join("s.md")).unwrap();
+    let err = read_note(&d.path().join("s.md"), "s.md", 1024).unwrap_err();
+    assert!(err.contains("s.md"), "{err}");
+
+    fs::write(d.path().join("big.md"), "x".repeat(2048)).unwrap();
+    let err = read_note(&d.path().join("big.md"), "big.md", 1024).unwrap_err();
+    assert!(err.contains("big.md") && err.contains("1024"), "{err}");
+    assert_eq!(
+        read_note(&d.path().join("big.md"), "big.md", 4096)
+            .unwrap()
+            .len(),
+        2048
+    );
+}
+
 #[test]
 fn fails_with_a_clear_error_past_the_limits() {
     let d = tmp();

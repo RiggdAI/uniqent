@@ -1,6 +1,7 @@
 //! Walk a user-picked vault folder for markdown notes. Never follows symlinks, skips
 //! dot/tooling directories, and fails loudly past the size limits (no silent truncation).
 use serde::Serialize;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 /// One markdown note: POSIX path relative to the vault root, and its UTF-8 text.
@@ -68,30 +69,54 @@ fn walk(
                     limits.max_files
                 ));
             }
-            let size = entry
-                .metadata()
-                .map_err(|e| format!("cannot stat {rel}: {e}"))?
-                .len();
-            if size > limits.max_file_bytes {
-                return Err(format!(
-                    "{rel} is {size} bytes, over the {} byte per-note limit",
-                    limits.max_file_bytes
-                ));
-            }
-            *total += size;
+            let bytes = read_note(&path, &rel, limits.max_file_bytes)?;
+            *total += bytes.len() as u64;
             if *total > limits.max_total_bytes {
                 return Err(format!(
                     "vault is over the {} byte total limit",
                     limits.max_total_bytes
                 ));
             }
-            let bytes = std::fs::read(&path).map_err(|e| format!("cannot read {rel}: {e}"))?;
             let content =
                 String::from_utf8(bytes).map_err(|_| format!("{rel} is not valid UTF-8 text"))?;
             out.push(VaultFile { path: rel, content });
         }
     }
     Ok(())
+}
+
+/// Read one note without following a symlink (the walk's file_type check could be stale by now),
+/// insisting on a regular file and reading at most `max_bytes` (+1 to detect overflow).
+pub fn read_note(path: &Path, rel: &str, max_bytes: u64) -> Result<Vec<u8>, String> {
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::custom_flags(&mut options, libc::O_NOFOLLOW);
+    let file = options
+        .open(path)
+        .map_err(|e| format!("cannot read {rel}: {e}"))?;
+    let meta = file
+        .metadata()
+        .map_err(|e| format!("cannot stat {rel}: {e}"))?;
+    if !meta.is_file() {
+        return Err(format!("{rel} is not a regular file"));
+    }
+    if meta.len() > max_bytes {
+        return Err(format!(
+            "{rel} is {} bytes, over the {max_bytes} byte per-note limit",
+            meta.len()
+        ));
+    }
+    let mut bytes = Vec::new();
+    file.take(max_bytes + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|e| format!("cannot read {rel}: {e}"))?;
+    if bytes.len() as u64 > max_bytes {
+        return Err(format!(
+            "{rel} grew past the {max_bytes} byte per-note limit while reading"
+        ));
+    }
+    Ok(bytes)
 }
 
 /// The canonical form of `dir` if the user picked exactly that folder this session.
