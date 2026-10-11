@@ -79,7 +79,7 @@ const CRON_FIELDS: [(&str, u32, u32); 5] = [
 ];
 
 /// Explain why `expr` is not a standard 5-field cron expression (numbers, ranges, lists, steps,
-/// `*`), or `None` when it is valid. Mirrors `cronProblem` in apps/studio/src/server/cron.ts.
+/// `*`), each value within its field's range in `CRON_FIELDS`, or `None` when it is valid.
 pub fn cron_problem(expr: &str) -> Option<String> {
     let parts: Vec<&str> = expr.split_whitespace().collect();
     if parts.len() != CRON_FIELDS.len() {
@@ -534,8 +534,7 @@ impl Session {
     }
 
     /// Remove a component via `remove` and release its credentials: `consumer` is dropped from
-    /// every credential it used, and a credential left with no consumer is removed. Mirrors
-    /// `releaseCredentials` in apps/studio/src/server/session.ts.
+    /// every credential it used, and a credential left with no consumer is removed.
     fn remove_consumer(&mut self, consumer: &str, remove: impl FnOnce(&mut Self)) {
         let before: Vec<(Value, Vec<String>)> = self
             .credentials
@@ -618,7 +617,7 @@ impl Session {
 
     /// Add a task. Input may have: name, triggerType (schedule|event|manual, default schedule),
     /// cron (required + validated for schedule), event (required for event), prompt, enabled.
-    /// Mirrors the TS `/api/task/add` validation; nothing changes on error.
+    /// Nothing changes on error.
     pub fn add_task(&mut self, input: Value) -> Result<(), String> {
         let trigger_type = match input.get("triggerType") {
             None | Some(Value::Null) => "schedule",
@@ -1146,7 +1145,7 @@ impl Session {
         *self = Session::new();
     }
 
-    /// Preview a pasted MCP config without mutating state. Mirrors TS previewPastedMcp.
+    /// Preview a pasted MCP config without mutating state.
     pub fn paste_mcp_preview(&self, text: &str) -> Value {
         use crate::ports::mcp_normalize::normalize_mcp_config;
         let parsed: Value = match serde_json::from_str(text) {
@@ -1183,9 +1182,9 @@ impl Session {
         Ok(servers.len())
     }
 
-    /// Import memory from `{markdown?, text?, items?}` payload — mirrors TS `/api/memory/import`.
+    /// Import memory from `{markdown?, text?, items?}` payload.
     ///
-    /// Priority (mirrors TS api.ts):
+    /// Priority:
     ///   1. `items` array  → importItems semantics (kind/text/id preserved; blanks skipped)
     ///   2. `markdown` string → parseMemoryMarkdown (kind inferred from prefix; links/tags kept)
     ///   3. `text` string → importLines (plain newline-split, each non-empty line = one fact)
@@ -1317,13 +1316,12 @@ impl Session {
 
     /// Preview a memory import: parse markdown into items + build graph, WITHOUT mutating state.
     /// Returns `{ items: ImportedMemoryItem[], graph: MemoryGraph }`.
-    /// Mirrors TS `previewMemoryImport(text)`.
     pub fn preview_memory(&self, text: &str) -> Value {
         use crate::ports::memory::{memory_graph, parse_memory_markdown};
 
         let parsed = parse_memory_markdown(text);
         let items = parsed.as_array().cloned().unwrap_or_default();
-        // Build graph input: id = p{i}, text, kind (same as TS previewMemoryImport)
+        // Build graph input: id = p{i}, text, kind
         let graph_input: Vec<Value> = items
             .iter()
             .enumerate()
@@ -1340,7 +1338,7 @@ impl Session {
     }
 
     /// Return the memory knowledge graph from current session facts.
-    /// Each fact contributes its id, text, and kind. Mirrors TS `session.memoryGraph()`.
+    /// Each fact contributes its id, text, and kind.
     pub fn memory_graph(&self) -> Value {
         use crate::ports::memory::memory_graph;
 
@@ -1361,7 +1359,7 @@ impl Session {
     /// Import MCP servers from a JSON array of any shape. Raw server objects are normalized as ONE
     /// batch so unnamed or alike-named ones get distinct ids (`-2`, `-3`); canonical servers and
     /// whole config blobs are normalized on their own. Errors, adding nothing, when two imported
-    /// servers still share an id. Mirrors TS `importMcpServers`. Returns the server count.
+    /// servers still share an id. Returns the server count.
     pub fn import_mcp_servers(&mut self, servers: Value) -> Result<usize, String> {
         use crate::ports::mcp_normalize::normalize_mcp_config;
         let arr = servers

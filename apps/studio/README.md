@@ -8,8 +8,8 @@ Prereqs: Rust (`rustup`), Xcode CLT.
 
 - `pnpm --filter @uniqent/studio native:dev` — dev app (Vite HMR + Rust backend)
 - `pnpm --filter @uniqent/studio native:build` — Studio.app + DMG (src-tauri/target/release/bundle)
-- `pnpm --filter @uniqent/studio fixtures` — regenerate golden fixtures after changing the TS session
-  (cargo tests in src-tauri assert the Rust session matches them)
+- `pnpm --filter @uniqent/studio fixtures` — regenerate `catalog*.json` from the builder catalogs
+  (Rust embeds them); `state-*.json` are frozen Rust goldens
 
 Native scope (through Phase 3b): content building is fully native — MCP servers, skills, channels,
 tasks, memory and profile invoke the Rust backend directly, and export runs the Rust core pack/sign

@@ -91,7 +91,7 @@ export async function writeViaRust(writes: OutputWrite[]): Promise<void> {
   }
 }
 
-/** The session draft failed validateBundle; message `brain is invalid; fix it before installing: <issues>` (as the old server). */
+/** The session draft failed validateBundle; message `brain is invalid; fix it before installing: <issues>`. */
 export class BrainInvalidError extends Error {
   constructor(readonly issues: string[]) {
     super(`brain is invalid; fix it before installing: ${issues.join('; ')}`);

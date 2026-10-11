@@ -12,7 +12,7 @@ import {
   X,
 } from 'lucide-react';
 import type { StudioState, CatalogView, OpenedBundle } from './types';
-import { api, isNative } from './api';
+import { api } from './api';
 import { routeDrop, type DropAction, type DroppedItem } from './capture';
 import { DroppedLines } from './DroppedLines';
 import { buildGraph } from './canvas/graph';
@@ -63,7 +63,6 @@ export function App() {
 
   // Drops are granted by Rust from the OS event; the payload only lists what it granted.
   useEffect(() => {
-    if (!isNative) return;
     const unlisten = [
       listen<DroppedItem[]>('studio://dropped', (e) => {
         setDropRefused([]);

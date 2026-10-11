@@ -6,17 +6,14 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "build": "pnpm build:server && pnpm build:web",
-    "build:server": "tsc -p tsconfig.json",
+    "build": "pnpm build:web",
     "build:web": "vite build --config web/vite.config.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p web/tsconfig.json --noEmit",
+    "typecheck": "tsc -p web/tsconfig.json --noEmit",
     "test": "vitest run",
-    "start": "node dist/server/index.js",
     "dev:web": "vite --config web/vite.config.ts",
-    "dev:server": "tsx watch src/server/index.ts",
     "native:dev": "tauri dev",
     "native:build": "tauri build",
-    "fixtures": "tsx scripts/emit-fixtures.ts && prettier --write fixtures",
+    "fixtures": "tsx scripts/emit-catalog-fixtures.ts && prettier --write fixtures/catalog.json fixtures/catalog-data.json",
     "fixtures:core": "tsx scripts/emit-core-fixtures.ts && prettier --write fixtures/core",
     "fixtures:install": "tsx scripts/emit-install-fixtures.ts && prettier --write fixtures/install",
     "fixtures:ports": "tsx scripts/emit-port-fixtures.ts && prettier --write fixtures/ports"
@@ -44,8 +41,7 @@
     "react-force-graph-2d": "^1.29.1",
     "react-force-graph-3d": "^1.29.1",
     "tailwind-merge": "^3.7.0",
-    "tiptap-markdown": "^0.9.0",
-    "zod": "^4.6.5"
+    "tiptap-markdown": "^0.9.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

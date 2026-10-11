@@ -79,8 +79,8 @@ pnpm --filter @uniqent/spec gen
 - **`packages/builder`** — the framework-agnostic "assemble a brain" engine + catalogs (MCP,
   skills). Create/edit a Brain model → live-validate → emit a `Bundle`. **Both Studio and the CLI
   are thin front-ends over this — build the logic once here.**
-- **`apps/studio`** — **Uniqent Studio**, the local-first visual builder (browser UI + a small
-  local Node server) over `builder` + `core`. **The priority deliverable / product face.** A
+- **`apps/studio`** — **Uniqent Studio**, the local-first visual builder (a native Tauri app:
+  React UI + Rust backend) over `builder` + `core`. **The priority deliverable / product face.** A
   hosted version is a future, separate offering, NOT part of the open v1.
 - **`packages/cli`** — the `uniqent` CLI. **Secondary / power-user + automation surface**, reusing
   `builder` + `core` + adapters. `install` is a 7-step flow
@@ -107,17 +107,16 @@ default).
 **M3 (Studio) + M4 (install, two adapters) complete — cross-framework proven.** Packages: `spec`,
 `core`, `builder`, `adapter-sdk`, `adapter-claude-code`, `adapter-hermes`, `cli`; app: `studio`.
 
-- **Studio** (`apps/studio`) — local-first React+Vite app over a Node API (`StudioSession` over the
-  builder) with an **n8n-style react-flow canvas**: agent core node wired to component nodes
-  (persona/MCP/skill/memory/channel/flow) + credential→consumer "needs" edges, a palette
+- **Studio** (`apps/studio`) — local-first React+Vite app with an **n8n-style react-flow canvas**:
+  agent core node wired to component nodes (persona/MCP/skill/memory/channel/flow) +
+  credential→consumer "needs" edges, a palette
   (catalog + custom/import for skills & MCP, channels, flows), and a side-panel inspector. Memory
   has single + bulk import (paste / `.txt`/`.md`/`.jsonl`), a **profile editor** (→ USER.md), and a
   **"Smart import"** that parses markdown into kinded items keeping Obsidian-style `[[entities]]` +
   `#tags`, plus a **"Memory brain"** force-directed graph (🧠 button) of memory↔entities↔tags
   (`packages/builder/src/memory/parse.ts` builds the graph; `d3-force` lays it out). Run:
-  `pnpm --filter @uniqent/studio build && pnpm --filter @uniqent/studio start` (`:4173`,
-  `UNIQENT_STUDIO_PORT` to override). Verified in a real browser. The native Tauri app (`native:dev`/`native:build`) runs all
-  of this except install/capture (Phase 4): Rust owns files/session/crypto, the web UI runs the
+  `pnpm --filter @uniqent/studio native:dev` (dev) or `native:build` (Studio.app + DMG); there is no
+  browser/server mode. Rust owns files/session/crypto, the web UI runs the
   CLI's pure logic via the `@uniqent/core/pure`, `@uniqent/builder/{hubs,memory}` entries (no Node APIs —
   enforced by lint + `packages/builder/test/pure-entries.test.ts`) with an injected `fetch`.
 - **Install** — `@uniqent/adapter-sdk` (Adapter interface + conformance harness) +
@@ -141,8 +140,7 @@ default).
   (0600); persona/memory/profile/skills go to the workspace (`agents.defaults.workspace`, else
   `<root>/workspace`) in managed sections; tasks → lossiness. All **three v1 adapters**
   install the same signed `.uniqent` end to end (verified via the CLI). Studio's in-app **Install**
-  button and the `uniqent install --target <claude-code|hermes|openclaw>` CLI both drive them; the
-  local server is hardened (127.0.0.1-only, exact Studio Origin/Host incl. port, JSON-only mutations).
+  button and the `uniqent install --target <claude-code|hermes|openclaw>` CLI both drive them.
 
 **Wow first-run** — `npx @uniqent/cli try <brain>` auto-detects the running framework (filesystem probe in `packages/builder/src/detect.ts`) and one-command-installs a featured, signed, creds-free brain (the enriched `research-analyst`), ending with the manifest's `suggestedPrompts`. Featured bundles are packed+signed into `packages/cli/featured/` at build (`build:featured`); `uniqent try` reuses the shared `runInstall` pipeline in `packages/cli/src/run.ts`. Manifest gained optional `suggestedPrompts`.
 
@@ -152,8 +150,8 @@ with per-source error isolation; sources: the official **MCP Registry** + **Smit
 **GitHub** repo search (skills), plus a zero-service **JSON-index** hub (`{ mcp, skills }` at any
 URL). Registry mappers turn server rows into `McpServer` (remotes→streamable-http; packages→stdio;
 secret env vars→`${credentialRef:…}` + explicit `CredentialRequirement`s — no secret value leaks).
-Surfaces: CLI `uniqent hub mcp|skills <query>` and Studio palette **"Browse hubs…"** panels
-(`/api/hub/*`), which add a result as a normal canvas node + its credentials. Mappers tested
+Surfaces: CLI `uniqent hub mcp|skills <query>` and Studio palette **"Browse hubs…"** panels,
+which add a result as a normal canvas node + its credentials. Mappers tested
 against frozen fixtures of the real responses; verified live and in a browser.
 
 CLI surface:
@@ -162,9 +160,9 @@ CLI surface:
 recovers MCP credential _requirements_ from auth headers without their values). `import-vault <dir>`
 captures an Obsidian/"second-brain" vault folder into a signed `.uniqent` (SOUL.md→persona,
 USER.md→profile, MEMORY.md+notes→memory, journal/dated notes→episodic, `[[links]]`/`#tags` kept);
-Studio exposes the same via the Memory inspector's "Import a second-brain vault" panel
-(`POST /api/memory/vault/{preview,import}`). The vault parser is `packages/builder/src/memory/vault.ts`
-(pure `importVault(files)`); the fs walk lives in the Studio server / CLI. UX-review +
+Studio exposes the same via the Memory inspector's "Import a second-brain vault" panel.
+The vault parser is `packages/builder/src/memory/vault.ts` (pure `importVault(files)`); the fs walk
+lives in Studio's Rust `read_vault` / the CLI. UX-review +
 roadmap of CLI gaps (no `sign`/`keygen`, no `install --dry-run`, no `init`): `docs/UX-REVIEW.md`.
 `install` accepts a **raw http(s) URL** (no registry needed) **or a registry slug** resolved
 against a JSON index (`--registry <url>` / `UNIQENT_REGISTRY`). The registry is just a hosted

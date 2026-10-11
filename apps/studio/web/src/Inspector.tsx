@@ -10,11 +10,10 @@ import type {
   MemoryPackResult,
   VaultImport,
 } from './types';
-import { api, isNative } from './api';
+import { api } from './api';
 import { InstallPanel } from './InstallPanel';
 import { CapturePanel } from './CapturePanel';
 import { errorText } from './lib/utils';
-import { canPublish } from './publish';
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
 import { Textarea } from './components/ui/textarea';
@@ -358,29 +357,18 @@ function VaultImportPanel({
         notes become episodic).
       </p>
       <div className="flex items-center gap-2">
-        {isNative ? (
-          <>
-            <Button
-              data-testid="vault-choose"
-              variant="outline"
-              size="sm"
-              disabled={busy}
-              onClick={chooseFolder}
-            >
-              Choose folder…
-            </Button>
-            <span data-testid="vault-dir" className="truncate text-xs text-muted-foreground">
-              {dir || 'No folder chosen'}
-            </span>
-          </>
-        ) : (
-          <Input
-            data-testid="vault-dir"
-            placeholder="/Users/you/Documents/MyVault"
-            value={dir}
-            onChange={(e) => setDir(e.target.value)}
-          />
-        )}
+        <Button
+          data-testid="vault-choose"
+          variant="outline"
+          size="sm"
+          disabled={busy}
+          onClick={chooseFolder}
+        >
+          Choose folder…
+        </Button>
+        <span data-testid="vault-dir" className="truncate text-xs text-muted-foreground">
+          {dir || 'No folder chosen'}
+        </span>
         <Button
           data-testid="vault-preview"
           variant="outline"
@@ -1653,26 +1641,17 @@ function MemoryHubPanel({ apply }: { apply: (p: Promise<StudioState>) => void })
         <Label>Publish this brain's memory</Label>
         <p className="text-xs text-muted-foreground">
           Share this brain's <b>shareable</b> facts as a pack on the hub (personal memory never
-          leaves).{' '}
-          {isNative
-            ? 'Uses your `uniqent login` token unless you paste one.'
-            : 'Needs a publish token.'}
+          leaves). Uses your `uniqent login` token unless you paste one.
         </p>
         <div className="flex gap-2">
           <Input
             data-testid="memory-hub-token"
             type="password"
-            placeholder={
-              isNative ? 'publish token (optional — uses uniqent login)' : 'publish token'
-            }
+            placeholder="publish token (optional — uses uniqent login)"
             value={token}
             onChange={(e) => setToken(e.target.value)}
           />
-          <Button
-            data-testid="memory-hub-publish"
-            onClick={() => publish()}
-            disabled={publishing || !canPublish(token, isNative)}
-          >
+          <Button data-testid="memory-hub-publish" onClick={() => publish()} disabled={publishing}>
             {publishing ? 'Publishing…' : 'Publish'}
           </Button>
         </div>

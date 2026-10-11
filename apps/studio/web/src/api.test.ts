@@ -9,7 +9,6 @@ describe('api shim (native)', () => {
   beforeEach(() => {
     invokeMock.mockReset();
     httpFetchMock.mockReset();
-    (globalThis as Record<string, unknown>).__TAURI_INTERNALS__ = {}; // native detection
     vi.resetModules();
   });
 
@@ -21,7 +20,7 @@ describe('api shim (native)', () => {
     await api.setMeta({ name: 'x' });
     expect(invokeMock).toHaveBeenCalledWith('set_meta', { meta: { name: 'x' } });
     await api.removeAvatar();
-    expect(invokeMock).toHaveBeenCalledWith('remove_avatar');
+    expect(invokeMock).toHaveBeenCalledWith('remove_avatar', undefined);
   });
 
   it('routes MCP mutators through invoke', async () => {
@@ -113,7 +112,7 @@ describe('api shim (native)', () => {
     invokeMock.mockResolvedValue({ nodes: [], edges: [] });
     const { api } = await import('./api');
     await api.memoryGraph();
-    expect(invokeMock).toHaveBeenCalledWith('memory_graph');
+    expect(invokeMock).toHaveBeenCalledWith('memory_graph', undefined);
   });
 
   it('routes profile commands through invoke', async () => {
@@ -125,7 +124,7 @@ describe('api shim (native)', () => {
     });
     invokeMock.mockResolvedValue({ profile: { name: 'Alice' } });
     await api.getProfile();
-    expect(invokeMock).toHaveBeenCalledWith('get_profile');
+    expect(invokeMock).toHaveBeenCalledWith('get_profile', undefined);
   });
 
   it('installs natively: the session draft is validated before anything is read', async () => {
@@ -294,16 +293,12 @@ describe('api shim (native)', () => {
     expect(invokeMock).toHaveBeenCalledWith('export', { sign: true });
   });
 
-  it('falls back to fetch when not running under Tauri', async () => {
-    delete (globalThis as Record<string, unknown>).__TAURI_INTERNALS__;
-    vi.resetModules();
-    const fetchMock = vi.fn(
-      async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
+  it('has no HTTP fallback left', async () => {
+    const src = (await import('node:fs')).readFileSync(
+      new URL('./api.ts', import.meta.url),
+      'utf8',
     );
-    vi.stubGlobal('fetch', fetchMock);
-    const { api } = await import('./api');
-    await api.state();
-    expect(fetchMock).toHaveBeenCalled();
-    vi.unstubAllGlobals();
+    // `/api/` only as the start of a string literal: the `@tauri-apps/api/core` import must not match.
+    expect(src).not.toMatch(/\bfetch\(|['"`]\/api\/|isNative/);
   });
 });
