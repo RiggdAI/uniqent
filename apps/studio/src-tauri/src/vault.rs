@@ -120,17 +120,33 @@ pub fn read_note(path: &Path, rel: &str, max_bytes: u64) -> Result<Vec<u8>, Stri
     Ok(bytes)
 }
 
-/// The canonical form of `dir` if the user picked exactly that folder this session.
-pub fn granted_dir(granted: &[PathBuf], dir: &str) -> Result<PathBuf, String> {
-    let canonical = PathBuf::from(dir)
+/// `path` canonicalized, and whether it is exactly one of `granted` (stored canonical).
+fn canonical_grant(granted: &[PathBuf], path: &str) -> Result<(PathBuf, bool), String> {
+    let canonical = PathBuf::from(path)
         .canonicalize()
-        .map_err(|e| format!("cannot open {dir}: {e}"))?;
-    if granted.iter().any(|g| g == &canonical) {
-        Ok(canonical)
-    } else {
-        Err(format!(
+        .map_err(|e| format!("cannot open {path}: {e}"))?;
+    let is_granted = granted.contains(&canonical);
+    Ok((canonical, is_granted))
+}
+
+/// The canonical form of `dir` if the user picked (or dropped) exactly that folder this session.
+pub fn granted_dir(granted: &[PathBuf], dir: &str) -> Result<PathBuf, String> {
+    match canonical_grant(granted, dir)? {
+        (canonical, true) => Ok(canonical),
+        (canonical, false) => Err(format!(
             "{} was not chosen in this session; use \"Choose folder…\"",
             canonical.display()
-        ))
+        )),
+    }
+}
+
+/// The canonical form of `path` if the user dropped exactly that file on Studio this session.
+pub fn granted_file(granted: &[PathBuf], path: &str) -> Result<PathBuf, String> {
+    match canonical_grant(granted, path)? {
+        (canonical, true) => Ok(canonical),
+        (canonical, false) => Err(format!(
+            "{} was not dropped on Studio in this session; drop it again or use Open…",
+            canonical.display()
+        )),
     }
 }

@@ -19,11 +19,13 @@ fn main() {
             if let tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event {
                 let (granted, refused) =
                     commands::grant_dropped(&window.state::<AppState>(), paths);
-                for reason in refused {
-                    eprintln!("studio: drop refused: {reason}");
-                }
                 if let Err(e) = window.emit("studio://dropped", granted) {
                     eprintln!("studio: cannot emit studio://dropped: {e}");
+                }
+                if !refused.is_empty() {
+                    if let Err(e) = window.emit("studio://drop-refused", refused) {
+                        eprintln!("studio: cannot emit studio://drop-refused: {e}");
+                    }
                 }
             }
         })

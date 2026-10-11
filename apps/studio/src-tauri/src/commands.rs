@@ -402,6 +402,11 @@ fn replace_session(state: &AppState, next: Session, dropped: Vec<String>) -> Res
 /// Replace the session with a bundle given as files (a capture); `{ state, dropped }`.
 #[tauri::command]
 pub fn load_bundle_files(s: State<AppState>, files: Vec<BundleFile>) -> Result<Value, String> {
+    load_files_into(&s, files)
+}
+
+/// `load_bundle_files` on `state`: the session is swapped only when every file loads.
+pub fn load_files_into(state: &AppState, files: Vec<BundleFile>) -> Result<Value, String> {
     let mut map = std::collections::BTreeMap::new();
     for f in files {
         let bytes = base64::engine::general_purpose::STANDARD
@@ -413,7 +418,7 @@ pub fn load_bundle_files(s: State<AppState>, files: Vec<BundleFile>) -> Result<V
     }
     let bundle = crate::core::bundle::Bundle::from_files(map)?;
     let (next, dropped) = Session::load_bundle(&bundle)?;
-    replace_session(&s, next, dropped)
+    replace_session(state, next, dropped)
 }
 
 /// Read the `.uniqent` at `path` (canonical), verify it and swap it in as the session;
@@ -457,15 +462,7 @@ pub async fn open_bundle(
 /// read and unpack run off the main thread.
 #[tauri::command]
 pub async fn open_dropped_bundle(s: State<'_, AppState>, path: String) -> Result<Value, String> {
-    let canonical = Path::new(&path)
-        .canonicalize()
-        .map_err(|e| format!("cannot open {path}: {e}"))?;
-    if !s.granted_files.lock().unwrap().contains(&canonical) {
-        return Err(format!(
-            "{} was not dropped on Studio in this session; drop it again or use Open…",
-            canonical.display()
-        ));
-    }
+    let canonical = crate::vault::granted_file(&s.granted_files.lock().unwrap(), &path)?;
     open_bundle_at(&s, &canonical)
 }
 
@@ -523,7 +520,8 @@ pub struct DroppedPath {
 }
 
 /// Grant dropped paths, canonicalized: folders join `granted_dirs`, regular files
-/// `granted_files`. Returns what was granted plus why each other path was refused.
+/// `granted_files`. Returns what was granted (`studio://dropped`) plus why each other path was
+/// refused (`studio://drop-refused`; names paths, never content).
 pub fn grant_dropped(state: &AppState, paths: &[PathBuf]) -> (Vec<DroppedPath>, Vec<String>) {
     let mut granted = vec![];
     let mut refused = vec![];

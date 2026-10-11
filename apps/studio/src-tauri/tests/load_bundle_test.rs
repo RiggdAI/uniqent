@@ -1,8 +1,10 @@
 use base64::Engine;
 use serde_json::Value;
 use std::collections::BTreeMap;
+use std::sync::Mutex;
+use uniqent_studio::commands::{load_files_into, AppState};
 use uniqent_studio::core::bundle::Bundle;
-use uniqent_studio::session::{open_bundle_bytes, Session};
+use uniqent_studio::session::{open_bundle_bytes, BundleFile, Session};
 
 #[test]
 fn opens_the_signed_golden_fixture_and_refuses_a_tampered_copy() {
@@ -85,30 +87,87 @@ fn reports_what_the_session_cannot_hold() {
 
 #[test]
 fn a_malformed_component_names_its_file_and_changes_nothing() {
-    let err = Session::load_bundle(&bundle_with(
-        "mcp/servers.json",
-        r#"{"servers":[{"id":"Bad Id"}]}"#,
-    ))
-    .err()
-    .expect("malformed server refused");
+    let state = app_state();
+    state.session.lock().unwrap().set_persona("# Keep".into());
+    let files: Vec<BundleFile> =
+        bundle_with("mcp/servers.json", r#"{"servers":[{"id":"Bad Id"}]}"#)
+            .entries()
+            .map(|(path, bytes)| BundleFile {
+                path: path.clone(),
+                bytes_base64: b64(bytes),
+            })
+            .collect();
+    let err = load_files_into(&state, files).unwrap_err();
     assert!(err.contains("mcp/servers.json"), "{err}");
+    let kept = state.session.lock().unwrap().state();
+    assert_eq!(kept["persona"], "# Keep");
+    assert_eq!(kept["manifest"]["name"], "my-brain");
+}
+
+#[test]
+fn opens_an_unsigned_bundle_and_says_so() {
+    let unsigned = captured_bundle("hermes");
+    let packed = uniqent_studio::core::archive::pack(&unsigned).unwrap();
+    let (bundle, sig) = open_bundle_bytes(&packed).unwrap();
+    assert_eq!(sig, "unsigned");
+    let (s, dropped) = Session::load_bundle(&bundle).unwrap();
+    assert_eq!(s.state()["manifest"]["name"], "captured-hermes-agent");
+    assert!(
+        dropped.iter().all(|d| !d.contains("signature")),
+        "{dropped:?}"
+    );
+}
+
+#[test]
+fn reports_blank_readme_empty_profile_values_and_repeated_credential_refs() {
+    let mut manifest: Value = serde_json::from_str(MANIFEST).unwrap();
+    let cred = serde_json::json!({
+        "ref": "api_key", "label": "API key", "type": "apiKey", "consumedBy": [], "required": true
+    });
+    manifest["credentials"] = serde_json::json!([cred, cred]);
+    let manifest = serde_json::to_string_pretty(&manifest).unwrap();
+    let (_, dropped) = Session::load_bundle(&bundle_from(&[
+        ("uniqent.json", &manifest),
+        ("README.md", "  \n"),
+        ("memory/profile.json", r#"{"name":"Ada","nick":""}"#),
+    ]))
+    .unwrap();
+    for needle in ["README.md", "\"nick\"", "\"api_key\""] {
+        assert!(
+            dropped.iter().any(|d| d.contains(needle)),
+            "{needle} not reported: {dropped:?}"
+        );
+    }
+}
+
+#[test]
+fn opens_only_a_dropped_file() {
+    use uniqent_studio::vault::granted_file;
+    let d = tempfile::tempdir().unwrap();
+    let root = d.path().canonicalize().unwrap();
+    for name in ["dropped.uniqent", "other.uniqent"] {
+        std::fs::write(root.join(name), b"x").unwrap();
+    }
+    let granted = vec![root.join("dropped.uniqent")];
+    let path = |name: &str| root.join(name).to_string_lossy().into_owned();
+    assert_eq!(
+        granted_file(&granted, &path("dropped.uniqent")).unwrap(),
+        root.join("dropped.uniqent")
+    );
+    let err = granted_file(&granted, &path("other.uniqent")).unwrap_err();
+    assert!(err.contains("was not dropped"), "{err}");
 }
 
 #[cfg(unix)]
 #[test]
 fn a_drop_grants_canonical_folders_and_files_only() {
-    use std::sync::Mutex;
-    use uniqent_studio::commands::{grant_dropped, AppState, DroppedPath};
+    use uniqent_studio::commands::{grant_dropped, DroppedPath};
     let d = tempfile::tempdir().unwrap();
     let root = d.path().canonicalize().unwrap();
     std::fs::create_dir(root.join("vault")).unwrap();
     std::os::unix::fs::symlink(root.join("vault"), root.join("link")).unwrap();
     std::fs::write(root.join("a.uniqent"), b"x").unwrap();
-    let state = AppState {
-        session: Mutex::new(Session::new()),
-        granted_dirs: Mutex::new(vec![]),
-        granted_files: Mutex::new(vec![]),
-    };
+    let state = app_state();
     let (granted, refused) = grant_dropped(
         &state,
         &[
@@ -137,6 +196,14 @@ fn a_drop_grants_canonical_folders_and_files_only() {
 }
 
 // ── helpers ────────────────────────────────────────────────────────────────
+
+fn app_state() -> AppState {
+    AppState {
+        session: Mutex::new(Session::new()),
+        granted_dirs: Mutex::new(vec![]),
+        granted_files: Mutex::new(vec![]),
+    }
+}
 
 fn b64(bytes: &[u8]) -> String {
     base64::engine::general_purpose::STANDARD.encode(bytes)
