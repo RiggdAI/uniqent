@@ -1,7 +1,12 @@
-import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
-import type { Bundle } from '@uniqent/core';
-import { stripMemoryMarkup } from '@uniqent/builder';
+import type { Bundle } from '@uniqent/core/pure';
+import {
+  confineRelative,
+  joinPath,
+  resolvePosix,
+  type FileRef,
+  type TargetContext,
+} from '@uniqent/adapter-sdk/pure';
+import { stripMemoryMarkup } from '@uniqent/builder/memory';
 
 /**
  * The OpenClaw agent workspace (docs.openclaw.ai/concepts/agent-workspace): SOUL.md, AGENTS.md,
@@ -30,15 +35,29 @@ export class ManagedSectionError extends Error {
 }
 
 /**
- * Resolve the workspace dir: `agents.defaults.workspace` (`~` expanded, a relative path resolved
- * against the cwd as OpenClaw's resolveUserPath does), else `<root>/workspace`.
+ * Resolve the workspace dir: `agents.defaults.workspace` (`~` expanded against `ctx.home`, a
+ * relative path resolved against `ctx.cwd` as OpenClaw's resolveUserPath does), else
+ * `<root>/workspace`.
  */
-export function resolveWorkspace(root: string, configured: string | undefined): string {
-  if (configured === undefined) return join(resolve(root), 'workspace');
+export function resolveWorkspace(ctx: TargetContext, configured: string | undefined): string {
+  if (configured === undefined) return joinPath(ctx.root, 'workspace');
   const trimmed = configured.trim();
-  if (trimmed === '~') return homedir();
-  if (trimmed.startsWith('~/')) return join(homedir(), trimmed.slice(2));
-  return resolve(trimmed);
+  if (trimmed === '~') return ctx.home;
+  if (trimmed.startsWith('~/')) return resolvePosix(ctx.home, trimmed.slice(2));
+  return resolvePosix(ctx.cwd, trimmed);
+}
+
+/**
+ * The file `name` in `workspace` (PathEscapeError if it climbs out): rooted at the state dir when
+ * the workspace lies under it, else at the workspace itself.
+ */
+export function workspaceRef(ctx: TargetContext, workspace: string, name: string): FileRef {
+  const path = confineRelative(workspace, name);
+  const prefix = joinPath(ctx.root, '');
+  if (workspace === ctx.root) return { root: ctx.root, path };
+  if (workspace.startsWith(prefix))
+    return { root: ctx.root, path: `${workspace.slice(prefix.length)}/${path}` };
+  return { root: workspace, path };
 }
 
 function count(text: string, needle: string): number {

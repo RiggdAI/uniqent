@@ -36,6 +36,7 @@ export default tseslint.config(
       'packages/builder/src/catalog/**/*.ts',
       'packages/adapter-hermes/src/{pure,translate,capture,config,env,mcp,memory,channels}.ts',
       'packages/adapter-claude-code/src/{pure,translate,capture,mcp,agents-md}.ts',
+      'packages/adapter-openclaw/src/{pure,translate,capture,config,env,workspace}.ts',
     ],
     rules: {
       'no-restricted-imports': [

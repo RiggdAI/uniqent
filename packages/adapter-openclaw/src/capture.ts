@@ -1,18 +1,25 @@
-import { readdir } from 'node:fs/promises';
-import type { Bundle } from '@uniqent/core';
-import { resolveInside } from '@uniqent/adapter-sdk';
-import { Brain, parseMemoryMarkdown, parseProfile } from '@uniqent/builder';
+import type { Bundle } from '@uniqent/core/pure';
+import {
+  joinPath,
+  readText,
+  type InputRequest,
+  type ReadFiles,
+  type TargetContext,
+} from '@uniqent/adapter-sdk/pure';
+import { Brain } from '@uniqent/builder/brain';
+import { parseMemoryMarkdown, parseProfile } from '@uniqent/builder/memory';
 import type { CredentialRequirement, McpServer } from '@uniqent/spec';
-import { configuredWorkspace, objectAt, OpenClawConfigError, parseConfig } from './config.js';
+import { objectAt, OpenClawConfigError } from './config.js';
 import type { JsonObject, JsonValue } from './config.js';
-import { isNotFound, readOptional } from './fs.js';
-import { resolveWorkspace, withoutMarkers } from './workspace.js';
+import { CONFIG_FILE, loadConfig, SKILLS_DIR, workspaceOf } from './translate.js';
+import { withoutMarkers, workspaceRef } from './workspace.js';
 
 /**
  * Capture an OpenClaw setup (`root` = the state dir) back into a canonical bundle:
  * openclaw.json `mcp.servers` + `channels.{telegram,discord}`, and the workspace's
  * SOUL.md/IDENTITY.md (persona), AGENTS.md (policies), USER.md (profile), MEMORY.md (facts)
- * and `skills/`. Secret values never leave the machine: every MCP env value and auth header
+ * and `skills/`. Episodic MEMORY.md items are kept (ids `e1…`); the export drops them with
+ * `scrubPrivateMemory`. Secret values never leave the machine: every MCP env value and auth header
  * becomes a credential requirement (a `${VAR}` reference keeps its name, a literal is captured
  * without its value), since those commonly hold secrets. command/args/url are kept verbatim
  * (a `${HOME}`-style reference there is ordinary config, not a credential).
@@ -161,31 +168,65 @@ function toServer(file: string, capture: Capture, id: string, entry: JsonObject)
 }
 
 const CHANNEL_TOKEN_FIELD = { telegram: 'botToken', discord: 'token' } as const;
+const WORKSPACE_FILES = ['SOUL.md', 'IDENTITY.md', 'AGENTS.md', 'USER.md', 'MEMORY.md'];
+const SKILL_FILE = 'SKILL.md';
+const SKILL_RE = /^([^/]+)\/SKILL\.md$/;
 
-async function captureWorkspace(brain: Brain, workspace: string): Promise<void> {
-  const read = async (name: string) => {
-    const text = await readOptional(resolveInside(workspace, name));
+/** Files a capture reads: openclaw.json, the workspace files it maps, every SKILL.md under skills/. */
+export function captureInputs(read: ReadFiles, ctx: TargetContext): InputRequest {
+  const workspace = workspaceOf(ctx, loadConfig(read, ctx));
+  const skills = workspaceRef(ctx, workspace, SKILLS_DIR);
+  return {
+    files: [
+      { root: ctx.root, path: CONFIG_FILE },
+      ...WORKSPACE_FILES.map((name) => workspaceRef(ctx, workspace, name)),
+    ],
+    finds: [{ root: skills.root, dir: skills.path, fileName: SKILL_FILE, skipDirs: [] }],
+  };
+}
+
+/** Names of the workspace skills OpenClaw loads (`skills/<name>/SKILL.md`, depth 1), sorted. */
+function skillNames(read: ReadFiles, ctx: TargetContext, workspace: string): string[] {
+  const skills = workspaceRef(ctx, workspace, SKILLS_DIR);
+  const prefix = joinPath(joinPath(skills.root, skills.path), '');
+  return [...read.keys()]
+    .filter((k) => k.startsWith(prefix))
+    .map((k) => SKILL_RE.exec(k.slice(prefix.length))?.[1])
+    .filter((name): name is string => name !== undefined)
+    .sort();
+}
+
+function captureWorkspace(
+  brain: Brain,
+  files: ReadFiles,
+  ctx: TargetContext,
+  workspace: string,
+): void {
+  const read = (name: string) => {
+    const ref = workspaceRef(ctx, workspace, name);
+    const text = readText(files, ref.root, ref.path);
     return text === undefined ? undefined : withoutMarkers(text);
   };
-  const soul = await read('SOUL.md');
-  const identity = await read('IDENTITY.md');
+  const soul = read('SOUL.md');
+  const identity = read('IDENTITY.md');
   const persona = [soul, identity ? `## Identity\n\n${identity}` : undefined]
     .filter(Boolean)
     .join('\n\n');
   if (persona) brain.setPersona(persona);
-  const agents = await read('AGENTS.md');
+  const agents = read('AGENTS.md');
   if (agents) brain.setPolicies(agents);
-  const user = await read('USER.md');
+  const user = read('USER.md');
   if (user) {
     const profile = parseProfile(user);
     if (Object.keys(profile).length > 0) brain.setProfile(profile);
   }
-  const memory = await read('MEMORY.md');
-  let n = 0;
+  const memory = read('MEMORY.md');
+  let facts = 0;
+  let episodes = 0;
   for (const item of memory ? parseMemoryMarkdown(memory) : []) {
-    if (item.kind === 'episodic') continue; // episodic memory is scrubbed on export by default
     brain.addMemory({
-      id: `m${++n}`,
+      // Own counters: fact ids stay m1… whether or not episodic items are interleaved.
+      id: item.kind === 'episodic' ? `e${++episodes}` : `m${++facts}`,
       kind: item.kind,
       text: item.text,
       source: 'openclaw:MEMORY.md',
@@ -194,19 +235,15 @@ async function captureWorkspace(brain: Brain, workspace: string): Promise<void> 
     });
   }
 
-  let names: string[] = [];
-  try {
-    names = await readdir(resolveInside(workspace, 'skills'));
-  } catch (err) {
-    if (!isNotFound(err)) throw err;
-  }
-  for (const name of names.sort()) {
-    const md = await readOptional(resolveInside(workspace, `skills/${name}/SKILL.md`));
-    if (md !== undefined) brain.addSkill(name, md);
+  // skillNames() only lists skills whose SKILL.md was read.
+  for (const name of skillNames(files, ctx, workspace)) {
+    const ref = workspaceRef(ctx, workspace, `${SKILLS_DIR}/${name}/${SKILL_FILE}`);
+    brain.addSkill(name, readText(files, ref.root, ref.path)!);
   }
 }
 
-export async function exportOpenClaw(root: string): Promise<Bundle> {
+/** Capture an OpenClaw state dir (`ctx.root`) from the files `captureInputs()` read. */
+export function capture(read: ReadFiles, ctx: TargetContext): Bundle {
   const brain = Brain.create({
     name: 'captured-openclaw-agent',
     displayName: 'Captured OpenClaw Agent',
@@ -216,9 +253,8 @@ export async function exportOpenClaw(root: string): Promise<Bundle> {
     license: 'CC0-1.0',
     tags: [],
   });
-  const file = resolveInside(root, 'openclaw.json');
-  const raw = await readOptional(file);
-  const config = raw === undefined ? {} : parseConfig(file, raw);
+  const loaded = loadConfig(read, ctx);
+  const { file, config } = loaded;
   const capture: Capture = { refs: new Map() };
 
   const servers =
@@ -254,6 +290,6 @@ export async function exportOpenClaw(root: string): Promise<Bundle> {
     });
   }
 
-  await captureWorkspace(brain, resolveWorkspace(root, configuredWorkspace(file, config)));
+  captureWorkspace(brain, read, ctx, workspaceOf(ctx, loaded));
   return brain.toBundle();
 }

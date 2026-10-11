@@ -12,6 +12,7 @@ const ENTRIES = [
   resolve(root, 'adapter-sdk/dist/pure.js'),
   resolve(root, 'adapter-hermes/dist/pure.js'),
   resolve(root, 'adapter-claude-code/dist/pure.js'),
+  resolve(root, 'adapter-openclaw/dist/pure.js'),
 ];
 const RESOLVE: Record<string, string> = {
   '@uniqent/core/pure': resolve(root, 'core/dist/pure.js'),
