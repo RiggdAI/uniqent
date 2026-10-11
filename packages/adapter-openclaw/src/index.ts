@@ -4,6 +4,7 @@ import { dirname, isAbsolute, join, relative } from 'node:path';
 import type { Bundle } from '@uniqent/core';
 import {
   assertMcpCredentialScope,
+  assertNoEnvReferences,
   requiredCredentialRefs,
   resolveInside,
 } from '@uniqent/adapter-sdk';
@@ -110,6 +111,7 @@ function sameJson(a: JsonObject | undefined, b: JsonObject): boolean {
 }
 
 async function draftInstall(bundle: Bundle, root: string): Promise<Draft> {
+  assertNoEnvReferences(bundle);
   const configPath = resolveInside(root, 'openclaw.json');
   const raw = await readOptional(configPath);
   const existing = raw === undefined ? {} : parseConfig(configPath, raw);

@@ -1,6 +1,7 @@
 import type { Bundle } from '@uniqent/core';
 import {
   assertMcpCredentialScope,
+  assertNoEnvReferences,
   requiredCredentialRefs,
   resolveInside,
   type InstallPlan,
@@ -110,6 +111,7 @@ function memoryLoss(
  * yields the same plan and file contents, which is what makes apply() idempotent.
  */
 export function translate(bundle: Bundle, home: HermesHome, root: string): Translation {
+  assertNoEnvReferences(bundle);
   const writes: PlanWrite[] = [];
   const files: FileWrite[] = [];
   const lossiness: Lossiness[] = [];

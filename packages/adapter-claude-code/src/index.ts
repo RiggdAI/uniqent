@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { dirname, join, relative, sep } from 'node:path';
 import type { Bundle } from '@uniqent/core';
 import type { McpServer } from '@uniqent/spec';
-import { requiredCredentialRefs, resolveInside } from '@uniqent/adapter-sdk';
+import { assertNoEnvReferences, requiredCredentialRefs, resolveInside } from '@uniqent/adapter-sdk';
 import type {
   Adapter,
   DetectResult,
@@ -162,6 +162,7 @@ function computeLossiness(
  * existing files as such.
  */
 async function computePlan(bundle: Bundle, root: string): Promise<InstallPlan> {
+  assertNoEnvReferences(bundle);
   const skills = skillTargets(bundle, root);
   const writes: PlanWrite[] = skills.map((s) => ({
     path: s.rel,
