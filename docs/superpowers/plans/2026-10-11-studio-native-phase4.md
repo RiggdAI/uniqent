@@ -165,11 +165,12 @@ git commit -m "test(studio): golden CLI install + capture trees for all three ta
 
 **Files:**
 
-- Create: `packages/adapter-sdk/src/pure-paths.ts`, `credential-refs.ts`, `io.ts`, `pure.ts`, `node-io.ts`
-- Modify: `packages/adapter-sdk/src/paths.ts` (keep only Node `resolveInside`; `PathEscapeError` imported from `pure-paths.ts`), `types.ts` (`import type { Bundle } from '@uniqent/core/pure'`), `index.ts` (re-export everything, unchanged public names), `package.json` (`exports["./pure"]`)
+- Create: `packages/adapter-sdk/src/pure-paths.ts`, `io.ts`, `pure.ts`, `node-io.ts`
+- Modify: `packages/adapter-sdk/src/paths.ts` (keep only Node `resolveInside`; `PathEscapeError` imported from `pure-paths.ts`), `credentials.ts` (gains `requiredCredentialRefs`, moved verbatim from `paths.ts`; `import type { Bundle } from '@uniqent/core/pure'`), `types.ts` (`import type { Bundle } from '@uniqent/core/pure'`), `index.ts` (re-export everything, unchanged public names), `package.json` (`exports["./pure"]`; dependency `"@uniqent/builder": "workspace:^"` for `scrubPrivateMemory` in `node-io.ts`)
 - Create: `packages/builder/src/brain-entry.ts`, `packages/builder/src/scrub.ts`, `packages/builder/src/detect-markers.ts`
 - Modify: `packages/builder/src/brain.ts` (import `Bundle, PATHS, validateBundle` and types from `@uniqent/core/pure`), `detect.ts` (use `projectTargets`), `index.ts` (export `scrub.js`, `detect-markers.js`), `package.json` (`exports["./brain"]`)
-- Modify: `eslint.config.js` (pure file globs), `packages/builder/test/pure-entries.test.ts` (new entries)
+- Modify: `packages/cli/src/targets.ts` (`nextStep` moves to `detect-markers.ts`; `targets.ts` keeps `export { nextStep } from '@uniqent/builder'` so `run.ts` and `test/targets.test.ts` are unchanged)
+- Modify: `eslint.config.js` (pure file globs), `packages/builder/test/pure-entries.test.ts` (new entries), `pnpm-lock.yaml`
 - Test: `packages/adapter-sdk/test/pure.test.ts`, `packages/adapter-sdk/test/node-io.test.ts`, `packages/builder/test/scrub.test.ts`
 
 **Interfaces:**
@@ -237,13 +238,20 @@ export interface PureAdapter {
 }
 
 /** The adapter kept asking for new files (OpenClaw needs 2 rounds: openclaw.json, then its workspace). */
-export class InputsUnsettledError extends Error {}
+export class InputsUnsettledError extends Error {
+  constructor(readonly rounds: number) {
+    super(`adapter inputs did not settle after ${rounds} read rounds`);
+    this.name = 'InputsUnsettledError';
+  }
+}
 export function gatherInputs(
   next: (read: ReadFiles) => InputRequest,
   readFn: ReadFn,
 ): Promise<ReadFiles>;
 /** UTF-8 text of `root/path` (Node `readFile(…, 'utf8')` semantics: invalid bytes → U+FFFD), or undefined if absent. */
 export function readText(read: ReadFiles, root: string, path: string): string | undefined;
+/** Byte-for-byte equality without `Buffer`: every adapter's "replaces an existing, different file" check. */
+export function sameBytes(a: Uint8Array, b: Uint8Array): boolean;
 
 // pure-paths.ts
 export class PathEscapeError extends Error {} // moved verbatim from paths.ts
@@ -255,7 +263,10 @@ export function resolvePosix(base: string, p: string): string;
 /** Root-relative path when the write lies under `root`, else the absolute path (what the CLI prints today). */
 export function displayPath(root: string, ref: FileRef): string;
 
-// credential-refs.ts — requiredCredentialRefs moved verbatim from paths.ts
+// credentials.ts (existing file, now on the pure surface) — requiredCredentialRefs moved verbatim
+// from paths.ts, next to the existing CredentialScopeError, assertMcpCredentialScope,
+// EnvReferenceError and assertNoEnvReferences. pure.ts re-exports all of them, so the pure
+// adapters (Tasks 3–5) import the scope/env-reference checks from '@uniqent/adapter-sdk/pure'.
 ```
 
 - Produces (Node only, from `@uniqent/adapter-sdk` `.`):
@@ -264,6 +275,7 @@ export function displayPath(root: string, ref: FileRef): string;
 export const readFromDisk: ReadFn;
 export function writeToDisk(writes: OutputWrite[]): Promise<void>;
 export function nodeContext(root: string): TargetContext; // { root: resolve(root), home: homedir(), cwd: process.cwd() }
+/** `export()` = pure capture → scrubPrivateMemory (the CLI never exports episodic/personal memory). */
 export function nodeAdapter(pure: PureAdapter, detect: Adapter['detect']): Adapter;
 ```
 
@@ -274,7 +286,10 @@ export interface ScrubReport {
   episodic: number;
   personal: number;
 }
-/** Drop episodic and `visibility: "personal"` memory — capture never carries a colleague's private notes. */
+/**
+ * Drop episodic and `visibility: "personal"` memory — capture never carries a colleague's private
+ * notes. Returns the input bundle itself (same bytes) when there is nothing to remove.
+ */
 export function scrubPrivateMemory(bundle: Bundle): { bundle: Bundle; removed: ScrubReport };
 
 export type TargetId = 'claude-code' | 'openclaw' | 'hermes'; // moved from detect.ts, re-exported there
@@ -293,6 +308,8 @@ export const PROJECT_MARKERS: readonly [
 export type ProjectMarker = (typeof PROJECT_MARKERS)[number];
 /** Frameworks whose markers are `present` in `dir`; each installs into `dir`. */
 export function projectTargets(dir: string, present: ReadonlySet<ProjectMarker>): TargetGuess[];
+/** What to do after a successful install into `root` — moved verbatim from packages/cli/src/targets.ts (CLI + Studio share the wording). */
+export function nextStep(target: string, root: string): string;
 ```
 
 - [ ] **Step 1: Write the failing tests**
@@ -308,6 +325,7 @@ import {
   InputsUnsettledError,
   PathEscapeError,
   resolvePosix,
+  sameBytes,
   type ReadFiles,
 } from '../src/pure';
 
@@ -322,6 +340,11 @@ describe('pure paths', () => {
     expect(joinPath('/h/.hermes/', 'SOUL.md')).toBe('/h/.hermes/SOUL.md');
     expect(resolvePosix('/cwd', 'ws/../ws2')).toBe('/cwd/ws2');
     expect(resolvePosix('/cwd', '/abs/./w')).toBe('/abs/w');
+  });
+  it('compares bytes', () => {
+    expect(sameBytes(new Uint8Array([1, 2]), new Uint8Array([1, 2]))).toBe(true);
+    expect(sameBytes(new Uint8Array([1, 2]), new Uint8Array([1, 3]))).toBe(false);
+    expect(sameBytes(new Uint8Array([1]), new Uint8Array([1, 0]))).toBe(false);
   });
 });
 
@@ -364,7 +387,7 @@ describe('gatherInputs', () => {
 
 `packages/adapter-sdk/test/node-io.test.ts` (real temp dirs): `readFromDisk` omits absent files, rethrows non-ENOENT errors (read a directory path → EISDIR), finds `SKILL.md` at any depth while skipping `.git`, a `skipDirs` entry and a symlinked dir; `writeToDisk` creates parents, writes `OWNER_ONLY` as 0600 and tightens an existing 0644 file, and leaves an existing 0640 file's mode for `mode: null`.
 
-`packages/builder/test/scrub.test.ts`: a bundle with one shareable fact, one `personal` fact and two episodic items → `removed` is `{ episodic: 2, personal: 1 }`, the result has exactly the shareable fact and still validates.
+`packages/builder/test/scrub.test.ts`: a bundle with one shareable fact, one `personal` fact and two episodic items → `removed` is `{ episodic: 2, personal: 1 }`, the result has exactly the shareable fact and still validates; a bundle with only shareable facts → `removed` is `{ episodic: 0, personal: 0 }` and the returned `bundle` is the input object (`toBe`).
 
 - [ ] **Step 2: Run to verify they fail**
 
@@ -400,7 +423,7 @@ export async function gatherInputs(
 }
 ```
 
-`readText` uses a module-level `new TextDecoder('utf-8')` (non-fatal, same replacement behaviour as Node's `'utf8'`). `confineRelative` splits on `/`, folds `.`/`..` on a stack and throws `PathEscapeError(base, path)` (same message as today) when the stack would go below zero; `joinPath` trims trailing `/` from `dir`.
+`readText` uses a module-level `new TextDecoder('utf-8')` (non-fatal, same replacement behaviour as Node's `'utf8'`). `sameBytes` compares lengths, then every byte. `pure.ts` re-exports `io.js`, `pure-paths.js` and `credentials.js`. `confineRelative` splits on `/`, folds `.`/`..` on a stack and throws `PathEscapeError(base, path)` (same message as today) when the stack would go below zero; `joinPath` trims trailing `/` from `dir`.
 
 - [ ] **Step 4: Implement the Node wrapper**
 
@@ -428,19 +451,22 @@ export function nodeAdapter(pure: PureAdapter, detect: Adapter['detect']): Adapt
     async export({ root }) {
       const ctx = nodeContext(root);
       const read = await gatherInputs((r) => pure.captureInputs(r, ctx), readFromDisk);
-      return pure.capture(read, ctx);
+      // Pure capture keeps every memory item it finds; the export never carries private ones.
+      return scrubPrivateMemory(pure.capture(read, ctx)).bundle;
     },
   };
 }
 ```
+
+`scrubPrivateMemory` is imported from `@uniqent/builder/brain`. Today only OpenClaw capture can meet episodic items (it skipped them inline; Task 5 moves that to this scrub), so `uniqent export` output is unchanged for all three targets.
 
 `writeToDisk` keeps today's semantics exactly (plain `writeFile`, not atomic — the CLI must stay byte- and mode-identical): `mkdir(dirname, { recursive: true })`, `writeFile(target, bytes)` for `mode: null`; `writeFile(target, bytes, { mode: 0o600 })` + `chmod(target, 0o600)` for `OWNER_ONLY`. `readFromDisk` reads each file (`ENOENT` → absent, anything else rethrown) and walks finds with `readdir(..., { withFileTypes: true })` (Dirents never follow symlinks; skip names starting with `.` and `skipDirs`; `ENOENT` on the start dir → none).
 
 - [ ] **Step 5: Builder pure entry, scrub, detect markers**
 
 - `brain.ts`: change `import { Bundle, PATHS, validateBundle } from '@uniqent/core'` (and the type import) to `@uniqent/core/pure`.
-- `scrub.ts`: `Brain.fromBundle(bundle)`, `removeMemory` every item with `kind === 'episodic'` or `visibility === 'personal'`, count both, `toBundle()`.
-- `detect-markers.ts`: move `TargetId`/`TargetGuess` here; `projectTargets` holds `detectProject`'s three rules verbatim. `detect.ts` probes each `PROJECT_MARKERS` entry with its `exists()` and calls `projectTargets(cwd, present)`; `detectTarget`'s signature and behaviour are unchanged (`packages/builder/test/detect.test.ts` must pass untouched).
+- `scrub.ts`: count the items with `kind === 'episodic'` or `visibility === 'personal'`; none → return `{ bundle, removed }` with the input bundle; else `Brain.fromBundle(bundle)`, `removeMemory` each, `toBundle()`.
+- `detect-markers.ts`: move `TargetId`/`TargetGuess` here; `projectTargets` holds `detectProject`'s three rules verbatim; `nextStep` moves here verbatim from `packages/cli/src/targets.ts`, which keeps `export { nextStep } from '@uniqent/builder';` (`packages/cli/test/targets.test.ts` passes untouched). `detect.ts` probes each `PROJECT_MARKERS` entry with its `exists()` and calls `projectTargets(cwd, present)`; `detectTarget`'s signature and behaviour are unchanged (`packages/builder/test/detect.test.ts` must pass untouched).
 - `brain-entry.ts`: `export * from './brain.js'; './derive.js'; './catalog/index.js'; './scrub.js'; './detect-markers.js'`. `package.json` adds `"./brain": { "types": "./dist/brain-entry.d.ts", "default": "./dist/brain-entry.js" }`.
 
 - [ ] **Step 6: Extend the import-graph guard and ESLint**
@@ -450,21 +476,21 @@ export function nodeAdapter(pure: PureAdapter, detect: Adapter['detect']): Adapt
 `eslint.config.js` pure block `files` adds:
 
 ```js
-'packages/adapter-sdk/src/{pure,pure-paths,credential-refs,io,types}.ts',
+'packages/adapter-sdk/src/{pure,pure-paths,credentials,io,types}.ts',
 'packages/builder/src/{brain,brain-entry,derive,scrub,detect-markers}.ts',
 'packages/builder/src/catalog/**/*.ts',
 ```
 
 - [ ] **Step 7: Run tests and gates**
 
-Run: `pnpm build && pnpm vitest run packages/adapter-sdk packages/builder && pnpm lint`, then the gates.
-Expected: PASS, including the unchanged conformance test, `detect.test.ts` and the Task 1 golden test.
+Run: `pnpm install && pnpm build && pnpm vitest run packages/adapter-sdk packages/builder packages/cli/test/targets.test.ts && pnpm lint`, then the gates.
+Expected: PASS, including the unchanged conformance test, `detect.test.ts`, `targets.test.ts` and the Task 1 golden test.
 
 - [ ] **Step 8: Commit**
 
 ```bash
 git add -A
-git commit -m "feat(adapter-sdk): pure adapter contract with a Node read/translate/write wrapper" -m "PureAdapter (inputs/plan/translate/captureInputs/capture) over FileRefs and a gatherInputs fixpoint, browser-safe at @uniqent/adapter-sdk/pure; nodeAdapter() keeps the Adapter interface and the CLI's write semantics. @uniqent/builder/brain exposes Brain, scrubPrivateMemory and the project-marker rules without Node APIs." -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
+git commit -m "feat(adapter-sdk): pure adapter contract with a Node read/translate/write wrapper" -m "PureAdapter (inputs/plan/translate/captureInputs/capture) over FileRefs and a gatherInputs fixpoint, browser-safe at @uniqent/adapter-sdk/pure; nodeAdapter() keeps the Adapter interface and the CLI's write semantics. @uniqent/builder/brain exposes Brain, scrubPrivateMemory, the project-marker rules and nextStep without Node APIs." -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
 ---
@@ -482,7 +508,7 @@ git commit -m "feat(adapter-sdk): pure adapter contract with a Node read/transla
 **Interfaces:**
 
 - Consumes: Task 2 contract.
-- Produces `@uniqent/adapter-hermes/pure`: `hermesPure: PureAdapter`, plus `MissingCredentialError` (moved from `index.ts`), `UndeclaredCredentialError`, `EnvKeyConflictError`, `DuplicateSkillError`, `HermesConfigError`, `skillTarget(root: string, path: string): string` (now `joinPath(root, 'skills/' + confineRelative(…))`; same results as today, test at `adapter.test.ts:217` unchanged). `index.ts` re-exports the same names it exports today.
+- Produces `@uniqent/adapter-hermes/pure`: `hermesPure: PureAdapter`, plus `MissingCredentialError` (moved from `index.ts`), `UndeclaredCredentialError`, `EnvKeyConflictError`, `DuplicateSkillError`, `HermesConfigError`, `skillTarget(root: string, path: string): string` (now `joinPath(root, 'skills/' + confineRelative(…))`; same results as today, the `adapter.test.ts` test "rejects a skill path that escapes skills/" unchanged). `index.ts` re-exports the same names it exports today.
 
 - [ ] **Step 1: Write the failing pure test**
 
@@ -496,14 +522,24 @@ const read = new Map([
   ['/h/.env', enc.encode('EXISTING=1\n')],
 ]);
 
-it('asks for the five HERMES_HOME files and nothing else', () => {
+it('asks for the five HERMES_HOME files plus every bundle skill target, nothing else', () => {
   expect(hermesPure.inputs(bundle, new Map(), ctx).files.map((f) => f.path)).toEqual([
     'SOUL.md',
     'memories/MEMORY.md',
     'memories/USER.md',
     'config.yaml',
     '.env',
+    ...bundle.list().filter((p) => p.startsWith('skills/')),
   ]);
+});
+it('reports replacing an existing, different skill file', () => {
+  const skill = bundle.list().find((p) => p.startsWith('skills/'))!;
+  const withSkill = new Map([...read, [`/h/${skill}`, enc.encode('my own skill\n')]]);
+  expect(hermesPure.plan(bundle, withSkill, ctx).lossiness).toContainEqual({
+    component: `skill ${skill}`,
+    action: 'transformed',
+    issue: 'replaces an existing, different skill file.',
+  });
 });
 it('writes .env owner-only with the resolved value and keeps other lines', () => {
   const t = hermesPure.translate(bundle, read, resolved, ctx);
@@ -532,15 +568,17 @@ Expected: FAIL — `./pure` missing.
 
 - [ ] **Step 3: Make `translate.ts` pure**
 
-- Imports: `Bundle` from `@uniqent/core/pure`; contract + `confineRelative`, `joinPath`, `readText`, `OWNER_ONLY`, `requiredCredentialRefs` from `@uniqent/adapter-sdk/pure`.
-- `homeFrom(read, ctx): HermesHome` = `readText` of the five files.
-- `inputs(_bundle, _read, ctx)` → the five `FileRef`s at `ctx.root`.
-- `planInstall(bundle, read, ctx)` → `draft(bundle, homeFrom(read, ctx), ctx.root).plan`.
-- `translate(bundle, read, resolved, ctx)`: missing-credential check (moved from `index.ts`), writes = draft files (`bytes` = `TextEncoder` of string content, raw bytes for skill files, `mode: null`) then, when `env.length > 0`, `.env` = `mergeEnv(home.env, …)` with `mode: OWNER_ONLY`; `notes` = the lossiness lines exactly as `apply()` builds them today.
+- Imports: `Bundle` from `@uniqent/core/pure`; contract + `confineRelative`, `joinPath`, `readText`, `sameBytes`, `OWNER_ONLY`, `requiredCredentialRefs`, `assertNoEnvReferences`, `assertMcpCredentialScope` from `@uniqent/adapter-sdk/pure`.
+- The local `Translation` interface (plan/files/env) is renamed `Draft` (the sdk's `Translation` is the pure result type).
+- `homeFrom(bundle, read, ctx): HermesHome` = `readText` of the five files, plus `skills` = `read.get(joinPath(ctx.root, path))` for every bundle `skills/…` path that was read (today's `readHome`).
+- `inputs(bundle, _read, ctx)` → the five `FileRef`s at `ctx.root`, then one `FileRef` per bundle `skills/…` path from `bundle.list()` (target via `confineRelative`, so a hostile path throws `PathEscapeError` before anything is read).
+- `draft`: the skill overwrite check `!Buffer.from(prior).equals(Buffer.from(bytes))` becomes `!sameBytes(prior, bytes)`.
+- `planInstall(bundle, read, ctx)` → `draft(bundle, homeFrom(bundle, read, ctx), ctx.root).plan`.
+- `translate(bundle, read, resolved, ctx)`: missing-credential check (moved from `index.ts`), writes = draft files (`bytes` = `TextEncoder` of string content, raw bytes for skill files, `mode: null`) then, when `env.length > 0`, `.env` = `mergeEnv(home.env, …)` with `mode: OWNER_ONLY`; `notes` = the lossiness lines exactly as `apply()` builds them today, including the `transformed: .env — replaces your existing, different value of …` line when `mergeEnv` replaced a value.
 
 - [ ] **Step 4: `capture.ts` and `pure.ts`**
 
-`captureInputs(_read, ctx)` → files `SOUL.md`, `memories/MEMORY.md`, `memories/USER.md`, `config.yaml` + find `{ root: ctx.root, dir: 'skills', fileName: 'SKILL.md', skipDirs: ['venv', 'node_modules', 'site-packages', '__pycache__'] }`. `capture(read, ctx)` is `exportHermes` with reads replaced by `readText`; skill dirs = found keys under `skills/` ending in `/SKILL.md`, minus any whose ancestor dir also holds a `SKILL.md`, sorted (same order `findSkillDirs` produced); `DuplicateSkillError` names root-relative dirs as today.
+`captureInputs(_read, ctx)` → files `SOUL.md`, `memories/MEMORY.md`, `memories/USER.md`, `config.yaml` + find `{ root: ctx.root, dir: 'skills', fileName: 'SKILL.md', skipDirs: ['venv', 'node_modules', 'site-packages', '__pycache__'] }`. `capture(read, ctx)` is `exportHermes` with reads replaced by `readText` and `Brain` from `@uniqent/builder/brain`; skill dirs = found keys under `skills/` ending in `/SKILL.md`, minus any whose ancestor dir also holds a `SKILL.md`, sorted (same order `findSkillDirs` produced); `DuplicateSkillError` names root-relative dirs as today.
 
 `pure.ts`:
 
@@ -590,20 +628,21 @@ git commit -m "refactor(adapter-hermes): pure translate/capture behind @uniqent/
 
 **Files:**
 
-- Create: `packages/adapter-claude-code/src/translate.ts` (from `index.ts`'s `skillTargets`, `replacedServerIds`, `computeLossiness`, `computePlan`, `apply` body), `capture.ts` (from `export.ts`), `pure.ts`
-- Modify: `index.ts` (Node wrapper + `detect`), `mcp.ts` (`resolvePlaceholders` from `@uniqent/core/pure`), `agents-md.ts` (`stripMemoryMarkup` from `@uniqent/builder/memory`), `package.json`, `eslint.config.js`, `pure-entries.test.ts`
+- Create: `packages/adapter-claude-code/src/translate.ts` (from `index.ts`'s `skillTargets`, `replacedSkillFiles`, `readMcpJson`, `replacedServerIds`, `computeLossiness`, `computePlan`, `apply` body), `capture.ts` (from `export.ts`), `pure.ts`
+- Modify: `index.ts` (Node wrapper + `detect`), `mcp.ts` (`resolvePlaceholders` from `@uniqent/core/pure`; `assertMcpCredentialScope` and the `ResolvedCredentials` type from `@uniqent/adapter-sdk/pure`), `agents-md.ts` (`stripMemoryMarkup` from `@uniqent/builder/memory`), `package.json`, `eslint.config.js`, `pure-entries.test.ts`
 - Delete: `packages/adapter-claude-code/src/export.ts`
 - Test: `packages/adapter-claude-code/test/translate.test.ts`; `adapter.test.ts` unchanged
 
 **Interfaces:**
 
-- Produces `@uniqent/adapter-claude-code/pure`: `claudeCodePure: PureAdapter` and the error classes/constants `index.ts` exports today (`McpConfigParseError`, `CredentialScopeError`, `ManagedSectionError`, `MANAGED_BEGIN`, `MANAGED_END`, `toClaudeMcpEntry`).
+- Produces `@uniqent/adapter-claude-code/pure`: `claudeCodePure: PureAdapter` and the error classes/constants `index.ts` exports today (`McpConfigParseError`, `MissingCredentialError`, `CredentialScopeError` (re-exported from `@uniqent/adapter-sdk/pure`), `ManagedSectionError`, `MANAGED_BEGIN`, `MANAGED_END`, `toClaudeMcpEntry`).
 
 - [ ] **Step 1: Write the failing pure test**
 
 `translate.test.ts` (in-memory `ReadFiles`, `ctx = { root: '/p', … }`):
 
-- `inputs` asks exactly `AGENTS.md`, `CLAUDE.md`, `.mcp.json`.
+- `inputs` asks exactly `AGENTS.md`, `CLAUDE.md`, `.mcp.json`, then `.claude/skills/<rest>` for every bundle `skills/<rest>` path (from `bundle.list()`).
+- A different existing `.claude/skills/<name>/SKILL.md` in `read` is reported once as `{ component: 'skill .claude/skills/<name>/SKILL.md', action: 'transformed', issue: 'replaces an existing, different skill file.' }`; an identical one is not.
 - With `CLAUDE.md` present, `translate` writes `CLAUDE.md` with the `@AGENTS.md` managed import and the note "CLAUDE.md exists, so Claude Code would ignore AGENTS.md; …".
 - `.mcp.json` gets `mode: 0o600` and the do-not-commit note only when it inlines a credential; `mode: null` for a bundle whose servers need none.
 - An unparseable `.mcp.json` throws `McpConfigParseError` naming `/p/.mcp.json`.
@@ -616,11 +655,13 @@ Expected: FAIL.
 
 - [ ] **Step 3: Move the logic, unchanged except for I/O**
 
+- Imports: `Bundle` from `@uniqent/core/pure`; contract + `confineRelative`, `joinPath`, `readText`, `sameBytes`, `OWNER_ONLY`, `requiredCredentialRefs`, `assertNoEnvReferences` from `@uniqent/adapter-sdk/pure`.
 - `existsSync(resolveInside(root, X))` → `read.has(joinPath(ctx.root, X))`; `readIfExists` → `readText`.
-- Skill targets: `confineRelative('.claude/skills', rest)` → `FileRef { root: ctx.root, path: '.claude/skills/' + normalized }` (the `PathEscapeError` hardening test at `adapter.test.ts:207` stays green because `plan` and `translate` both compute targets before any write).
+- Skill targets: computed from `bundle.list()` (as today), `confineRelative('.claude/skills', rest)` → `FileRef { root: ctx.root, path: '.claude/skills/' + normalized }`. `inputs` computes them too, so the `adapter.test.ts` hardening test "rejects a skill path that escapes the skills dir, before writing anything" (whose hostile bundle overrides only `list`/`get`) throws `PathEscapeError` before anything is read or written.
+- `replacedSkillFiles`: `existsSync` + `readFile` + `Buffer.equals` → `read.get(joinPath(ctx.root, target.path))` + `!sameBytes(prior, bytes)`.
 - Error file names stay absolute: `joinPath(ctx.root, 'AGENTS.md')` etc. (same strings as `resolveInside` produced for an absolute root).
 - Write order and notes exactly as `apply()` today: skills, `AGENTS.md`, `CLAUDE.md`, `.mcp.json`, then lossiness notes. `.mcp.json` `mode` = `inlinesSecrets ? OWNER_ONLY : null` (today: `{ mode: 0o666 }` on create, untouched mode otherwise; plus `chmod 0600` when inlining — `writeToDisk` reproduces both).
-- `capture.ts`: `captureInputs` = the three files + find `{ dir: '.claude/skills', fileName: 'SKILL.md', skipDirs: [] }`; `capture` = `exportClaudeCode` over `readText`, skill names from found keys matching `^\.claude/skills/([^/]+)/SKILL\.md$`, sorted.
+- `capture.ts`: `captureInputs` = the three files + find `{ dir: '.claude/skills', fileName: 'SKILL.md', skipDirs: [] }`; `capture` = `exportClaudeCode` over `readText` (`Brain` from `@uniqent/builder/brain`, `isLikelySecretValue` from `@uniqent/core/pure`), skill names from found keys matching `^\.claude/skills/([^/]+)/SKILL\.md$`, sorted.
 
 Note: today's apply always ran `mkdir(root, { recursive: true })`; with the wrapper an install that writes nothing no longer creates an empty root. No test or golden depends on it.
 
@@ -689,7 +730,7 @@ it('needs openclaw.json before it knows the workspace (two rounds)', async () =>
 });
 ```
 
-Plus: the default workspace yields refs rooted at `ctx.root` with `workspace/` paths; a configured relative workspace resolves against `ctx.cwd`; a different existing skill file is reported as `transformed` (byte compare without `Buffer`).
+Plus: the default workspace yields refs rooted at `ctx.root` with `workspace/` paths; a configured relative workspace resolves against `ctx.cwd`; a different existing skill file is reported as `transformed` (byte compare with `sameBytes`); an existing `.env` holding a different `GITHUB_PAT` makes `translate`'s notes contain `transformed: .env — replaces your existing, different value of GITHUB_PAT.` right before the `credentials stored in .env (mode 0600) as …` line; `capture` of a workspace `MEMORY.md` holding one fact and one episodic note returns both (`memoryFacts()` ids `m1…`, `memoryEpisodic()` ids `e1…`).
 
 - [ ] **Step 2: Run to verify it fails**
 
@@ -699,10 +740,11 @@ Expected: FAIL.
 - [ ] **Step 3: Move the logic**
 
 - `inputs(bundle, read, ctx)`: `openclaw.json` and `.env` at `ctx.root`, plus `SOUL.md`/`AGENTS.md`/`USER.md`/`MEMORY.md` and every bundle `skills/…` path under the workspace computed **from what has been read so far** (absent config → default workspace). `gatherInputs` re-asks after the first round and settles in round 3.
-- `draft` = `draftInstall` over `readText`/`read.get`; `Buffer.from(prior).equals(Buffer.from(bytes))` → a local `sameBytes(a: Uint8Array, b: Uint8Array): boolean`.
+- Imports: `Bundle` from `@uniqent/core/pure`; contract + `confineRelative`, `joinPath`, `resolvePosix`, `displayPath`, `readText`, `sameBytes`, `OWNER_ONLY`, `requiredCredentialRefs`, `assertNoEnvReferences`, `assertMcpCredentialScope` from `@uniqent/adapter-sdk/pure`; `stripMemoryMarkup`, `parseMemoryMarkdown`, `parseProfile` from `@uniqent/builder/memory`; `Brain` from `@uniqent/builder/brain`.
+- `draft` = `draftInstall` over `readText`/`read.get`; `Buffer.from(prior).equals(Buffer.from(bytes))` → `!sameBytes(prior, bytes)` (from `@uniqent/adapter-sdk/pure`).
 - `FileWrite.display` disappears: plan writes use `displayPath(ctx.root, ref)` (identical strings to today's `displayPath(root, abs)`); `written` comes from `nodeAdapter`.
-- `translate` writes workspace/config files with `mode: null`, then `.env` (`mergeEnvFile`) with `mode: OWNER_ONLY` when there are values; notes = lossiness lines + the "credentials stored in .env (mode 0600) as …" line, in today's order.
-- `capture.ts`: `captureInputs(read, ctx)` = `openclaw.json` + workspace `SOUL.md`, `IDENTITY.md`, `AGENTS.md`, `USER.md`, `MEMORY.md` + find `{ dir: <ws>/skills, fileName: 'SKILL.md', skipDirs: [] }` (fixpoint like install); `capture` = `exportOpenClaw` with depth-1 skills sorted by name (today: `names.sort()`).
+- `translate` writes workspace/config files with `mode: null`, then `.env` (`mergeEnvFile`) with `mode: OWNER_ONLY` when there are values; notes, in today's order = the lossiness lines, then `transformed: .env — replaces your existing, different value of <names>.` when `mergeEnvFile` replaced a value, then the `credentials stored in .env (mode 0600) as …` line.
+- `capture.ts`: `captureInputs(read, ctx)` = `openclaw.json` + workspace `SOUL.md`, `IDENTITY.md`, `AGENTS.md`, `USER.md`, `MEMORY.md` + find `{ dir: <ws>/skills, fileName: 'SKILL.md', skipDirs: [] }` (fixpoint like install); `capture` = `exportOpenClaw` with depth-1 skills sorted by name (today: `names.sort()`). Episodic `MEMORY.md` items are **kept** (no more inline `continue`) with ids `e1, e2, …` from their own counter, so fact ids stay `m1…` exactly as today; `nodeAdapter.export` (Task 2) and Studio's capture (Task 10) drop and count them with `scrubPrivateMemory`, so `uniqent export` output is unchanged.
 
 - [ ] **Step 4: `pure.ts`, `index.ts`, guards**
 
@@ -711,13 +753,13 @@ As in Tasks 3–4. ESLint globs add `'packages/adapter-openclaw/src/{pure,transl
 - [ ] **Step 5: Run tests and gates**
 
 Run: `pnpm build && pnpm vitest run packages/adapter-openclaw packages/cli apps/studio/test/install-fixtures.test.ts packages/builder/test/pure-entries.test.ts`, then the gates.
-Expected: PASS (`openclaw.json` golden unchanged; `writes into agents.defaults.workspace when configured` still passes).
+Expected: PASS (`openclaw.json` golden unchanged, including `captured`; `writes into agents.defaults.workspace when configured` and the `.env` "different value" note test still pass).
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git add -A
-git commit -m "refactor(adapter-openclaw): pure translate/capture behind @uniqent/adapter-openclaw/pure" -m "inputs() is a two-round fixpoint (openclaw.json decides the workspace); workspace refs outside the state dir carry their own root. CLI output byte-identical." -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
+git commit -m "refactor(adapter-openclaw): pure translate/capture behind @uniqent/adapter-openclaw/pure" -m "inputs() is a two-round fixpoint (openclaw.json decides the workspace); workspace refs outside the state dir carry their own root. Capture keeps episodic items for the shared scrub to count. CLI output byte-identical." -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
 ---
@@ -772,18 +814,19 @@ pub fn framework_homes(env: &HomeEnv) -> Vec<(&'static str, PathBuf)>;
 pub fn allowed_root(root: &str, granted: &[PathBuf], homes: &[PathBuf]) -> Result<PathBuf, String>;
 ```
 
-- Produces (Tauri commands, args camelCase on the JS side):
-  - `read_inputs(root: String, files: Vec<String>, finds: Vec<FindRequest>) -> Result<Vec<ReadFile>, String>`
-  - `write_outputs(root: String, writes: Vec<OutputWrite>) -> Result<Vec<String>, String>`
+- Produces (Tauri commands, args camelCase on the JS side; the two I/O commands are `async` like `read_vault`, so file work runs off the main thread):
+  - `async read_inputs(root: String, files: Vec<String>, finds: Vec<FindRequest>) -> Result<Vec<ReadFile>, String>`
+  - `async write_outputs(root: String, writes: Vec<OutputWrite>) -> Result<Vec<String>, String>`
   - `framework_homes() -> Result<Value /* { home, targets: [{ id, root, present }], claudeCodeUser: bool } */, String>` — hermes present = root is a dir; openclaw present = `root/openclaw.json` exists; `claudeCodeUser` = `~/.claude` exists
   - `folder_markers(dir: String, names: Vec<String>) -> Result<Vec<String>, String>` — only for a granted `dir`; each name must be a single normal component; returns the names that exist
 
 - [ ] **Step 1: Write the failing Rust tests**
 
-`apps/studio/src-tauri/tests/fs_io_test.rs` (all with `tempfile::tempdir()`; unix-only tests behind `#[cfg(unix)]`):
+`apps/studio/src-tauri/tests/fs_io_test.rs` (all with `tempfile::tempdir()`; unix-only imports, helpers and tests behind `#[cfg(unix)]` so the file compiles on every platform):
 
 ```rust
 use std::fs;
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use base64::Engine;
 use uniqent_studio::fs_io::*;
@@ -792,6 +835,7 @@ fn b64(s: &[u8]) -> String { base64::engine::general_purpose::STANDARD.encode(s)
 fn w(path: &str, body: &str, mode: Option<u32>) -> OutputWrite {
     OutputWrite { path: path.into(), bytes_base64: b64(body.as_bytes()), mode }
 }
+#[cfg(unix)]
 fn mode_of(p: &std::path::Path) -> u32 { fs::metadata(p).unwrap().permissions().mode() & 0o777 }
 
 #[test]
@@ -960,10 +1004,14 @@ fn write_one(root: &Path, comps: &[String], bytes: &[u8], mode: Option<u32>) -> 
             .map_err(|e| format!("cannot create a temp file in {}: {e}", parent.display()))?;
         f.write_all(bytes).and_then(|_| f.sync_all())
             .map_err(|e| format!("cannot write {}: {e}", target.display()))?;
-        if mode == Some(OWNER_ONLY) {
+        let set_mode = if mode == Some(OWNER_ONLY) {
             std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(OWNER_ONLY))
-        } else if let Some(p) = existing { std::fs::set_permissions(&tmp, p) } else { Ok(()) }
-            .map_err(|e| format!("cannot set the mode of {}: {e}", target.display()))?;
+        } else if let Some(p) = existing {
+            std::fs::set_permissions(&tmp, p)
+        } else {
+            Ok(())
+        };
+        set_mode.map_err(|e| format!("cannot set the mode of {}: {e}", target.display()))?;
         std::fs::rename(&tmp, &target).map_err(|e| format!("cannot replace {}: {e}", target.display()))
     })();
     if result.is_err() { let _ = std::fs::remove_file(&tmp); }
@@ -988,15 +1036,16 @@ fn allowed(s: &State<AppState>, root: &str) -> Result<PathBuf, String> {
     crate::fs_io::allowed_root(root, &s.granted_dirs.lock().unwrap(), &homes)
 }
 
+/// Async so a large read/write runs off the main thread (same reason as `read_vault`).
 #[tauri::command]
-pub fn read_inputs(s: State<AppState>, root: String, files: Vec<String>, finds: Vec<crate::fs_io::FindRequest>)
+pub async fn read_inputs(s: State<'_, AppState>, root: String, files: Vec<String>, finds: Vec<crate::fs_io::FindRequest>)
     -> Result<Vec<crate::fs_io::ReadFile>, String> {
     let root = allowed(&s, &root)?;
     crate::fs_io::read_inputs(&root, &files, &finds, &crate::fs_io::DEFAULT_IO_LIMITS)
 }
 
 #[tauri::command]
-pub fn write_outputs(s: State<AppState>, root: String, writes: Vec<crate::fs_io::OutputWrite>)
+pub async fn write_outputs(s: State<'_, AppState>, root: String, writes: Vec<crate::fs_io::OutputWrite>)
     -> Result<Vec<String>, String> {
     let root = allowed(&s, &root)?;
     crate::fs_io::write_outputs(&root, &writes)
@@ -1029,7 +1078,7 @@ git commit -m "feat(studio-native): confined read_inputs/write_outputs and frame
 
 **Interfaces:**
 
-- `InstallFixture` gains:
+- `InstallFixture` gains two keys, declared and emitted **between `tree` and `captured`** (JSON key order = insertion order), so the regenerated files only add lines:
 
 ```ts
   /** What the pure adapter asked to read (root-relative) and the bytes it got, on the seed. */
@@ -1098,7 +1147,7 @@ Expected: FAIL — fixtures have no `inputs`/`writes` keys.
 
 - [ ] **Step 2: Emit `inputs` and `writes`**
 
-In `buildInstallFixture`, on a **fresh** copy of the seed (before the CLI run): pick the pure adapter (`claudeCodePure`/`hermesPure`/`openClawPure`), `ctx = nodeContext(root)`, record every `readFromDisk` request while running `gatherInputs((r) => pure.inputs(bundle, r, ctx), recordingReader)`, then `pure.translate(bundle, read, credentials, ctx)`. Throw if any request or write has `root !== ctx.root` (the fixture is single-root by construction — the default OpenClaw workspace lies under the state dir). Store root-relative `files`, `finds` (`dir`, `fileName`, `skipDirs`), `read` (path → base64) and `writes` (`path`, base64, `mode`).
+In `buildInstallFixture`, on a **fresh** copy of the seed (before the CLI run): pick the pure adapter (`claudeCodePure`/`hermesPure`/`openClawPure`), `ctx = nodeContext(root)`, record every `readFromDisk` request while running `gatherInputs((r) => pure.inputs(bundle, r, ctx), recordingReader)`, then `pure.translate(bundle, read, credentials, ctx)`. Throw if any request or write has `root !== ctx.root` (the fixture is single-root by construction — the default OpenClaw workspace lies under the state dir). Store root-relative `files`, `finds` (`dir`, `fileName`, `skipDirs`), `read` (path → base64) and `writes` (`path`, base64, `mode`). Build the returned object as `{ target, seed, credentials, tree, inputs, writes, captured }` in that order: appending after `captured` would turn its closing `}` into `},`, and the Step 4 check would see a removed line.
 
 - [ ] **Step 3: Extend the vitest guard**
 
@@ -1107,7 +1156,7 @@ The existing `toEqual(committed)` now also covers `inputs` and `writes`. Add one
 - [ ] **Step 4: Regenerate and review**
 
 Run: `pnpm build && pnpm --filter @uniqent/studio fixtures:install && git --no-pager diff --stat apps/studio/fixtures/install`
-Expected: only `inputs` and `writes` keys added; `seed`, `credentials`, `tree`, `captured` unchanged (verify with `git --no-pager diff apps/studio/fixtures/install | grep '^-' | grep -v '^---'` → empty).
+Expected: only `inputs` and `writes` keys added (between `tree` and `captured`); `seed`, `credentials`, `tree`, `captured` unchanged (verify with `git --no-pager diff apps/studio/fixtures/install | grep '^-' | grep -v '^---'` → empty).
 
 - [ ] **Step 5: Run both sides and the gates**
 
@@ -1140,9 +1189,9 @@ git commit -m "test(studio): Studio's install path and the CLI write byte-identi
 - Produces (Tauri commands):
   - `bundle_files() -> Result<Vec<BundleFile>, String>`
   - `load_bundle_files(files: Vec<BundleFile>) -> Result<Value /* { state, dropped } */, String>` — used by capture; `Bundle::from_files` enforces path rules.
-  - `open_bundle() -> Result<Option<Value /* { state, dropped, signature } */>, String>` — native file dialog filtered to `.uniqent`.
+  - `async open_bundle() -> Result<Option<Value /* { state, dropped, signature } */>, String>` — native file dialog filtered to `.uniqent`. `async` like `pick_folder`: a `blocking_*` dialog on the main thread deadlocks.
   - `open_dropped_bundle(path: String) -> Result<Value, String>` — only a path in `granted_files` (recorded by the drop handler).
-  - `save_bundle(sign: bool) -> Result<Option<String>, String>` — native save dialog (default `<name>.uniqent`), same pack/sign as `export`, atomic write via `fs_io` semantics; returns the path.
+  - `async save_bundle() -> Result<Option<String>, String>` — native save dialog (default `<name>.uniqent`). It always signs with the session keypair: same pack/sign as `export(true)`, the only call Studio makes today, so there is no flag parameter. Atomic write via `fs_io` semantics; returns the path.
 - Drag-and-drop (main.rs `.on_window_event`): on `tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. })`, canonicalize each path; directories → `granted_dirs`, regular files → `granted_files`; then `window.emit("studio://dropped", Vec<{ path, kind: "dir" | "file" }>)`. The webview never supplies a path Rust has not granted.
 
 - [ ] **Step 1: Write the failing Rust tests**
@@ -1208,7 +1257,7 @@ Expected: compile errors.
 
 - `policies: Option<String>` on `Session` (default `None`; `build_bundle` writes `identity/policies.md` when set). `state()` is unchanged, so every `fixtures/state-*.json` golden still matches.
 - `load_bundle` reuses the existing validators (`set_meta`, `add_custom_mcp`, `add_custom_skill`, `set_profile`, the fact checks in `import_memory`, `cron_problem` for schedule tasks); channels/tasks are checked field by field (`id` slug, `kind`/trigger shape) and stored verbatim; facts keep their `id`/`createdAt`/`tags`, and `fact_counter`/`task_counter` move past the highest numeric suffix.
-- `open_bundle` / `save_bundle` use `tauri_plugin_dialog::DialogExt` (`add_filter("Uniqent bundle", &["uniqent"])`, `blocking_pick_file()` / `set_file_name(..).blocking_save_file()`), read/write in Rust; the picked file is not added to any grant (it is consumed immediately).
+- `open_bundle` / `save_bundle` are `pub async fn` (`app: tauri::AppHandle, s: State<'_, AppState>`, as `pick_folder`) and use `tauri_plugin_dialog::DialogExt` (`add_filter("Uniqent bundle", &["uniqent"])`, `blocking_pick_file()` / `set_file_name(..).blocking_save_file()`), read/write in Rust; the picked file is not added to any grant (it is consumed immediately). `save_bundle` signs exactly like `Session::export(true)` (reuse its keypair/sign/pack path, no copy).
 - On success each command swaps the new session in: `*s.session.lock().unwrap() = new_session` (keeping `hub_index_urls` from the old one).
 
 - [ ] **Step 4: Run tests, then the gates**
@@ -1220,7 +1269,7 @@ Expected: PASS.
 
 ```bash
 git add -A
-git commit -m "feat(studio-native): open, save and load .uniqent bundles; drag-and-drop grants" -m "Opening verifies the signature (tampered → refused, unsigned → loaded and flagged); load_bundle builds a fresh session and reports every component it cannot hold instead of dropping it silently; policies now pass through. Dropped files/folders are granted by Rust from the window event, never by a webview-supplied path." -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
+git commit -m "feat(studio-native): open, save and load .uniqent bundles; drag-and-drop grants" -m "Opening verifies the signature (tampered → refused, unsigned → loaded and flagged); saving always signs; load_bundle builds a fresh session and reports every component it cannot hold instead of dropping it silently; policies now pass through. Dropped files/folders are granted by Rust from the window event, never by a webview-supplied path." -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
 ---
@@ -1230,12 +1279,12 @@ git commit -m "feat(studio-native): open, save and load .uniqent bundles; drag-a
 **Files:**
 
 - Create: `apps/studio/web/src/bytes.ts`, `apps/studio/web/src/install.ts`, `apps/studio/web/src/targets.ts`
-- Modify: `apps/studio/web/src/api.ts` (`installPlan`/`install` native; new `frameworkHomes`, `folderTargets`), `apps/studio/web/src/types.ts` (`FrameworkHomes`, `InstallChoice`), `apps/studio/web/src/Inspector.tsx` (`InstallPanel`)
+- Modify: `apps/studio/web/src/api.ts` (`installPlan`/`install` native; new `installPreview`, `frameworkHomes`, `folderTargets`), `apps/studio/web/src/types.ts` (`FrameworkHomes` only — `InstallChoice` lives in `targets.ts`), `apps/studio/web/src/Inspector.tsx` (`InstallPanel`)
 - Test: `apps/studio/web/src/install.test.ts`, `apps/studio/web/src/targets.test.ts`
 
 **Interfaces:**
 
-- Consumes: Tasks 2–6 (`@uniqent/adapter-*/pure`, `@uniqent/adapter-sdk/pure`, `@uniqent/core/pure`, `@uniqent/builder/brain`), Rust `read_inputs`, `write_outputs`, `framework_homes`, `folder_markers`, `bundle_files`, `pick_folder`.
+- Consumes: Tasks 2–6 (`@uniqent/adapter-*/pure`, `@uniqent/adapter-sdk/pure`, `@uniqent/core/pure`, `@uniqent/builder/brain` incl. `nextStep`), Rust `read_inputs`, `write_outputs`, `framework_homes`, `folder_markers`, `pick_folder`; Task 8 `bundle_files`.
 - Produces:
 
 ```ts
@@ -1249,10 +1298,29 @@ export const PURE_ADAPTERS: Record<TargetId, PureAdapter>; // claudeCodePure, he
 export const readViaRust: ReadFn;
 /** write_outputs per distinct root, in the translation's order. */
 export function writeViaRust(writes: OutputWrite[]): Promise<void>;
+/** The session draft failed validateBundle; message `brain is invalid; fix it before installing: <issues>` (as the old server). */
+export class BrainInvalidError extends Error {
+  constructor(readonly issues: string[]) {
+    super(`brain is invalid; fix it before installing: ${issues.join('; ')}`);
+    this.name = 'BrainInvalidError';
+  }
+}
 /** The session draft as a Bundle; throws BrainInvalidError (listing the issues) before any read. */
 export function sessionBundle(): Promise<Bundle>;
 export function targetContext(root: string): Promise<TargetContext>; // home from framework_homes; cwd = home
+/** Credential-free dry run (writes + lossiness + required credentials). */
 export function planInstall(target: TargetId, root: string): Promise<InstallPlan>;
+/**
+ * Read + pure translate with the typed credentials, writing nothing: its `notes` include what only
+ * the credentials reveal (e.g. "replaces your existing, different value of X" in .env), shown
+ * before the user confirms.
+ */
+export function previewInstall(
+  target: TargetId,
+  root: string,
+  resolved: ResolvedCredentials,
+): Promise<Translation>;
+/** Re-read, re-translate (validates before the first write) and hand the writes to Rust. */
 export function applyInstall(
   target: TargetId,
   root: string,
@@ -1289,6 +1357,18 @@ it('plans Hermes without writing, then writes .env owner-only with the typed cre
   expect(new TextDecoder().decode(fromBase64(env!.bytesBase64))).toContain('GITHUB_PAT=v1');
 });
 
+it('previews a replaced .env value before writing anything', async () => {
+  disk.set('/home/u/.hermes/.env', enc('GITHUB_PAT=old\n'));
+  const t = await previewInstall('hermes', '/home/u/.hermes', {
+    github_pat: 'v1',
+    telegram_bot_token: 'v2',
+  });
+  expect(writeCalls).toHaveLength(0);
+  expect(t.notes).toContain(
+    'transformed: .env — replaces your existing, different value of GITHUB_PAT.',
+  );
+});
+
 it('never logs a credential value', async () => {
   const spies = (['log', 'info', 'warn', 'error', 'debug'] as const).map((k) =>
     vi.spyOn(console, k),
@@ -1296,12 +1376,14 @@ it('never logs a credential value', async () => {
   await applyInstall('openclaw', '/home/u/.openclaw', {
     github_pat: 'S3CRET',
     telegram_bot_token: 'T0KEN',
-  }).catch(() => undefined);
+  });
+  expect(writeCalls.length).toBeGreaterThan(0);
   for (const s of spies) expect(JSON.stringify(s.mock.calls)).not.toMatch(/S3CRET|T0KEN/);
 });
 
 it('refuses an invalid draft before reading anything', async () => {
   bundleFiles = invalidBrainFiles();
+  await expect(planInstall('claude-code', '/p')).rejects.toThrow(BrainInvalidError);
   await expect(planInstall('claude-code', '/p')).rejects.toThrow(/brain is invalid/);
   expect(readCalls).toHaveLength(0);
 });
@@ -1325,16 +1407,16 @@ Expected: FAIL — modules missing.
 
 - [ ] **Step 3: Implement `bytes.ts`, `install.ts`, `targets.ts`**
 
-`bytes.ts` uses `atob`/`btoa` over 32 KiB chunks (no `Buffer`). `install.ts` follows the CLI's `runInstall` order: `sessionBundle()` (`validateBundle` from `@uniqent/core/pure`; error `brain is invalid; fix it before installing: …` as the old server did) → `gatherInputs(…, readViaRust)` → `pure.plan` / `pure.translate` → `writeViaRust`. `InstallResult.written` = `displayPath(ctx.root, w)`; `notes` = `t.notes`. No `console.*` anywhere in the module.
+`bytes.ts` uses `atob`/`btoa` over 32 KiB chunks (no `Buffer`). `install.ts` follows the CLI's `runInstall` order: `sessionBundle()` (`validateBundle` from `@uniqent/core/pure`; throws `BrainInvalidError` as defined above) → `gatherInputs(…, readViaRust)` → `pure.plan` (`planInstall`) / `pure.translate` (`previewInstall`, no write; `applyInstall` = the same read + translate, then `writeViaRust`). `InstallResult.written` = `displayPath(ctx.root, w)`; `notes` = `t.notes`. No `console.*` anywhere in the module.
 
 - [ ] **Step 4: Rework `InstallPanel`**
 
 - On mount: `api.frameworkHomes()` → `installChoices` → radio list (`data-testid="install-target-<id>"`), each row showing its root and "found"/"not found". When `preselected` is null and more than one is present, show "Several agent frameworks found — choose one".
 - "Choose folder…" (`data-testid="install-choose"`) → `api.chooseFolder()` → `api.folderTargets(dir)` → `folderChoices`; one match selects it, several become the choice list, none keeps the current target with `root = dir`.
 - "Preview plan" (dry run, nothing written): writes with summaries, MCP registrations, and lossiness rendered as `action: component — issue` in full.
-- Credential inputs (`type="password"`) for `requiresCredentials`; "Install into <target>" disabled until every required one is filled. Values live only in component state and are cleared after install.
+- Credential inputs (`type="password"`) for `requiresCredentials`; "Review changes" disabled until every required one is filled. It calls `previewInstall` (nothing written) and shows every write plus every `notes` line in full, including `.env` value replacements the credential-free plan cannot know. Only then does "Install into <target>" (`data-testid="install-confirm"`) call `applyInstall`. Values live only in component state and are cleared after install.
 - A Rust "outside the folders Studio may use" error shows next to a "Choose folder…" button.
-- Result: written paths, notes, and the CLI's `nextStep` wording for the target.
+- Result: written paths, notes, and `nextStep(target, root)` from `@uniqent/builder/brain` (the same text the CLI prints).
 
 - [ ] **Step 5: Run tests, build**
 
@@ -1345,7 +1427,7 @@ Expected: PASS.
 
 ```bash
 git add -A
-git commit -m "feat(studio-native): install into Claude Code, Hermes and OpenClaw from the native app" -m "The web UI runs the adapters' pure translate on files Rust reads, previews writes + full lossiness + required credentials, and hands the writes to Rust. Targets are auto-detected; several found frameworks are offered as a choice." -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
+git commit -m "feat(studio-native): install into Claude Code, Hermes and OpenClaw from the native app" -m "The web UI runs the adapters' pure translate on files Rust reads, previews writes + full lossiness + required credentials (and the credential-dependent notes before confirming), and hands the writes to Rust. Targets are auto-detected; several found frameworks are offered as a choice." -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
 ---
@@ -1369,13 +1451,25 @@ export interface CaptureResult {
 }
 /** Read a framework setup via Rust, capture it with the shared pure adapter, scrub private memory, load it into the session. */
 export function captureAgent(target: TargetId, root: string): Promise<CaptureResult>;
+
+/** One entry of the Rust `studio://dropped` payload. */
+export interface DroppedItem {
+  path: string;
+  kind: 'dir' | 'file';
+}
+export type DropAction =
+  | { kind: 'open-bundle'; path: string }
+  | { kind: 'choose-vault-or-capture'; dir: string }
+  | { kind: 'unsupported' };
+/** Pure routing for a drop: a single `.uniqent` file opens, a single folder offers vault/capture, anything else is unsupported. */
+export function routeDrop(items: DroppedItem[]): DropAction;
 ```
 
-- `api.openBundle(): Promise<{ state; dropped; signature: 'valid' | 'unsigned' } | null>`, `api.openDroppedBundle(path: string)`, `api.saveBundle(sign: boolean): Promise<string | null>`.
+- `api.openBundle(): Promise<{ state; dropped; signature: 'valid' | 'unsigned' } | null>`, `api.openDroppedBundle(path: string)`, `api.saveBundle(): Promise<string | null>` (always signed, see Task 8).
 
 - [ ] **Step 1: Write the failing tests**
 
-`capture.test.ts` (in-memory disk fake as in Task 9): an OpenClaw state dir whose `MEMORY.md` holds a fact and an episodic note → `load_bundle_files` receives files without `memory/episodic.jsonl` and with the fact; `removed` counts what was scrubbed; `dropped` passes through from Rust. A capture whose result fails `validateBundle` or `scanForSecrets` (both from `@uniqent/core/pure`) throws before `load_bundle_files` (same gate as `uniqent export`). `api.test.ts`: `openBundle`/`saveBundle` call `open_bundle`/`save_bundle` with the mapped args; the drop listener routes a `.uniqent` file to `open_dropped_bundle` and a folder to the vault/capture chooser.
+`capture.test.ts` (in-memory disk fake as in Task 9): an OpenClaw state dir whose workspace `MEMORY.md` holds a fact and an episodic note (Task 5's capture keeps it) → `load_bundle_files` receives files without `memory/episodic.jsonl` and with the fact, and `removed` is exactly `{ episodic: 1, personal: 0 }`; `dropped` passes through from Rust. A capture whose result fails `validateBundle` or `scanForSecrets` (both from `@uniqent/core/pure`) throws before `load_bundle_files` (same gate as `uniqent export`). `routeDrop`: `[{ path: '/x/a.uniqent', kind: 'file' }]` → `open-bundle`; `[{ path: '/x/vault', kind: 'dir' }]` → `choose-vault-or-capture`; a `.txt` file, two items or `[]` → `unsupported`. `api.test.ts`: `openBundle()` calls `open_bundle` with no args, `saveBundle()` calls `save_bundle` with no args, `openDroppedBundle('/x/a.uniqent')` calls `open_dropped_bundle` with `{ path: '/x/a.uniqent' }`.
 
 - [ ] **Step 2: Run to verify they fail**
 
@@ -1384,9 +1478,9 @@ Expected: FAIL.
 
 - [ ] **Step 3: Implement**
 
-- `captureAgent`: `targetContext(root)` → `gatherInputs((r) => pure.captureInputs(r, ctx), readViaRust)` → `pure.capture` → `validateBundle` + `scanForSecrets` (fail loudly, naming the finding kind) → `scrubPrivateMemory` → `load_bundle_files` with base64 files.
+- `captureAgent`: `targetContext(root)` → `gatherInputs((r) => pure.captureInputs(r, ctx), readViaRust)` → `pure.capture` → `validateBundle` + `scanForSecrets` (fail loudly, naming the finding kind) → `scrubPrivateMemory` → `load_bundle_files` with base64 files. `routeDrop` lives in `capture.ts` too (pure, no React).
 - `CapturePanel`: same target/root chooser as `InstallPanel` (reuse `installChoices`/`folderChoices` and the choice list component, extracted from `InstallPanel` in this step); a button labelled "Replace current brain with captured agent"; afterwards show component counts, "credentials to re-supply on install", "left out: N episodic, M personal memory items" and every `dropped` line.
-- `App.tsx`: header "Open…" (`data-testid="open-btn"`) and Export now calls `api.saveBundle(sign)` (native save dialog) instead of the blob-anchor download; `listen('studio://dropped', …)` from `@tauri-apps/api/event` — a `.uniqent` file opens; a folder shows a two-button chooser "Import as vault" (opens the vault panel with that dir) / "Capture agent" (opens `CapturePanel` with that root, markers via `folderTargets`); anything else shows "drop a .uniqent file or a folder".
+- `App.tsx`: header "Open…" (`data-testid="open-btn"`) and Export now calls `api.saveBundle()` (native save dialog, always signed) instead of the blob-anchor download; `listen('studio://dropped', …)` from `@tauri-apps/api/event` passes the payload to `routeDrop` and only renders its result: `open-bundle` → `api.openDroppedBundle`; `choose-vault-or-capture` → a two-button chooser "Import as vault" (opens the vault panel with that dir) / "Capture agent" (opens `CapturePanel` with that root, markers via `folderTargets`); `unsupported` → "drop a .uniqent file or a folder".
 - Show `signature: 'unsigned'` after Open as a visible warning.
 
 - [ ] **Step 4: Run tests, build, gates**
@@ -1427,7 +1521,8 @@ Every route of `apps/studio/src/server/api.ts` and what replaces it:
 - Create: `apps/studio/scripts/emit-catalog-fixtures.ts`, `apps/studio/test/catalog-fixtures.test.ts`
 - Modify: `apps/studio/package.json` scripts (`build` → `pnpm build:web`; remove `build:server`, `start`, `dev:server`; `typecheck` → `tsc -p web/tsconfig.json --noEmit`; `fixtures` → `tsx scripts/emit-catalog-fixtures.ts && prettier --write fixtures/catalog.json fixtures/catalog-data.json`), drop `zod` if `grep -rn "from 'zod'" apps/studio/web/src` finds nothing
 - Modify: `apps/studio/web/vite.config.ts` (remove the `/api` proxy), `apps/studio/web/src/api.ts` (invoke-only: delete `unwrap`/`get`/`post`, every `isNative ? … : post(…)` becomes the native call; `isNative` and the browser-mode vault text field in `Inspector.tsx` go), `apps/studio/web/src/api.test.ts` (drop browser-mode cases)
-- Modify docs: `CLAUDE.md` (Studio run line at ~118 and the "local server is hardened…" sentence), `README.md` (lines ~146–153 and ~187–191), `apps/studio/README.md` (fixtures line, native scope paragraph)
+- Modify docs: `CLAUDE.md` (Studio run line at ~118 and the "local server is hardened…" sentence), `README.md` (lines ~146–153 and ~187–191), `examples/README.md` (the `pnpm --filter @uniqent/studio build && pnpm --filter @uniqent/studio start` line), `apps/studio/README.md` (fixtures line, native scope paragraph)
+- Modify doc comments only: `apps/studio/src-tauri/src/session.rs` — `cron_problem`'s "Mirrors `cronProblem` in apps/studio/src/server/cron.ts" and the "`releaseCredentials` in apps/studio/src/server/session.ts" reference both point at deleted files; state the rule in place instead of naming the deleted source
 
 **Interfaces:**
 
@@ -1440,7 +1535,8 @@ Every route of `apps/studio/src/server/api.ts` and what replaces it:
 ```ts
 it('has no HTTP fallback left', async () => {
   const src = (await import('node:fs')).readFileSync(new URL('./api.ts', import.meta.url), 'utf8');
-  expect(src).not.toMatch(/\bfetch\(|\/api\/|isNative/);
+  // `/api/` only as the start of a string literal: the `@tauri-apps/api/core` import must not match.
+  expect(src).not.toMatch(/\bfetch\(|['"`]\/api\/|isNative/);
 });
 ```
 
@@ -1450,7 +1546,7 @@ Expected: FAIL (script missing; api.ts still has fetch).
 - [ ] **Step 2: Check nothing else depends on the server**
 
 Run: `grep -rn "src/server\|StudioSession\|4173\|studio start\|dev:server" --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=target --exclude-dir=superpowers . | grep -v "^./apps/studio/src/server"`
-Expected: only the files listed above (tests/scripts being deleted, vite proxy, README/CLAUDE.md lines). The CLI and every package are independent of it.
+Expected: only the files listed above (tests/scripts being deleted, vite proxy, `README.md`/`examples/README.md`/`CLAUDE.md` lines, `apps/studio/package.json`, the two `session.rs` doc comments). The CLI and every package are independent of it.
 
 - [ ] **Step 3: Delete, rewrite `api.ts`, add the catalog emitter**
 
@@ -1460,6 +1556,8 @@ Delete the files; rewrite `api.ts` as one `call()`-based object (move the 3b `ca
 
 - `CLAUDE.md` Studio bullet: replace "Run: `pnpm --filter @uniqent/studio build && pnpm --filter @uniqent/studio start` (`:4173`, `UNIQENT_STUDIO_PORT` to override). Verified in a real browser. The native Tauri app … runs all of this except install/capture (Phase 4)" with "Run: `pnpm --filter @uniqent/studio native:dev` (dev) or `native:build` (Studio.app + DMG); there is no browser/server mode." and drop "the local server is hardened (127.0.0.1-only, …)" from the OpenClaw paragraph ("Studio's in-app **Install** button … drive them" stays).
 - `README.md`: "Studio runs as a native desktop app (Tauri)…" — remove the `start` lines in both blocks and the "(web UI and local server)" note after `pnpm build`.
+- `examples/README.md`: in "Or build your own in **Uniqent Studio** (…)", replace the command `pnpm --filter @uniqent/studio build && pnpm --filter @uniqent/studio start` with `pnpm --filter @uniqent/studio native:dev`.
+- `session.rs` doc comments: "Mirrors `cronProblem` in apps/studio/src/server/cron.ts" → describe the accepted cron shape in place; drop the "`releaseCredentials` in apps/studio/src/server/session.ts" pointer the same way (comments only, no code change).
 - `apps/studio/README.md`: fixtures line → "`pnpm --filter @uniqent/studio fixtures` — regenerate `catalog*.json` from the builder catalogs (Rust embeds them); `state-*.json` are frozen Rust goldens"; scope paragraph updated in Task 14.
 
 - [ ] **Step 5: Run tests, gates**
@@ -1713,29 +1811,26 @@ git commit -m "ci(studio): universal macOS DMG release on studio-v* tags" -m "Co
 
 ### Task 14: Version bumps, docs, native smoke, human check
 
+No version bumps: every package version on this stack is already ahead of npm and unpublished. npm has core/spec/adapter-sdk/adapters ≤ 0.1.2 and builder/cli ≤ 0.2.0; the stack has 0.2.0 and builder/cli 0.3.0. `release.yml`'s gate reports them as "new", so a second bump would be redundant. No `package.json` changes in this task.
+
 **Files:**
 
-- Modify: `packages/adapter-sdk/package.json` (0.2.0 → 0.3.0), `packages/adapter-claude-code`, `packages/adapter-hermes`, `packages/adapter-openclaw` (0.2.0 → 0.3.0), `packages/builder/package.json` (0.3.0 → 0.4.0) — `release.yml` refuses to publish changed `dist/` under an existing version
 - Modify: `CLAUDE.md` ("Current status"), `apps/studio/README.md` (scope paragraph), `docs/UX-REVIEW.md` only if it lists Studio install as missing
 
 **Interfaces:**
 
 - Consumes: everything above.
 
-- [ ] **Step 1: Bump versions**
-
-Run: `git --no-pager diff --stat main -- packages/*/src` to confirm exactly which packages changed code; bump each (minor while `0.x`). `pnpm install` (lockfile stays `workspace:^`).
-
-- [ ] **Step 2: Docs**
+- [ ] **Step 1: Docs**
 
 - `CLAUDE.md` "Current status": the Studio bullet says Studio is native-only: content, hubs, vault, publish **and** install-to-agent (all three targets, auto-detected, plan + full lossiness + credential prompts before Rust writes) and capture (scrubs episodic/personal by default), Open/Save `.uniqent`, drag-and-drop; the adapters' pure cores live at `@uniqent/adapter-*/pure` and are shared verbatim with the CLI; byte-identical install trees are pinned by `apps/studio/fixtures/install/*.json` (regenerate with `pnpm --filter @uniqent/studio fixtures:install`). Add to "Left for v1": signing/notarization/updater credentials (CI is wired, `studio-v*` tags). Mention the gotcha: Finder-launched apps do not inherit shell env vars, so `$HERMES_HOME`/`$OPENCLAW_STATE_DIR` set in a shell rc are not seen — Studio falls back to `~/.hermes`/`~/.openclaw` and "Choose folder…".
 - `apps/studio/README.md`: replace the "Native scope (through Phase 3b)" paragraph with the Phase 4 scope in two sentences and add `native:build:universal`.
 
-- [ ] **Step 3: Gates**
+- [ ] **Step 2: Gates**
 
 Run the gates. Expected: all green.
 
-- [ ] **Step 4: Native launch smoke**
+- [ ] **Step 3: Native launch smoke**
 
 ```bash
 pnpm --filter @uniqent/studio native:build
@@ -1748,14 +1843,14 @@ osascript -e 'tell application "Uniqent Studio" to quit'
 
 Expected: `running`, `no listening port`; report the app size.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add -A
-git commit -m "docs(studio): Phase 4 — native install, capture and ship; bump changed packages" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
+git commit -m "docs(studio): Phase 4 — native install, capture and ship" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
-- [ ] **Step 6: Human check (hand to the user)**
+- [ ] **Step 5: Human check (hand to the user)**
 
 Ask the user to open Studio.app and: (1) build a brain with the github MCP + telegram channel, Install into Hermes (`~/.hermes` auto-detected) with test credentials, confirm `~/.hermes/.env` is 0600; (2) Install into a picked Claude Code project folder; (3) Install into OpenClaw; (4) compare one of those trees with `uniqent install` of the exported `.uniqent` into a scratch dir (`diff -r`); (5) Capture from Hermes and see the brain on the canvas with the "left out" report; (6) Save, then Open the saved file, and drag a `.uniqent` and a folder onto the window. Every step must work with no server running.
 
@@ -1767,12 +1862,12 @@ Ask the user to open Studio.app and: (1) build a brain with the github MCP + tel
 2. **Pure paths are POSIX** (`confineRelative`/`joinPath`/`resolvePosix`); the Node `resolveInside` stays for the conformance harness. The CLI is not tested on Windows today; the pure layer does not add Windows path support.
 3. **Node writes stay non-atomic** (`writeFile` + `chmod`, as today) to keep the CLI byte- and mode-identical; Rust writes are atomic. Rust refuses symlinked components; the CLI keeps following them.
 4. **Capture never follows symlinks and skips dot-dirs** for all three targets (CLI too). Install output is unchanged; capture differs only for symlinked or dot-named skill dirs in Claude Code/OpenClaw (Task 1's `captured` goldens confirm nothing else moves). Claude Code capture now sorts skills by name (previously `readdir` order).
-5. **Studio capture always scrubs** episodic + `personal` memory and reports the counts; no opt-in toggle (YAGNI, no flag). `uniqent export` is unchanged.
+5. **Capture always scrubs** episodic + `personal` memory with the shared `scrubPrivateMemory` (pure captures keep every item; OpenClaw no longer skips episodic inline). Studio reports the counts; `nodeAdapter.export` applies the same scrub, so `uniqent export` output is unchanged. No opt-in toggle (YAGNI, no flag).
 6. **The Rust session gains only `policies`** (captured OpenClaw `AGENTS.md` would otherwise vanish). Tools, runtime, episodic memory, extra skill files and author/license/tags are reported in `dropped` on load, not modelled.
 7. **Studio installs the session draft unsigned** after `validateBundle`, as the deleted server did; Open `.uniqent` verifies the signature (invalid → refused, unsigned → loaded with a warning).
 8. **Allowed roots** = folders picked or dropped this session + `$HERMES_HOME`/`~/.hermes` + `$OPENCLAW_STATE_DIR`/`~/.openclaw` (env read from the app process). Claude Code always needs a picked project folder. Studio passes `cwd = home` (only affects a relative OpenClaw `agents.defaults.workspace`; the resolved path is shown in the plan, and writing there still needs a grant).
 9. **Drag-and-drop is handled in Rust** (`WindowEvent::DragDrop`), which grants the dropped paths and emits `studio://dropped`; the webview never supplies a path to read.
-10. **Export saves through the native save dialog** (`save_bundle`), replacing the blob-anchor download.
+10. **Export saves through the native save dialog** (`save_bundle()`), replacing the blob-anchor download; it always signs (Studio only ever exported signed), so there is no `sign` flag.
 11. **State goldens are frozen** once the TS session is deleted; `catalog*.json` stay generated from the builder catalogs.
 12. **Capabilities shrink to** `core:event:allow-listen/unlisten` + scoped `http:default`; CSP keeps `style-src 'unsafe-inline'` (inline style attributes) with `dangerousDisableAssetCspModification: ["style-src"]`.
 13. **Size gate measures the DMG** (≤ 15 MB) and prints the `.app` size: a universal binary roughly doubles the 11 MB arm64 executable, so the umbrella spec's "app ≤ ~15 MB" (written for one architecture) cannot hold for a universal `.app`.
