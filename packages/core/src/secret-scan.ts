@@ -8,7 +8,8 @@ export interface SecretFinding {
 
 type Hit = { kind: string; snippet: string };
 
-const strictUtf8 = new TextDecoder('utf-8', { fatal: true });
+/** Lenient: invalid UTF-8 bytes decode to U+FFFD, so mis-encoded text is still scanned as text. */
+const utf8 = new TextDecoder();
 // One char per byte, so known token formats are still found inside binary assets. (WHATWG maps
 // 'latin1' to windows-1252; only bytes 0x80–0x9F differ from ISO-8859-1, and token formats are ASCII.)
 const latin1 = new TextDecoder('latin1');
@@ -43,6 +44,8 @@ const HIGH_ENTROPY_TOKEN = /[A-Za-z0-9+/_=-]{32,}/g;
 const DATA_URI_RE = /data:[a-z0-9.+/-]+;base64,[A-Za-z0-9+/=]+/gi;
 const INTEGRITY_RE = /\bsha(?:1|256|384|512)[-:][A-Za-z0-9+/=]+/gi;
 const URL_RE = /\b[a-z][a-z0-9+.-]*:\/\/[^\s"'<>()`]+/gi;
+/** Hosts whose URL paths hold public document ids (random-looking, but not credentials). */
+const PUBLIC_ID_HOSTS: ReadonlySet<string> = new Set(['drive.google.com', 'docs.google.com']);
 
 /** Names (JSON keys, env vars, assignments) whose values are credentials. */
 const SECRET_NAME_WORD =
@@ -114,8 +117,13 @@ function detectKnownFormat(text: string): Hit | null {
   return null;
 }
 
-/** Keep only a URL's query/fragment: paths and hosts are public identifiers (drive ids, slugs). */
+/**
+ * A URL is scanned whole (secrets live in paths too: webhook/bot tokens), except a public-document
+ * host's path, whose ids are not credentials; only its query/fragment is kept.
+ */
 function urlSecretSurface(url: string): string {
+  const host = url.slice(url.indexOf('://') + 3).split(/[/?#:]/)[0] ?? '';
+  if (!PUBLIC_ID_HOSTS.has(host.toLowerCase())) return url;
   const cut = url.search(/[?#]/);
   return cut === -1 ? ' ' : ` ${url.slice(cut + 1).replace(/[&#]/g, ' ')} `;
 }
@@ -182,15 +190,9 @@ function scanJson(path: string, json: unknown, record: (hit: Hit | null) => void
   });
 }
 
-/** UTF-8 text without NULs is scanned as text whatever its extension; anything else is binary. */
+/** Content without NULs is scanned as text whatever its extension or encoding; else binary. */
 function decodeText(bytes: Uint8Array): string | undefined {
-  if (bytes.includes(0)) return undefined;
-  try {
-    return strictUtf8.decode(bytes);
-  } catch (e) {
-    if (e instanceof TypeError) return undefined; // invalid UTF-8
-    throw e;
-  }
+  return bytes.includes(0) ? undefined : utf8.decode(bytes);
 }
 
 /** True when a single string value looks like a secret (known format, named credential, high entropy). */

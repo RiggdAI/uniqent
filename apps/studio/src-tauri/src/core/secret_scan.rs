@@ -2,14 +2,15 @@
 //!
 //! Mirrors every TS rule: known-format patterns (PREFIX_PATTERNS), credential-shaped values under
 //! secret-ish names (detectNamed / ASSIGNMENT_RE), and the high-entropy check with its non-secret
-//! surfaces (data URIs, SRI hashes, URL paths) removed. `${credentialRef:<slug>}` placeholders are
-//! allowed, but their names are scanned too. UTF-8 files are scanned as text whatever their
-//! extension (JSON/JSONL by field, with per-file public-key allowlists); anything else gets a
-//! known-format scan of its latin1 text. `fixtures/ports/secret-cases.json` pins parity with TS.
+//! surfaces (data URIs, SRI hashes, public-document URL paths) removed. `${credentialRef:<slug>}` placeholders are
+//! allowed, but their names are scanned too. Files without NULs are scanned as (lossily decoded
+//! UTF-8) text whatever their extension (JSON/JSONL by field, with per-file public-key
+//! allowlists); anything else gets a known-format scan of its latin1 text. `fixtures/ports/secret-cases.json` pins parity with TS.
 //! JS regex features Rust's `regex` lacks (lookaround) are written as plain code.
 
 use regex::Regex;
 use serde_json::Value;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
@@ -222,8 +223,20 @@ fn detect_known_format(text: &str) -> Option<Hit> {
         .find_map(|(kind, re)| re.find(text).map(|m| (*kind, make_snippet(m.as_str()))))
 }
 
-/// TS `urlSecretSurface`: keep only a URL's query/fragment (paths and hosts are public).
+/// TS PUBLIC_ID_HOSTS: hosts whose URL paths hold public document ids, not credentials.
+const PUBLIC_ID_HOSTS: [&str; 2] = ["drive.google.com", "docs.google.com"];
+
+/// TS `urlSecretSurface`: the whole URL, except a public-document host's path (only its
+/// query/fragment is kept).
 fn url_secret_surface(url: &str) -> String {
+    let after_scheme = url.find("://").map_or(url, |i| &url[i + 3..]);
+    let host = after_scheme
+        .split(['/', '?', '#', ':'])
+        .next()
+        .unwrap_or("");
+    if !PUBLIC_ID_HOSTS.contains(&host.to_ascii_lowercase().as_str()) {
+        return url.to_string();
+    }
     match url.find(['?', '#']) {
         None => " ".to_string(),
         Some(cut) => format!(" {} ", url[cut + 1..].replace(['&', '#'], " ")),
@@ -322,13 +335,14 @@ fn scan_json(path: &str, json: &Value, record: &mut dyn FnMut(Option<Hit>)) {
     });
 }
 
-/// TS `decodeText`: UTF-8 without NULs (a leading BOM dropped, as TextDecoder does); else None.
-fn decode_text(bytes: &[u8]) -> Option<&str> {
+/// TS `decodeText`: content without NULs, lossily UTF-8 decoded with a leading BOM dropped (as
+/// TextDecoder does); else None.
+fn decode_text(bytes: &[u8]) -> Option<Cow<'_, str>> {
     if bytes.contains(&0) {
         return None;
     }
-    let text = std::str::from_utf8(bytes).ok()?;
-    Some(text.strip_prefix('\u{feff}').unwrap_or(text))
+    let bytes = bytes.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(bytes);
+    Some(String::from_utf8_lossy(bytes))
 }
 
 /// Port of TS `isLikelySecretValue`: known format, named credential or high entropy.
@@ -358,7 +372,7 @@ pub fn scan_for_secrets(bundle: &Bundle) -> Vec<Finding> {
             let lines: Vec<&str> = if path.ends_with(".jsonl") {
                 text.split('\n').collect()
             } else {
-                vec![text]
+                vec![&text]
             };
             for line in lines {
                 let trimmed = line.trim();
@@ -371,7 +385,7 @@ pub fn scan_for_secrets(bundle: &Bundle) -> Vec<Finding> {
                 }
             }
         } else {
-            record(detect(text));
+            record(detect(&text));
         }
     }
     findings

@@ -187,6 +187,10 @@ export function buildSecretCases(): {
     `sha512-${'Zk9Q2hVx7Lm4Tp8Rb1Nc6Yd3Wf0Gj5Hs2Aq8Eu4Iv'.repeat(2)}==`,
     `ghcr.io/org/img@sha256:${'0123456789abcdef'.repeat(4)}`,
     'https://drive.google.com/file/d/1Zk9Q2hVx7Lm4Tp8Rb1Nc6Yd3Wf0Gj5Hs/view',
+    'https://docs.google.com/document/d/1Zk9Q2hVx7Lm4Tp8Rb1Nc6Yd3Wf0Gj5Hs2Aq8Eu4Iv/edit',
+    `https://mcp.zapier.com/api/mcp/s/${'Zk9Q2hVx7Lm4Tp8Rb1Nc6Yd3Wf0Gj5Hs'.repeat(2)}/mcp`,
+    'https://api.telegram.org/bot123456789:AAH' + 'Zk9Q2hVx7Lm4Tp8Rb1Nc6Yd3Wf0Gj5Hs/getMe',
+    'https://user@drive.google.com/file/d/1Zk9Q2hVx7Lm4Tp8Rb1Nc6Yd3Wf0Gj5Hs/view',
     'https://api.example.com/cb?code=Zk9Q2hVx7Lm4Tp8Rb1Nc6Yd3Wf0Gj5Hs2Aq8Eu4Iv&x=1',
     'postgres://app:$DB_PASSWORD@db.example.com/app',
     `<image href="data:image/png;base64,${'iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB'.repeat(4)}"/>`,
@@ -258,6 +262,16 @@ export function buildSecretCases(): {
         ]).toString('base64'),
       },
       'README.md': { text: '\ufeffclean readme' },
+    }),
+    bundle('non-utf8-text', {
+      'skills/x/SKILL.md': {
+        base64: Buffer.concat([
+          Buffer.from('Caf'),
+          Buffer.from([0xe9]),
+          Buffer.from('\nAPI_TOKEN=Zk9Q2hVx7Lm4Tp8Rb1Nc6Yd3Wf0Gj5Hs\n'),
+        ]).toString('base64'),
+      },
+      'notes.md': { base64: Buffer.from([0xef, 0xbb, 0xbf, 0xff, 0x41]).toString('base64') },
     }),
   ];
   return { values, bundles };

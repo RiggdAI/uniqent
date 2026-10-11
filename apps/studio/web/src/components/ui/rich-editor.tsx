@@ -1,10 +1,10 @@
 import { useEffect } from 'react';
 import { useEditor, useEditorState, EditorContent, type Editor } from '@tiptap/react';
-import StarterKit from '@tiptap/starter-kit';
-import { Markdown, type MarkdownStorage } from 'tiptap-markdown';
+import type { MarkdownStorage } from 'tiptap-markdown';
 import { Bold, Italic, Heading1, Heading2, List, ListOrdered, Code, Quote } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { cn } from '../../lib/utils';
+import { markdownExtensions } from './markdown-extensions';
 
 // Tiptap 3 types extension storage through this interface; tiptap-markdown exports the shape
 // but does not register it.
@@ -62,11 +62,7 @@ export function RichEditor({
 }) {
   const editor = useEditor({
     immediatelyRender: false,
-    // Underline has no markdown form (html:false would drop it on save), so it is not offered.
-    extensions: [
-      StarterKit.configure({ underline: false }),
-      Markdown.configure({ html: false, linkify: true }),
-    ],
+    extensions: markdownExtensions,
     content: value,
     onUpdate: ({ editor }: { editor: Editor }) => onChange(editor.storage.markdown.getMarkdown()),
     editorProps: {
