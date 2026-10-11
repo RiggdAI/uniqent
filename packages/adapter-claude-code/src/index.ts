@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { dirname, join, relative, sep } from 'node:path';
 import type { Bundle } from '@uniqent/core';
 import type { McpServer } from '@uniqent/spec';
-import { requiredCredentialRefs, resolveInside } from '@uniqent/adapter-sdk';
+import { assertNoEnvReferences, requiredCredentialRefs, resolveInside } from '@uniqent/adapter-sdk';
 import type {
   Adapter,
   DetectResult,
@@ -22,6 +22,7 @@ import {
   parseMcpJson,
   placeholderCredentials,
   scopedCredentials,
+  serverCredentialRefs,
   toClaudeMcpEntry,
 } from './mcp.js';
 import type { McpJsonFile } from './mcp.js';
@@ -55,6 +56,18 @@ function skillTargets(bundle: Bundle, root: string): SkillTarget[] {
     });
 }
 
+/** Bundle skill files that would replace an existing, different file (root-relative paths). */
+async function replacedSkillFiles(bundle: Bundle, skills: SkillTarget[]): Promise<string[]> {
+  const replaced: string[] = [];
+  for (const skill of skills) {
+    const bytes = bundle.get(skill.bundlePath);
+    if (bytes === undefined || !existsSync(skill.target)) continue;
+    if (!Buffer.from(await readFile(skill.target)).equals(Buffer.from(bytes)))
+      replaced.push(skill.rel);
+  }
+  return replaced;
+}
+
 async function readMcpJson(root: string): Promise<McpJsonFile | undefined> {
   const path = resolveInside(root, MCP_JSON);
   const text = await readIfExists(path);
@@ -74,7 +87,11 @@ function replacedServerIds(servers: McpServer[], existing: McpJsonFile | undefin
     .map((s) => s.id);
 }
 
-function computeLossiness(bundle: Bundle, replaced: string[]): Lossiness[] {
+function computeLossiness(
+  bundle: Bundle,
+  replaced: string[],
+  replacedSkills: string[],
+): Lossiness[] {
   const lossiness: Lossiness[] = [];
   const channels = bundle.channels();
   if (channels.length > 0)
@@ -130,6 +147,12 @@ function computeLossiness(bundle: Bundle, replaced: string[]): Lossiness[] {
       issue: `replaces your existing, different "${id}" entry in .mcp.json.`,
       action: 'transformed',
     });
+  for (const rel of replacedSkills)
+    lossiness.push({
+      component: `skill ${rel}`,
+      issue: 'replaces an existing, different skill file.',
+      action: 'transformed',
+    });
   return lossiness;
 }
 
@@ -139,7 +162,9 @@ function computeLossiness(bundle: Bundle, replaced: string[]): Lossiness[] {
  * existing files as such.
  */
 async function computePlan(bundle: Bundle, root: string): Promise<InstallPlan> {
-  const writes: PlanWrite[] = skillTargets(bundle, root).map((s) => ({
+  assertNoEnvReferences(bundle);
+  const skills = skillTargets(bundle, root);
+  const writes: PlanWrite[] = skills.map((s) => ({
     path: s.rel,
     summary: 'skill file',
   }));
@@ -182,7 +207,7 @@ async function computePlan(bundle: Bundle, root: string): Promise<InstallPlan> {
     writes,
     mcpRegistrations: servers.map((s) => s.id),
     channelRegistrations: [],
-    lossiness: computeLossiness(bundle, replaced),
+    lossiness: computeLossiness(bundle, replaced, await replacedSkillFiles(bundle, skills)),
     requiresCredentials,
   };
 }
@@ -209,6 +234,12 @@ export const claudeCodeAdapter: Adapter = {
   ): Promise<InstallResult> {
     // Re-plan against the current state: validates everything before the first write.
     const plan = await computePlan(bundle, root);
+    // Resolve every MCP entry (throws on a missing credential) before the first write too.
+    const servers = bundle.mcpServers();
+    const entries = servers.map((s) => ({
+      server: s,
+      entry: toClaudeMcpEntry(s, scopedCredentials(bundle, s, resolved)),
+    }));
     await mkdir(root, { recursive: true });
     const written: string[] = [];
     const notes: string[] = [];
@@ -238,18 +269,10 @@ export const claudeCodeAdapter: Adapter = {
       }
     }
 
-    const servers = bundle.mcpServers();
     if (servers.length > 0) {
       const mcpPath = resolveInside(root, MCP_JSON);
       const existing = await readMcpJson(root);
-      const entries = servers.map((s) => ({
-        server: s,
-        entry: toClaudeMcpEntry(s, scopedCredentials(bundle, s, resolved)),
-      }));
-      const inlinesSecrets = entries.some(
-        ({ server, entry }) =>
-          JSON.stringify(entry) !== JSON.stringify(toClaudeMcpEntry(server, {})),
-      );
+      const inlinesSecrets = servers.some((s) => serverCredentialRefs(s).length > 0);
       const mcpServers: Record<string, unknown> = {
         ...(existing?.servers ?? {}),
         ...Object.fromEntries(entries.map(({ server, entry }) => [server.id, entry])),
@@ -281,5 +304,6 @@ export const claudeCodeAdapter: Adapter = {
 };
 
 export { toClaudeMcpEntry };
-export { McpConfigParseError, CredentialScopeError } from './mcp.js';
+export { McpConfigParseError, MissingCredentialError } from './mcp.js';
+export { CredentialScopeError } from '@uniqent/adapter-sdk';
 export { ManagedSectionError, MANAGED_BEGIN, MANAGED_END } from './agents-md.js';

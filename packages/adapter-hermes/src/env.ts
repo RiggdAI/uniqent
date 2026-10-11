@@ -16,24 +16,34 @@ function formatValue(value: string): string {
   return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n')}"`;
 }
 
+/** A merged .env text plus the existing keys whose assignment it changed. */
+export interface EnvMerge {
+  content: string;
+  replaced: string[];
+}
+
 /**
- * Merge `values` into an existing .env text. Every existing line is kept; a line assigning one
- * of our keys gets its value replaced in place (its `export`/spacing prefix kept); keys not yet
- * present are appended. Re-merging the same values yields byte-identical output.
+ * Merge `values` into an existing .env text. Every other line is kept; a line assigning one
+ * of our keys gets its value replaced in place (its `export`/spacing prefix kept) and is listed
+ * in `replaced` when that changes it; keys not yet present are appended. Re-merging the same
+ * values yields byte-identical output and no `replaced` keys.
  */
-export function mergeEnv(existing: string | undefined, values: Map<string, string>): string {
+export function mergeEnv(existing: string | undefined, values: Map<string, string>): EnvMerge {
   const lines =
     existing === undefined || existing === '' ? [] : existing.replace(/\n$/, '').split('\n');
   const seen = new Set<string>();
+  const replaced = new Set<string>();
   const merged = lines.map((line) => {
     const m = ASSIGNMENT_RE.exec(line);
     const key = m?.[1];
     const value = key === undefined ? undefined : values.get(key);
     if (m === null || key === undefined || value === undefined) return line;
     seen.add(key);
-    return `${m[0]}${formatValue(value)}`;
+    const next = `${m[0]}${formatValue(value)}`;
+    if (next !== line) replaced.add(key);
+    return next;
   });
   for (const [key, value] of values)
     if (!seen.has(key)) merged.push(`${key}=${formatValue(value)}`);
-  return merged.join('\n') + '\n';
+  return { content: merged.join('\n') + '\n', replaced: [...replaced] };
 }

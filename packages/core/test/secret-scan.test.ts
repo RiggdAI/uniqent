@@ -101,6 +101,14 @@ describe('secret-scan detectors', () => {
     ['named-secret', `Authorization: Bearer ${hex(32)}`],
     ['named-secret', `apiKey = "${randomUUID()}"`],
     ['named-secret', 'aws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY'],
+    [
+      'high-entropy',
+      `https://mcp.zapier.com/api/mcp/s/${'Zk9Q2hVx7Lm4Tp8Rb1Nc6Yd3Wf0Gj5Hs'.repeat(2)}/mcp`,
+    ],
+    [
+      'high-entropy',
+      'https://api.telegram.org/bot123456789:AAH' + 'Zk9Q2hVx7Lm4Tp8Rb1Nc6Yd3Wf0Gj5Hs/getMe',
+    ],
   ])('detects %s', (kind, value) => {
     const b = Bundle.empty();
     b.set('notes.md', value);
@@ -129,6 +137,19 @@ describe('secret-scan detectors', () => {
     const paths = scanForSecrets(b).map((f) => f.path);
     expect(paths).toContain('avatar.svg');
     expect(paths).toContain('skills/x/img.png');
+  });
+
+  it('scans non-UTF-8 text without NULs as text, not as a binary', () => {
+    const b = Bundle.empty();
+    b.set(
+      'skills/x/SKILL.md',
+      new Uint8Array([
+        ...Buffer.from('Caf'),
+        0xe9,
+        ...Buffer.from('\nAPI_TOKEN=Zk9Q2hVx7Lm4Tp8Rb1Nc6Yd3Wf0Gj5Hs\n'),
+      ]),
+    );
+    expect(scanForSecrets(b).map((f) => f.kind)).toEqual(['high-entropy']);
   });
 
   it('applies the publicKey allowlist only to signature.json and the manifest author pubkey', () => {

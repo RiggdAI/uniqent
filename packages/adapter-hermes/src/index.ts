@@ -10,17 +10,19 @@ import {
   type InstallOptions,
   type InstallPlan,
   type InstallResult,
+  type Lossiness,
   type ResolvedCredentials,
 } from '@uniqent/adapter-sdk';
 import { mergeEnv } from './env.js';
 import { exportHermes } from './export.js';
-import { exists, readOptional } from './fs.js';
+import { exists, readOptional, readOptionalBytes } from './fs.js';
 import {
   CONFIG_FILE,
   ENV_FILE,
   MEMORY_FILE,
   SOUL_FILE,
   USER_FILE,
+  skillTarget,
   translate,
   type HermesHome,
 } from './translate.js';
@@ -44,14 +46,21 @@ function defaultHermesHome(): string {
   return env ? env : join(homedir(), '.hermes');
 }
 
-async function readHome(root: string): Promise<HermesHome> {
+async function readHome(bundle: Bundle, root: string): Promise<HermesHome> {
   const read = (rel: string) => readOptional(resolveInside(root, rel));
+  const skills = new Map<string, Uint8Array>();
+  for (const path of bundle.list()) {
+    if (!path.startsWith('skills/')) continue;
+    const prior = await readOptionalBytes(skillTarget(root, path));
+    if (prior !== undefined) skills.set(path, prior);
+  }
   return {
     soul: await read(SOUL_FILE),
     memory: await read(MEMORY_FILE),
     user: await read(USER_FILE),
     config: await read(CONFIG_FILE),
     env: await read(ENV_FILE),
+    skills,
   };
 }
 
@@ -68,7 +77,7 @@ export const hermesAdapter: Adapter = {
   },
 
   async plan(bundle: Bundle, { root }: InstallOptions): Promise<InstallPlan> {
-    return translate(bundle, await readHome(root), root).plan;
+    return translate(bundle, await readHome(bundle, root), root).plan;
   },
 
   async apply(
@@ -77,32 +86,39 @@ export const hermesAdapter: Adapter = {
     resolved: ResolvedCredentials,
     { root }: InstallOptions,
   ): Promise<InstallResult> {
-    const home = await readHome(root);
+    const home = await readHome(bundle, root);
     const { plan, files, env } = translate(bundle, home, root);
     const missing = plan.requiresCredentials.filter((ref) => !resolved[ref]);
     if (missing.length > 0) throw new MissingCredentialError(missing);
 
-    const all =
+    const envMerge =
       env.length === 0
-        ? files
+        ? undefined
+        : mergeEnv(home.env, new Map(env.map((b) => [b.key, resolved[b.ref] ?? ''])));
+    const all =
+      envMerge === undefined ? files : [...files, { path: ENV_FILE, content: envMerge.content }];
+    const lossiness: Lossiness[] =
+      envMerge === undefined || envMerge.replaced.length === 0
+        ? plan.lossiness
         : [
-            ...files,
+            ...plan.lossiness,
             {
-              path: ENV_FILE,
-              content: mergeEnv(home.env, new Map(env.map((b) => [b.key, resolved[b.ref] ?? '']))),
+              component: ENV_FILE,
+              action: 'transformed',
+              issue: `replaces your existing, different value of ${envMerge.replaced.join(', ')}.`,
             },
           ];
     for (const f of all) {
       const target = resolveInside(root, f.path);
       await mkdir(dirname(target), { recursive: true });
-      await writeFile(target, f.content);
-      // .env holds real secrets: owner-only, also when it already existed with a wider mode.
+      // .env holds real secrets: created owner-only; chmod also tightens a pre-existing file.
+      await writeFile(target, f.content, { mode: f.path === ENV_FILE ? 0o600 : 0o666 });
       if (f.path === ENV_FILE) await chmod(target, 0o600);
     }
 
     return {
       written: all.map((f) => f.path),
-      notes: plan.lossiness.map((l) => `${l.action}: ${l.component} — ${l.issue}`),
+      notes: lossiness.map((l) => `${l.action}: ${l.component} — ${l.issue}`),
     };
   },
 

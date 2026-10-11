@@ -7,6 +7,9 @@ export const MAX_DOWNLOAD_BYTES = 50 * 1024 * 1024;
 /** Attempts per download; network errors and 5xx/429 are retried with a warning. */
 const FETCH_ATTEMPTS = 3;
 const RETRY_DELAY_MS = 500;
+/** Redirects followed per attempt; each hop must pass `assertSecureUrl`. */
+const MAX_REDIRECTS = 5;
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 
@@ -40,6 +43,31 @@ export function assertSecureUrl(raw: string): URL {
 
 const isRetryableStatus = (status: number): boolean => status >= 500 || status === 429;
 
+/**
+ * Fetch `url`, following up to MAX_REDIRECTS redirects by hand so every hop passes
+ * `assertSecureUrl` (fetch's own redirect handling would follow https→http). Refused,
+ * malformed, or excessive redirects throw a DownloadError.
+ */
+async function fetchSecure(url: string, signal: AbortSignal): Promise<Response> {
+  let current = url;
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    const res = await fetch(current, { signal, redirect: 'manual' });
+    if (!REDIRECT_STATUSES.has(res.status)) return res;
+    await res.body?.cancel();
+    const location = res.headers.get('location');
+    if (location === null)
+      throw new DownloadError(url, `${current} answered HTTP ${res.status} without a Location`);
+    let next: URL;
+    try {
+      next = new URL(location, current);
+    } catch {
+      throw new DownloadError(url, `${current} redirected to an invalid URL: ${safe(location)}`);
+    }
+    current = assertSecureUrl(next.toString()).toString();
+  }
+  throw new DownloadError(url, `fetch ${url} failed: more than ${MAX_REDIRECTS} redirects`);
+}
+
 async function readCapped(res: Response, url: string, maxBytes: number): Promise<Uint8Array> {
   const declared = Number(res.headers.get('content-length') ?? '0');
   if (declared > maxBytes)
@@ -68,8 +96,9 @@ async function readCapped(res: Response, url: string, maxBytes: number): Promise
 }
 
 /**
- * Download `raw` (https, or http on loopback) with a timeout and size cap. Network errors and
- * 5xx/429 responses are retried with a warning; the last error is raised. 4xx fails at once.
+ * Download `raw` (https, or http on loopback, for every redirect hop too) with a timeout and
+ * size cap. Network errors and 5xx/429 responses are retried with a warning; the last error is
+ * raised. 4xx and refused redirects fail at once.
  */
 export async function download(raw: string, warn: (msg: string) => void): Promise<Uint8Array> {
   const url = assertSecureUrl(raw).toString();
@@ -77,8 +106,9 @@ export async function download(raw: string, warn: (msg: string) => void): Promis
   for (let attempt = 1; attempt <= FETCH_ATTEMPTS; attempt++) {
     let res: Response | undefined;
     try {
-      res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+      res = await fetchSecure(url, AbortSignal.timeout(FETCH_TIMEOUT_MS));
     } catch (e) {
+      if (e instanceof DownloadError) throw e; // a refused redirect is not retryable
       const cause = (e as Error).cause;
       const reason =
         (e as Error).name === 'TimeoutError'
