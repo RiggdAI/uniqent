@@ -1,14 +1,18 @@
-use crate::session::Session;
+use crate::session::{open_bundle_bytes, BundleFile, Session};
+use base64::Engine;
+use serde::Serialize;
 use serde_json::Value;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::State;
 
-/// Shared app state: the brain draft, and the folders the user picked this session (the only
-/// folders Rust will read).
+/// Shared app state: the brain draft, the folders the user picked or dropped this session (the
+/// only folders Rust will read) and the files dropped on the window (the only files
+/// `open_dropped_bundle` opens).
 pub struct AppState {
     pub session: Mutex<Session>,
     pub granted_dirs: Mutex<Vec<PathBuf>>,
+    pub granted_files: Mutex<Vec<PathBuf>>,
 }
 
 #[tauri::command]
@@ -376,4 +380,177 @@ pub fn folder_markers(
 ) -> Result<Vec<String>, String> {
     let dir = crate::vault::granted_dir(&s.granted_dirs.lock().unwrap(), &dir)?;
     crate::fs_io::folder_markers(&dir, &names)
+}
+
+// ── Bundles: open, save, load ───────────────────────────────────────────────
+
+/// The current draft as an unsigned bundle (what install translates).
+#[tauri::command]
+pub fn bundle_files(s: State<AppState>) -> Result<Vec<BundleFile>, String> {
+    s.session.lock().unwrap().bundle_files()
+}
+
+/// Swap `next` in as the session, keeping the hub index URLs; `{ state, dropped }`.
+fn replace_session(state: &AppState, next: Session, dropped: Vec<String>) -> Result<Value, String> {
+    let mut g = state.session.lock().unwrap();
+    let mut next = next;
+    next.set_hub_indexes(g.hub_indexes())?;
+    *g = next;
+    Ok(serde_json::json!({ "state": g.state(), "dropped": dropped }))
+}
+
+/// Replace the session with a bundle given as files (a capture); `{ state, dropped }`.
+#[tauri::command]
+pub fn load_bundle_files(s: State<AppState>, files: Vec<BundleFile>) -> Result<Value, String> {
+    let mut map = std::collections::BTreeMap::new();
+    for f in files {
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(&f.bytes_base64)
+            .map_err(|_| format!("{}: bytesBase64 is not valid base64", f.path))?;
+        if map.insert(f.path.clone(), bytes).is_some() {
+            return Err(format!("{} is given twice", f.path));
+        }
+    }
+    let bundle = crate::core::bundle::Bundle::from_files(map)?;
+    let (next, dropped) = Session::load_bundle(&bundle)?;
+    replace_session(&s, next, dropped)
+}
+
+/// Read the `.uniqent` at `path` (canonical), verify it and swap it in as the session;
+/// `{ state, dropped, signature: "valid" | "unsigned" }`.
+fn open_bundle_at(state: &AppState, path: &Path) -> Result<Value, String> {
+    let label = path.display().to_string();
+    let bytes = crate::vault::read_note(path, &label, crate::core::archive::MAX_UNPACKED_BYTES)?;
+    let (bundle, signature) = open_bundle_bytes(&bytes).map_err(|e| format!("{label}: {e}"))?;
+    let (next, dropped) = Session::load_bundle(&bundle).map_err(|e| format!("{label}: {e}"))?;
+    let mut out = replace_session(state, next, dropped)?;
+    out["signature"] = serde_json::json!(signature);
+    Ok(out)
+}
+
+/// Open a `.uniqent` from the native file dialog (None when cancelled). The picked file is read
+/// once and not granted. Async: a blocking dialog on the main thread deadlocks.
+#[tauri::command]
+pub async fn open_bundle(
+    app: tauri::AppHandle,
+    s: State<'_, AppState>,
+) -> Result<Option<Value>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let Some(picked) = app
+        .dialog()
+        .file()
+        .add_filter("Uniqent bundle", &["uniqent"])
+        .blocking_pick_file()
+    else {
+        return Ok(None);
+    };
+    let path = picked
+        .into_path()
+        .map_err(|e| format!("picked file is not a local path: {e}"))?;
+    let canonical = path
+        .canonicalize()
+        .map_err(|e| format!("cannot open {}: {e}", path.display()))?;
+    open_bundle_at(&s, &canonical).map(Some)
+}
+
+/// Open a `.uniqent` dropped on the window: only a file the drop handler granted. Async so the
+/// read and unpack run off the main thread.
+#[tauri::command]
+pub async fn open_dropped_bundle(s: State<'_, AppState>, path: String) -> Result<Value, String> {
+    let canonical = Path::new(&path)
+        .canonicalize()
+        .map_err(|e| format!("cannot open {path}: {e}"))?;
+    if !s.granted_files.lock().unwrap().contains(&canonical) {
+        return Err(format!(
+            "{} was not dropped on Studio in this session; drop it again or use Open…",
+            canonical.display()
+        ));
+    }
+    open_bundle_at(&s, &canonical)
+}
+
+/// Save the brain, always signed with the session keypair (like `export(true)`), to a file the
+/// user chooses in the native save dialog; written atomically. Returns the path (None when
+/// cancelled). Signing runs first, so a secret-scan refusal shows before the dialog.
+#[tauri::command]
+pub async fn save_bundle(
+    app: tauri::AppHandle,
+    s: State<'_, AppState>,
+) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let (file_name, bytes) = {
+        let mut g = s.session.lock().unwrap();
+        (g.file_name(), g.signed_bytes()?)
+    };
+    let Some(picked) = app
+        .dialog()
+        .file()
+        .add_filter("Uniqent bundle", &["uniqent"])
+        .set_file_name(&file_name)
+        .blocking_save_file()
+    else {
+        return Ok(None);
+    };
+    let path = picked
+        .into_path()
+        .map_err(|e| format!("chosen file is not a local path: {e}"))?;
+    let (Some(parent), Some(name)) = (path.parent(), path.file_name().and_then(|n| n.to_str()))
+    else {
+        return Err(format!(
+            "cannot save to {}: not a file path",
+            path.display()
+        ));
+    };
+    let dir = parent
+        .canonicalize()
+        .map_err(|e| format!("cannot save to {}: {e}", parent.display()))?;
+    let write = crate::fs_io::OutputWrite {
+        path: name.to_string(),
+        bytes_base64: base64::engine::general_purpose::STANDARD.encode(bytes),
+        mode: None,
+    };
+    crate::fs_io::write_outputs(&dir, &[write])?;
+    Ok(Some(dir.join(name).to_string_lossy().into_owned()))
+}
+
+// ── Drag and drop ───────────────────────────────────────────────────────────
+
+/// One path dropped on the window and granted by Rust (the `studio://dropped` payload).
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct DroppedPath {
+    pub path: String,
+    pub kind: &'static str, // "dir" | "file"
+}
+
+/// Grant dropped paths, canonicalized: folders join `granted_dirs`, regular files
+/// `granted_files`. Returns what was granted plus why each other path was refused.
+pub fn grant_dropped(state: &AppState, paths: &[PathBuf]) -> (Vec<DroppedPath>, Vec<String>) {
+    let mut granted = vec![];
+    let mut refused = vec![];
+    for path in paths {
+        let canonical = match path.canonicalize() {
+            Ok(c) => c,
+            Err(e) => {
+                refused.push(format!("cannot open {}: {e}", path.display()));
+                continue;
+            }
+        };
+        let (kind, list) = if canonical.is_dir() {
+            ("dir", &state.granted_dirs)
+        } else if canonical.is_file() {
+            ("file", &state.granted_files)
+        } else {
+            refused.push(format!(
+                "{} is neither a folder nor a regular file",
+                canonical.display()
+            ));
+            continue;
+        };
+        list.lock().unwrap().push(canonical.clone());
+        granted.push(DroppedPath {
+            path: canonical.to_string_lossy().into_owned(),
+            kind,
+        });
+    }
+    (granted, refused)
 }

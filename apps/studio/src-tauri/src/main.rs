@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::sync::Mutex;
+use tauri::{Emitter, Manager};
 use uniqent_studio::commands::{self, AppState};
 use uniqent_studio::session::Session;
 
@@ -11,6 +12,20 @@ fn main() {
         .manage(AppState {
             session: Mutex::new(Session::new()),
             granted_dirs: Mutex::new(vec![]),
+            granted_files: Mutex::new(vec![]),
+        })
+        // Drops are granted here, from the OS event: the webview never names a path to allow.
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event {
+                let (granted, refused) =
+                    commands::grant_dropped(&window.state::<AppState>(), paths);
+                for reason in refused {
+                    eprintln!("studio: drop refused: {reason}");
+                }
+                if let Err(e) = window.emit("studio://dropped", granted) {
+                    eprintln!("studio: cannot emit studio://dropped: {e}");
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![
             commands::state,
@@ -62,6 +77,12 @@ fn main() {
             commands::read_inputs,
             commands::write_outputs,
             commands::framework_homes,
+            // Bundles
+            commands::bundle_files,
+            commands::load_bundle_files,
+            commands::open_bundle,
+            commands::open_dropped_bundle,
+            commands::save_bundle,
         ])
         .run(tauri::generate_context!())
         .expect("error while running uniqent studio");
