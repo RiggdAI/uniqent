@@ -1,3 +1,4 @@
+import { isLikelySecretValue } from '@uniqent/core/pure';
 import { z } from 'zod';
 import type { SourceError } from './aggregate.js';
 import { bodySnippet, hubFetch, type FetchFn } from './http.js';
@@ -92,7 +93,8 @@ export interface PublishResult {
 /**
  * Publish a memory pack to a hosted registry's `POST /api/v1/memory` (bearer-token gated).
  * `registry` is the SITE base (e.g. https://uniqent.ai), not an index.json URL. The server
- * scrubs personal-visibility facts before hosting. Throws with the status and body on failure.
+ * scrubs personal-visibility facts before hosting. Refuses (before any request) when a fact looks
+ * like it holds a secret. Throws with the status and body on failure.
  */
 export async function publishMemoryPack(
   fetchFn: FetchFn,
@@ -103,6 +105,12 @@ export async function publishMemoryPack(
 ): Promise<PublishResult> {
   if (!token) throw new Error('a publish token is required');
   if (!pack.slug || !pack.name) throw new Error('slug and name are required');
+  const leaking = pack.facts.flatMap((f, i) => (isLikelySecretValue(f.text) ? [`#${i + 1}`] : []));
+  if (leaking.length > 0) {
+    throw new Error(
+      `refusing to publish: fact ${leaking.join(', ')} looks like it contains a secret — remove or rewrite it first`,
+    );
+  }
   const url = `${base(registry)}/api/v1/memory`;
   const res = await fetchFn(url, {
     method: 'POST',
