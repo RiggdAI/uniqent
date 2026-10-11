@@ -12,6 +12,7 @@ import type {
 } from './types';
 import { api, isNative } from './api';
 import { InstallPanel } from './InstallPanel';
+import { CapturePanel } from './CapturePanel';
 import { errorText } from './lib/utils';
 import { canPublish } from './publish';
 import { Button } from './components/ui/button';
@@ -26,6 +27,8 @@ interface InspectorProps {
   catalog: CatalogView;
   apply: (p: Promise<StudioState>) => void;
   onClose: () => void;
+  /** A folder dropped on the window, for the 'vault' and 'capture' panels (else null). */
+  droppedDir: string | null;
 }
 
 function Field({
@@ -63,7 +66,10 @@ function RichEditor(props: { value: string; onChange: (md: string) => void; test
   );
 }
 
-function PersonaEditor({ state, apply }: Omit<InspectorProps, 'selection' | 'onClose'>) {
+function PersonaEditor({
+  state,
+  apply,
+}: Omit<InspectorProps, 'selection' | 'onClose' | 'droppedDir'>) {
   const [persona, setPersona] = useState(state.persona ?? '');
   const dirty = persona !== (state.persona ?? '');
   return (
@@ -86,7 +92,10 @@ function PersonaEditor({ state, apply }: Omit<InspectorProps, 'selection' | 'onC
   );
 }
 
-function MemoryEditor({ state, apply }: Omit<InspectorProps, 'selection' | 'onClose'>) {
+function MemoryEditor({
+  state,
+  apply,
+}: Omit<InspectorProps, 'selection' | 'onClose' | 'droppedDir'>) {
   const [text, setText] = useState('');
   const [addError, setAddError] = useState('');
   const [importance, setImportance] = useState('0.5');
@@ -267,7 +276,7 @@ function MemoryEditor({ state, apply }: Omit<InspectorProps, 'selection' | 'onCl
         </div>
       </div>
 
-      <VaultImportPanel apply={apply} />
+      <VaultImportPanel apply={apply} initialDir={null} />
     </div>
   );
 }
@@ -278,8 +287,15 @@ function MemoryEditor({ state, apply }: Omit<InspectorProps, 'selection' | 'onCl
  * notes become episodic). Preview first; the apply overwrites persona/profile only if you keep
  * the toggles on.
  */
-function VaultImportPanel({ apply }: { apply: (p: Promise<StudioState>) => void }) {
-  const [dir, setDir] = useState('');
+function VaultImportPanel({
+  apply,
+  initialDir,
+}: {
+  apply: (p: Promise<StudioState>) => void;
+  /** A folder dropped on the window (already granted by Rust), else null. */
+  initialDir: string | null;
+}) {
+  const [dir, setDir] = useState(initialDir ?? '');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [preview, setPreview] = useState<VaultImport | null>(null);
@@ -438,7 +454,10 @@ function VaultImportPanel({ apply }: { apply: (p: Promise<StudioState>) => void 
   );
 }
 
-function ConfigEditor({ state, apply }: Omit<InspectorProps, 'selection' | 'onClose'>) {
+function ConfigEditor({
+  state,
+  apply,
+}: Omit<InspectorProps, 'selection' | 'onClose' | 'droppedDir'>) {
   const m = state.manifest;
   const [name, setName] = useState(m.name);
   const [displayName, setDisplayName] = useState(m.displayName);
@@ -1674,6 +1693,8 @@ function titleFor(selection: string): string {
   if (selection === 'hub-mcp') return 'Browse MCP hubs';
   if (selection === 'hub-skills') return 'Browse skill hubs';
   if (selection === 'install') return 'Install';
+  if (selection === 'capture') return 'Capture an agent';
+  if (selection === 'vault') return 'Import a vault';
   if (selection === 'agent') return 'Config';
   if (selection === 'persona') return 'Persona';
   if (selection === 'memory') return 'Memory';
@@ -1689,7 +1710,7 @@ function titleFor(selection: string): string {
 }
 
 export function Inspector(props: InspectorProps) {
-  const { selection, state, catalog, apply, onClose } = props;
+  const { selection, state, catalog, apply, onClose, droppedDir } = props;
   return (
     <aside className="flex h-full flex-col">
       <div className="flex h-12 shrink-0 items-center justify-between border-b px-4">
@@ -1732,6 +1753,12 @@ export function Inspector(props: InspectorProps) {
         {selection === 'hub-mcp' && <HubMcpPanel state={state} apply={apply} />}
         {selection === 'hub-skills' && <HubSkillPanel apply={apply} />}
         {selection === 'install' && <InstallPanel />}
+        {selection === 'capture' && (
+          <CapturePanel key={droppedDir ?? ''} dir={droppedDir} apply={apply} />
+        )}
+        {selection === 'vault' && (
+          <VaultImportPanel key={droppedDir ?? ''} apply={apply} initialDir={droppedDir} />
+        )}
         {selection.startsWith('cred:') && (
           <CredentialDetails refId={selection.slice(5)} state={state} />
         )}

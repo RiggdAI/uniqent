@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { TargetId } from '@uniqent/builder/brain';
 import * as native from './native';
+import { captureAgent, type CaptureResult } from './capture';
 import {
   applyInstall,
   planInstall,
@@ -25,14 +26,15 @@ import type {
   MemoryHubSearch,
   VaultImport,
   FrameworkHomes,
+  OpenedBundle,
 } from './types';
 
 export const isNative =
   typeof (globalThis as Record<string, unknown>).__TAURI_INTERNALS__ !== 'undefined';
 
-/** Native-only features have no route on the old local server (the browser build). */
-const needsNative = <T>(what: string): Promise<T> =>
-  Promise.reject(new Error(`${what} needs the native app; use \`uniqent install\` from the CLI`));
+/** Native-only features have no route on the old local server (the browser build); `cli` is the CLI equivalent. */
+const needsNative = <T>(what: string, cli: string): Promise<T> =>
+  Promise.reject(new Error(`${what} needs the native app; use \`${cli}\` from the CLI`));
 
 async function unwrap<T>(res: Response): Promise<T> {
   const json = (await res.json()) as T & { error?: string };
@@ -225,7 +227,7 @@ export const api = {
   installPreview: (target: TargetId, root: string, creds: Record<string, string>) =>
     isNative
       ? previewInstall(target, root, creds).then(reviewOf)
-      : needsNative<ReviewedInstall>('reviewing install changes'),
+      : needsNative<ReviewedInstall>('reviewing install changes', 'uniqent install'),
   /** Installs only when the result still matches `reviewed` (see applyInstall). */
   install: (
     target: TargetId,
@@ -237,8 +239,34 @@ export const api = {
       ? applyInstall(target, root, creds, reviewed)
       : post<InstallResult>('/api/install', { target, root, creds }),
   frameworkHomes: () =>
-    isNative ? native.frameworkHomes() : needsNative<FrameworkHomes>('finding agent frameworks'),
+    isNative
+      ? native.frameworkHomes()
+      : needsNative<FrameworkHomes>('finding agent frameworks', 'uniqent install'),
   /** The project markers a picked folder holds (see targets.ts folderChoices). */
   folderTargets: (dir: string) =>
-    isNative ? native.folderMarkers(dir) : needsNative<string[]>('inspecting a picked folder'),
+    isNative
+      ? native.folderMarkers(dir)
+      : needsNative<string[]>('inspecting a picked folder', 'uniqent install'),
+
+  // ── Phase 4: capture an agent; open and save .uniqent bundles (dialogs and files in Rust) ──
+  /** Replaces the session with the captured agent (episodic and personal memory left out). */
+  capture: (target: TargetId, root: string) =>
+    isNative
+      ? captureAgent(target, root)
+      : needsNative<CaptureResult>('capturing an agent', 'uniqent export'),
+  /** The native open dialog; null when cancelled. A signed bundle that fails to verify is refused. */
+  openBundle: () =>
+    isNative
+      ? native.call<OpenedBundle | null>('open_bundle')
+      : needsNative<OpenedBundle | null>('opening a .uniqent', 'uniqent inspect'),
+  /** A `.uniqent` the user dropped on the window (only paths Rust granted from the drop). */
+  openDroppedBundle: (path: string) =>
+    isNative
+      ? native.call<OpenedBundle>('open_dropped_bundle', { path })
+      : needsNative<OpenedBundle>('opening a dropped .uniqent', 'uniqent inspect'),
+  /** The native save dialog, always signed; the saved path, or null when cancelled. */
+  saveBundle: () =>
+    isNative
+      ? native.call<string | null>('save_bundle')
+      : needsNative<string | null>('saving a signed .uniqent', 'uniqent pack'),
 };

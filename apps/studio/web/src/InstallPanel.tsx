@@ -1,24 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { displayPath, OWNER_ONLY } from '@uniqent/adapter-sdk/pure';
 import { nextStep, type TargetId } from '@uniqent/builder/brain';
 import type { InstallPlan, InstallResult } from './types';
 import { api } from './api';
 import { PURE_ADAPTERS, type ReviewedInstall } from './install';
-import { folderChoices, installChoices, type InstallChoice } from './targets';
+import { OUTSIDE_ALLOWED, TargetChoiceList, useTargetPicker } from './TargetPick';
 import { errorText } from './lib/utils';
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
 import { Label } from './components/ui/label';
 
-/** Rust's refusal of a root outside the picked folders and framework homes (fs_io::allowed_root). */
-const OUTSIDE_ALLOWED = 'outside the folders Studio may use';
-
 type InstallStep = 'plan' | 'review' | 'install';
 
 export function InstallPanel() {
-  const [choices, setChoices] = useState<InstallChoice[]>([]);
-  const [several, setSeveral] = useState(false);
-  const [target, setTarget] = useState<TargetId | null>(null);
   const [plan, setPlan] = useState<InstallPlan | null>(null);
   // Credential values live only here, in the translate call and in the bytes handed to Rust.
   const [creds, setCreds] = useState<Record<string, string>>({});
@@ -27,21 +21,6 @@ export function InstallPanel() {
   const [err, setErr] = useState('');
   const [failed, setFailed] = useState<InstallStep | null>(null);
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    api
-      .frameworkHomes()
-      .then((homes) => {
-        const found = installChoices(homes);
-        setChoices(found.choices);
-        setTarget(found.preselected);
-        setSeveral(found.preselected === null && found.choices.filter((c) => c.present).length > 1);
-      })
-      .catch((e: unknown) => setErr(errorText(e)));
-  }, []);
-
-  const choice = choices.find((c) => c.id === target) ?? null;
-  const root = choice && choice.error === null ? choice.root : null;
 
   /** A plan is for one target + root; changing either invalidates every later step. */
   function restart(): void {
@@ -53,41 +32,9 @@ export function InstallPanel() {
     setFailed(null);
   }
 
-  function select(id: TargetId): void {
-    setTarget(id);
-    setSeveral(false);
-    restart();
-  }
-
-  async function chooseFolder(): Promise<void> {
-    setErr('');
-    try {
-      const dir = await api.chooseFolder();
-      if (!dir) return;
-      const found = folderChoices(dir, await api.folderTargets(dir));
-      restart();
-      setSeveral(found.length > 1);
-      if (found.length === 1) {
-        const only = found[0]!;
-        // A list from an earlier folder pick may not hold this framework yet.
-        setChoices((cs) =>
-          cs.some((c) => c.id === only.id)
-            ? cs.map((c) => (c.id === only.id ? only : c))
-            : [...cs, only],
-        );
-        setTarget(only.id);
-      } else if (found.length > 1) {
-        setChoices(found);
-        setTarget(null);
-      } else if (target) {
-        setChoices((cs) => cs.map((c) => (c.id === target ? { ...c, root: dir, error: null } : c)));
-      } else {
-        setErr(`no agent framework found in ${dir}; choose a framework above, then the folder`);
-      }
-    } catch (e) {
-      setErr(errorText(e));
-    }
-  }
+  const picker = useTargetPicker(null, restart, setErr);
+  const { target } = picker.pick;
+  const { root } = picker;
 
   async function run(step: InstallStep, action: () => Promise<void>): Promise<void> {
     setBusy(true);
@@ -154,41 +101,14 @@ export function InstallPanel() {
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">Install this brain into a local framework.</p>
-      {several && (
-        <p data-testid="install-several" className="text-xs text-amber-400">
-          Several agent frameworks found — choose one
-        </p>
-      )}
-      <div className="space-y-1.5">
-        {choices.map((c) => (
-          <label key={c.id} className="flex items-start gap-2 text-sm">
-            <input
-              type="radio"
-              name="install-target"
-              data-testid={`install-target-${c.id}`}
-              checked={target === c.id}
-              onChange={() => select(c.id)}
-            />
-            <span className="min-w-0">
-              <span className="font-medium">{PURE_ADAPTERS[c.id].displayName}</span>{' '}
-              <span className="text-xs text-muted-foreground">
-                {c.present ? 'found' : 'not found'}
-              </span>
-              <span className="block truncate text-xs text-muted-foreground">
-                {c.root ?? 'choose a project folder'}
-              </span>
-              {c.error && <span className="block text-xs text-destructive">{c.error}</span>}
-            </span>
-          </label>
-        ))}
-      </div>
+      <TargetChoiceList name="install" picker={picker} />
       <div className="flex items-center gap-2">
         <Button
           data-testid="install-choose"
           variant="outline"
           size="sm"
           disabled={busy}
-          onClick={chooseFolder}
+          onClick={picker.chooseFolder}
         >
           Choose folder…
         </Button>

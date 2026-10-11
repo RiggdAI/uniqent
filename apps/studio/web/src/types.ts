@@ -105,6 +105,17 @@ export interface FrameworkHomes {
   claudeCodeUser: boolean;
 }
 
+/** Rust `load_bundle_files`: the new session state and every line the session could not hold. */
+export interface LoadedBundle {
+  state: StudioState;
+  dropped: string[];
+}
+
+/** Rust `open_bundle` / `open_dropped_bundle` (a signed bundle that fails to verify is refused). */
+export interface OpenedBundle extends LoadedBundle {
+  signature: 'valid' | 'unsigned';
+}
+
 export interface TaskInput {
   name?: string;
   triggerType?: 'schedule' | 'event' | 'manual';

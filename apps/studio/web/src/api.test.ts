@@ -137,6 +137,24 @@ describe('api shim (native)', () => {
     expect(invokeMock.mock.calls).toEqual([['bundle_files', undefined]]);
   });
 
+  it('opens and saves .uniqent bundles through the native dialogs (no args; save always signs)', async () => {
+    invokeMock.mockResolvedValue(null); // both dialogs cancelled
+    const { api } = await import('./api');
+    expect(await api.openBundle()).toBeNull();
+    expect(await api.saveBundle()).toBeNull();
+    expect(invokeMock.mock.calls).toEqual([
+      ['open_bundle', undefined],
+      ['save_bundle', undefined],
+    ]);
+  });
+
+  it('opens a dropped .uniqent by its granted path', async () => {
+    invokeMock.mockResolvedValue({ state: {}, dropped: [], signature: 'valid' });
+    const { api } = await import('./api');
+    await api.openDroppedBundle('/x/a.uniqent');
+    expect(invokeMock).toHaveBeenCalledWith('open_dropped_bundle', { path: '/x/a.uniqent' });
+  });
+
   it('has no Phase 3b "not yet available" stubs left', async () => {
     const src = (await import('node:fs')).readFileSync(
       new URL('./api.ts', import.meta.url),
