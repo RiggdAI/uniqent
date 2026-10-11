@@ -43,6 +43,66 @@
       "ownerOnly": false
     }
   },
+  "inputs": {
+    "files": [
+      "openclaw.json",
+      ".env",
+      "workspace/SOUL.md",
+      "workspace/AGENTS.md",
+      "workspace/USER.md",
+      "workspace/MEMORY.md",
+      "workspace/skills/triage/SKILL.md",
+      "workspace/skills/triage/assets/logo.bin"
+    ],
+    "finds": [],
+    "read": {
+      ".env": "RVhJU1RJTkc9MQo=",
+      "openclaw.json": "ewogIC8vIGtlZXAgdGhpcyBjb21tZW50CiAgZ2F0ZXdheTogeyBwb3J0OiAxODc4OSB9LAp9Cg==",
+      "workspace/SOUL.md": "VXNlciBzb3VsIHRleHQuCg=="
+    }
+  },
+  "writes": [
+    {
+      "path": "workspace/SOUL.md",
+      "bytesBase64": "VXNlciBzb3VsIHRleHQuCgo8IS0tIHVuaXFlbnQ6YmVnaW4gLS0+CiMgUGVyc29uYQoKQSBwcmVjaXNlLCBmcmllbmRseSBhc3Npc3RhbnQuCjwhLS0gdW5pcWVudDplbmQgLS0+Cg==",
+      "mode": null
+    },
+    {
+      "path": "workspace/AGENTS.md",
+      "bytesBase64": "PCEtLSB1bmlxZW50OmJlZ2luIC0tPgojIFBvbGljaWVzCgpOZXZlciBndWVzcy4KPCEtLSB1bmlxZW50OmVuZCAtLT4K",
+      "mode": null
+    },
+    {
+      "path": "workspace/USER.md",
+      "bytesBase64": "PCEtLSB1bmlxZW50OmJlZ2luIC0tPgotIG5hbWU6IEFkYQotIHJvbGU6IExlYWQKPCEtLSB1bmlxZW50OmVuZCAtLT4K",
+      "mode": null
+    },
+    {
+      "path": "workspace/MEMORY.md",
+      "bytesBase64": "PCEtLSB1bmlxZW50OmJlZ2luIC0tPgotIFByZWZlcnMgVHlwZVNjcmlwdAotIERlcGxveXMgb24gRnJpZGF5cwotIExpa2VzIHRlcnNlIGFuc3dlcnMKPCEtLSB1bmlxZW50OmVuZCAtLT4K",
+      "mode": null
+    },
+    {
+      "path": "workspace/skills/triage/SKILL.md",
+      "bytesBase64": "LS0tCm5hbWU6IHRyaWFnZQpkZXNjcmlwdGlvbjogVHJpYWdlIGluY29taW5nIGlzc3VlcwotLS0KVHJpYWdlIGlzc3Vlcy4K",
+      "mode": null
+    },
+    {
+      "path": "workspace/skills/triage/assets/logo.bin",
+      "bytesBase64": "AP8BgA==",
+      "mode": null
+    },
+    {
+      "path": "openclaw.json",
+      "bytesBase64": "ewogICJnYXRld2F5IjogewogICAgInBvcnQiOiAxODc4OQogIH0sCiAgIm1jcCI6IHsKICAgICJzZXJ2ZXJzIjogewogICAgICAiZ2l0aHViIjogewogICAgICAgICJ0cmFuc3BvcnQiOiAic3RyZWFtYWJsZS1odHRwIiwKICAgICAgICAidXJsIjogImh0dHBzOi8vYXBpLmdpdGh1YmNvcGlsb3QuY29tL21jcC8iLAogICAgICAgICJoZWFkZXJzIjogewogICAgICAgICAgIkF1dGhvcml6YXRpb24iOiAiQmVhcmVyICR7R0lUSFVCX1BBVH0iCiAgICAgICAgfQogICAgICB9CiAgICB9CiAgfSwKICAiY2hhbm5lbHMiOiB7CiAgICAidGVsZWdyYW0iOiB7CiAgICAgICJlbmFibGVkIjogdHJ1ZSwKICAgICAgImJvdFRva2VuIjogIiR7VEVMRUdSQU1fQk9UX1RPS0VOfSIKICAgIH0KICB9Cn0K",
+      "mode": null
+    },
+    {
+      "path": ".env",
+      "bytesBase64": "RVhJU1RJTkc9MQpHSVRIVUJfUEFUPXRlc3QtZ2l0aHViX3BhdApURUxFR1JBTV9CT1RfVE9LRU49dGVzdC10ZWxlZ3JhbV9ib3RfdG9rZW4K",
+      "mode": 384
+    }
+  ],
   "captured": {
     "channels/channels.json": "ewogICJjaGFubmVscyI6IFsKICAgIHsKICAgICAgImlkIjogInRlbGVncmFtIiwKICAgICAgImtpbmQiOiAidGVsZWdyYW0iLAogICAgICAiY3JlZGVudGlhbFJlZiI6ICJ0ZWxlZ3JhbV9ib3RfdG9rZW4iCiAgICB9CiAgXQp9",
     "identity/persona.md": "VXNlciBzb3VsIHRleHQuCgojIFBlcnNvbmEKCkEgcHJlY2lzZSwgZnJpZW5kbHkgYXNzaXN0YW50Lg==",

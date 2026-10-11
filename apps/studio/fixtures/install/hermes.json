@@ -40,6 +40,61 @@
       "ownerOnly": false
     }
   },
+  "inputs": {
+    "files": [
+      "SOUL.md",
+      "memories/MEMORY.md",
+      "memories/USER.md",
+      "config.yaml",
+      ".env",
+      "skills/triage/SKILL.md",
+      "skills/triage/assets/logo.bin"
+    ],
+    "finds": [],
+    "read": {
+      ".env": "RVhJU1RJTkc9MQo=",
+      "SOUL.md": "VXNlciBzb3VsIHRleHQuCg==",
+      "config.yaml": "IyBrZWVwIHRoaXMgY29tbWVudAptb2RlbDogc29tZS1tb2RlbAo=",
+      "memories/MEMORY.md": "Rmlyc3QgZXhpc3RpbmcgZW50cnkKwqcKU2Vjb25kIGV4aXN0aW5nIGVudHJ5Cg=="
+    }
+  },
+  "writes": [
+    {
+      "path": "SOUL.md",
+      "bytesBase64": "IyBQZXJzb25hCgpBIHByZWNpc2UsIGZyaWVuZGx5IGFzc2lzdGFudC4KCiMjIFBvbGljaWVzCgojIFBvbGljaWVzCgpOZXZlciBndWVzcy4K",
+      "mode": null
+    },
+    {
+      "path": "memories/MEMORY.md",
+      "bytesBase64": "Rmlyc3QgZXhpc3RpbmcgZW50cnkKwqcKU2Vjb25kIGV4aXN0aW5nIGVudHJ5CsKnClByZWZlcnMgVHlwZVNjcmlwdArCpwpEZXBsb3lzIG9uIEZyaWRheXMKwqcKTGlrZXMgdGVyc2UgYW5zd2Vycw==",
+      "mode": null
+    },
+    {
+      "path": "memories/USER.md",
+      "bytesBase64": "bmFtZTogQWRhCsKnCnJvbGU6IExlYWQ=",
+      "mode": null
+    },
+    {
+      "path": "skills/triage/SKILL.md",
+      "bytesBase64": "LS0tCm5hbWU6IHRyaWFnZQpkZXNjcmlwdGlvbjogVHJpYWdlIGluY29taW5nIGlzc3VlcwotLS0KVHJpYWdlIGlzc3Vlcy4K",
+      "mode": null
+    },
+    {
+      "path": "skills/triage/assets/logo.bin",
+      "bytesBase64": "AP8BgA==",
+      "mode": null
+    },
+    {
+      "path": "config.yaml",
+      "bytesBase64": "IyBrZWVwIHRoaXMgY29tbWVudAptb2RlbDogc29tZS1tb2RlbAptY3Bfc2VydmVyczoKICBnaXRodWI6CiAgICB1cmw6IGh0dHBzOi8vYXBpLmdpdGh1YmNvcGlsb3QuY29tL21jcC8KICAgIGhlYWRlcnM6CiAgICAgIEF1dGhvcml6YXRpb246IEJlYXJlciAke0dJVEhVQl9QQVR9Cg==",
+      "mode": null
+    },
+    {
+      "path": ".env",
+      "bytesBase64": "RVhJU1RJTkc9MQpHSVRIVUJfUEFUPXRlc3QtZ2l0aHViX3BhdApURUxFR1JBTV9CT1RfVE9LRU49dGVzdC10ZWxlZ3JhbV9ib3RfdG9rZW4K",
+      "mode": 384
+    }
+  ],
   "captured": {
     "identity/persona.md": "IyBQZXJzb25hCgpBIHByZWNpc2UsIGZyaWVuZGx5IGFzc2lzdGFudC4KCiMjIFBvbGljaWVzCgojIFBvbGljaWVzCgpOZXZlciBndWVzcy4K",
     "mcp/servers.json": "ewogICJzZXJ2ZXJzIjogWwogICAgewogICAgICAiaWQiOiAiZ2l0aHViIiwKICAgICAgInRyYW5zcG9ydCI6ICJzdHJlYW1hYmxlLWh0dHAiLAogICAgICAidXJsIjogImh0dHBzOi8vYXBpLmdpdGh1YmNvcGlsb3QuY29tL21jcC8iLAogICAgICAiYXV0aCI6IHsKICAgICAgICAidHlwZSI6ICJiZWFyZXIiLAogICAgICAgICJjcmVkZW50aWFsUmVmIjogImdpdGh1Yl9wYXQiCiAgICAgIH0sCiAgICAgICJ0b29scyI6IHsKICAgICAgICAiaW5jbHVkZSI6ICJhbGwiCiAgICAgIH0KICAgIH0KICBdCn0=",

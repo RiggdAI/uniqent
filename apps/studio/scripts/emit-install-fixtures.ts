@@ -2,6 +2,17 @@ import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { claudeCodePure } from '@uniqent/adapter-claude-code/pure';
+import { hermesPure } from '@uniqent/adapter-hermes/pure';
+import { openClawPure } from '@uniqent/adapter-openclaw/pure';
+import {
+  gatherInputs,
+  nodeContext,
+  readFromDisk,
+  type InputRequest,
+  type PureAdapter,
+  type ReadFn,
+} from '@uniqent/adapter-sdk';
 import { Brain } from '@uniqent/builder';
 import { pack, unpack, type Bundle } from '@uniqent/core';
 import { run, type CliIo } from '@uniqent/cli';
@@ -17,6 +28,14 @@ export interface InstallFixture {
   credentials: Record<string, string>;
   /** Every file after `uniqent install` (path → bytes, and whether its mode is owner-only). */
   tree: Record<string, { bytesBase64: string; ownerOnly: boolean }>;
+  /** What the pure adapter asked to read (root-relative) and the bytes it got, on the seed. */
+  inputs: {
+    files: string[];
+    finds: Array<{ dir: string; fileName: string; skipDirs: string[] }>;
+    read: Record<string, string>; // path → base64
+  };
+  /** The pure translate's writes for the seed + credentials — exactly what Studio hands to write_outputs. */
+  writes: Array<{ path: string; bytesBase64: string; mode: number | null }>;
   /** `uniqent export --from <target>` of that tree: bundle path → base64 bytes. */
   captured: Record<string, string>;
 }
@@ -101,6 +120,12 @@ const SEEDS: Record<FixtureTarget, Record<string, string>> = {
   },
 };
 
+const PURE: Record<FixtureTarget, PureAdapter> = {
+  'claude-code': claudeCodePure,
+  hermes: hermesPure,
+  openclaw: openClawPure,
+};
+
 const toPosix = (p: string): string => p.split(sep).join('/');
 
 async function listFiles(root: string, dir: string): Promise<string[]> {
@@ -115,7 +140,16 @@ async function listFiles(root: string, dir: string): Promise<string[]> {
   return nested.flat().sort();
 }
 
-async function snapshot(root: string): Promise<InstallFixture['tree']> {
+/** Write `seed` (path → UTF-8 text) under `root`. */
+export async function writeSeed(root: string, seed: Record<string, string>): Promise<void> {
+  for (const [path, text] of Object.entries(seed)) {
+    await mkdir(dirname(join(root, path)), { recursive: true });
+    await writeFile(join(root, path), text);
+  }
+}
+
+/** Every file under `root`: bytes and whether its mode is owner-only. */
+export async function snapshot(root: string): Promise<InstallFixture['tree']> {
   const entries = await Promise.all(
     (await listFiles(root, root)).map(async (path) => {
       const abs = join(root, path);
@@ -129,19 +163,75 @@ async function snapshot(root: string): Promise<InstallFixture['tree']> {
   return Object.fromEntries(entries);
 }
 
+/** `abs` relative to `root`; throws if it lies elsewhere (the fixture is single-root by construction). */
+function underRoot(root: string, abs: string): string {
+  if (!abs.startsWith(`${root}/`))
+    throw new Error(
+      `"${abs}" lies outside the install root "${root}"; the fixture must be single-root`,
+    );
+  return abs.slice(root.length + 1);
+}
+
+/** Throws unless `refRoot` is the install root (the fixture is single-root by construction). */
+function assertRoot(root: string, refRoot: string, path: string): void {
+  if (refRoot !== root)
+    throw new Error(
+      `"${path}" is under "${refRoot}", not the install root "${root}"; the fixture must be single-root`,
+    );
+}
+
+/**
+ * Studio's install path on the seeded `root`: gather the pure adapter's inputs (recording every
+ * request), then translate with `credentials`. Returns the root-relative reads and writes.
+ */
+async function pureTranslation(
+  pure: PureAdapter,
+  bundle: Bundle,
+  root: string,
+  credentials: Record<string, string>,
+): Promise<Pick<InstallFixture, 'inputs' | 'writes'>> {
+  const ctx = nodeContext(root);
+  const requests: InputRequest[] = [];
+  const recording: ReadFn = (request) => {
+    requests.push(request);
+    return readFromDisk(request);
+  };
+  const read = await gatherInputs((r, asked) => pure.inputs(bundle, r, ctx, asked), recording);
+  const { writes } = pure.translate(bundle, read, credentials, ctx);
+  const files = requests.flatMap((r) => r.files);
+  const finds = requests.flatMap((r) => r.finds);
+  files.forEach((f) => assertRoot(ctx.root, f.root, f.path));
+  finds.forEach((f) => assertRoot(ctx.root, f.root, f.dir));
+  writes.forEach((w) => assertRoot(ctx.root, w.root, w.path));
+  return {
+    inputs: {
+      files: files.map((f) => f.path),
+      finds: finds.map((f) => ({ dir: f.dir, fileName: f.fileName, skipDirs: f.skipDirs })),
+      read: Object.fromEntries(
+        [...read]
+          .map(([abs, bytes]) => [underRoot(ctx.root, abs), Buffer.from(bytes).toString('base64')])
+          .sort(([a], [b]) => (a < b ? -1 : 1)),
+      ),
+    },
+    writes: writes.map((w) => ({
+      path: w.path,
+      bytesBase64: Buffer.from(w.bytes).toString('base64'),
+      mode: w.mode,
+    })),
+  };
+}
+
 /** Install the fixture bundle into a seeded sandbox via the real CLI, then capture it back. */
 export async function buildInstallFixture(target: FixtureTarget): Promise<InstallFixture> {
   const base = await mkdtemp(join(tmpdir(), `uniqent-fixture-${target}-`));
   try {
     const root = join(base, 'root');
     const seed = SEEDS[target];
-    for (const [path, text] of Object.entries(seed)) {
-      await mkdir(dirname(join(root, path)), { recursive: true });
-      await writeFile(join(root, path), text);
-    }
+    await writeSeed(root, seed);
     const bundleFile = join(base, 'parity.uniqent');
     const capturedFile = join(base, 'captured.uniqent');
-    await writeFile(bundleFile, await pack(fixtureBundle()));
+    const bundleBytes = await pack(fixtureBundle());
+    await writeFile(bundleFile, bundleBytes);
 
     const lines: string[] = [];
     const io: CliIo = { log: (m) => lines.push(m), error: (m) => lines.push(m) };
@@ -149,6 +239,13 @@ export async function buildInstallFixture(target: FixtureTarget): Promise<Instal
       fixtureBundle()
         .manifest()
         .credentials.map((c) => [c.ref, `test-${c.ref}`]),
+    );
+    // Studio's path, on the untouched seed: the pure translate only reads, the CLI writes after.
+    const { inputs, writes } = await pureTranslation(
+      PURE[target],
+      await unpack(bundleBytes),
+      root,
+      credentials,
     );
     const credArgs = Object.entries(credentials).flatMap(([ref, v]) => ['--cred', `${ref}=${v}`]);
     const installCode = await run(
@@ -182,7 +279,7 @@ export async function buildInstallFixture(target: FixtureTarget): Promise<Instal
         .sort(([a], [b]) => (a < b ? -1 : 1))
         .map(([path, bytes]) => [path, Buffer.from(bytes).toString('base64')]),
     );
-    return { target, seed, credentials, tree, captured };
+    return { target, seed, credentials, tree, inputs, writes, captured };
   } finally {
     await rm(base, { recursive: true, force: true });
   }
