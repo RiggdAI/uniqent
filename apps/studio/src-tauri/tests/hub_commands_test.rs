@@ -99,6 +99,20 @@ fn publish_payload_refuses_all_personal_memory() {
 }
 
 #[test]
+fn publish_payload_refuses_a_fact_holding_a_secret_without_echoing_it() {
+    let secret = format!("ghp_{}", "a1B2c3D4e5".repeat(4));
+    let mut s = Session::new();
+    s.import_memory(
+        json!({"items":[{"text":"Team uses Postgres"},{"text":format!("deploy key: {secret}")}]}),
+    )
+    .unwrap();
+    let id = s.memory_items()[1]["id"].as_str().unwrap().to_string();
+    let err = s.publish_payload().unwrap_err();
+    assert!(err.contains(&id), "{err}");
+    assert!(!err.contains(&secret), "{err}");
+}
+
+#[test]
 fn registry_token_reads_the_cli_store_and_fails_loudly_on_corruption() {
     let store = r#"{"https://uniqent.ai":{"token":"tok123"}}"#;
     assert_eq!(

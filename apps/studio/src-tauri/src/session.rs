@@ -5,6 +5,7 @@ use std::sync::OnceLock;
 
 use crate::core::archive::pack_checked;
 use crate::core::bundle::Bundle;
+use crate::core::secret_scan::is_likely_secret_value;
 use crate::core::signing::{generate_keypair, sign, verify, Keypair};
 
 /// Validate `name` against the Slug pattern: `^[a-z0-9][a-z0-9-]*$`
@@ -384,16 +385,31 @@ impl Session {
     }
 
     /// The memory-pack upload for the hub: shareable facts only (personal ones never leave).
+    /// Refuses when a shareable fact looks like it holds a secret, naming the fact ids.
     pub fn publish_payload(&self) -> Result<Value, String> {
-        let facts: Vec<Value> = self
+        let shareable: Vec<&Value> = self
             .facts
             .iter()
             .filter(|f| f["visibility"].as_str() != Some("personal"))
-            .map(|f| json!({ "kind": f["kind"], "text": f["text"] }))
             .collect();
-        if facts.is_empty() {
+        if shareable.is_empty() {
             return Err("no shareable memory to publish".into());
         }
+        let leaking: Vec<&str> = shareable
+            .iter()
+            .filter(|f| is_likely_secret_value(f["text"].as_str().unwrap_or("")))
+            .map(|f| f["id"].as_str().unwrap_or("?"))
+            .collect();
+        if !leaking.is_empty() {
+            return Err(format!(
+                "refusing to publish: fact {} looks like it contains a secret — remove or rewrite it first",
+                leaking.join(", ")
+            ));
+        }
+        let facts: Vec<Value> = shareable
+            .iter()
+            .map(|f| json!({ "kind": f["kind"], "text": f["text"] }))
+            .collect();
         let m = &self.state()["manifest"];
         Ok(json!({
             "slug": m["name"],
