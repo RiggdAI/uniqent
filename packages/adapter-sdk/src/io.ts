@@ -72,6 +72,17 @@ export class InputsUnsettledError extends Error {
   }
 }
 
+/** A find walk met a symlink: following it could capture files outside the root, skipping it would silently drop them. */
+export class SymlinkRefusedError extends Error {
+  constructor(readonly path: string) {
+    super(
+      `refusing to read "${path}": it is a symlink. Replace it with a real copy of what it points to ` +
+        `(or export from the real location), then re-run.`,
+    );
+    this.name = 'SymlinkRefusedError';
+  }
+}
+
 const MAX_ROUNDS = 4;
 const fileKey = (f: FileRef) => joinPath(f.root, f.path);
 const findKey = (f: FindRef) =>

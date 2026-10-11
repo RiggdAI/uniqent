@@ -4,39 +4,65 @@ import { homedir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import type { Bundle } from '@uniqent/core';
 import { scrubPrivateMemory } from '@uniqent/builder/brain';
-import { gatherInputs, OWNER_ONLY } from './io.js';
+import { gatherInputs, OWNER_ONLY, SymlinkRefusedError } from './io.js';
 import type { FindRef, OutputWrite, PureAdapter, ReadFn, TargetContext } from './io.js';
 import { displayPath, joinPath } from './pure-paths.js';
 import type { Adapter } from './types.js';
 
-const isErrno = (err: unknown, code: string): boolean =>
-  err instanceof Error && (err as NodeJS.ErrnoException).code === code;
+const errnoCode = (err: unknown): string | undefined =>
+  err instanceof Error ? (err as NodeJS.ErrnoException).code : undefined;
 
-/** Bytes of `abs`, or undefined if it does not exist (any other error is rethrown). */
-async function readOptional(abs: string): Promise<Uint8Array | undefined> {
+/** Reading a file or directory failed for a reason other than its absence. */
+export class FileReadError extends Error {
+  constructor(
+    readonly path: string,
+    readonly code: string | undefined,
+    cause: unknown,
+  ) {
+    super(`cannot read "${path}": ${cause instanceof Error ? cause.message : String(cause)}`, {
+      cause,
+    });
+    this.name = 'FileReadError';
+  }
+}
+
+/** `read(abs)`; any failure becomes a FileReadError naming `abs`. */
+async function readNamed<T>(abs: string, read: (abs: string) => Promise<T>): Promise<T> {
   try {
-    return await readFile(abs);
+    return await read(abs);
   } catch (err) {
-    if (isErrno(err, 'ENOENT')) return undefined;
+    throw new FileReadError(abs, errnoCode(err), err);
+  }
+}
+
+/** `read(abs)`, or undefined if `abs` does not exist; any other failure is a FileReadError. */
+async function readOrAbsent<T>(
+  abs: string,
+  read: (abs: string) => Promise<T>,
+): Promise<T | undefined> {
+  try {
+    return await readNamed(abs, read);
+  } catch (err) {
+    if (err instanceof FileReadError && err.code === 'ENOENT') return undefined;
     throw err;
   }
 }
 
-/** Every `find.fileName` under `dir`, keyed by absolute path; Dirents never follow symlinks. */
+const readBytes = (abs: string): Promise<Uint8Array> => readFile(abs);
+const readEntries = (abs: string): Promise<Dirent[]> => readdir(abs, { withFileTypes: true });
+
+/**
+ * Every `find.fileName` under `dir`, keyed by absolute path. Dot entries and `skipDirs` are
+ * skipped; any other symlink throws SymlinkRefusedError (never followed, never silently dropped).
+ */
 async function walk(dir: string, find: FindRef, out: Map<string, Uint8Array>): Promise<void> {
-  let entries: Dirent[];
-  try {
-    entries = await readdir(dir, { withFileTypes: true });
-  } catch (err) {
-    if (isErrno(err, 'ENOENT')) return;
-    throw err;
-  }
+  const entries = (await readOrAbsent(dir, readEntries)) ?? [];
   for (const e of entries) {
-    if (e.name.startsWith('.')) continue;
+    if (e.name.startsWith('.') || find.skipDirs.includes(e.name)) continue;
     const abs = joinPath(dir, e.name);
-    if (e.isDirectory()) {
-      if (!find.skipDirs.includes(e.name)) await walk(abs, find, out);
-    } else if (e.isFile() && e.name === find.fileName) out.set(abs, await readFile(abs));
+    if (e.isSymbolicLink()) throw new SymlinkRefusedError(abs);
+    if (e.isDirectory()) await walk(abs, find, out);
+    else if (e.isFile() && e.name === find.fileName) out.set(abs, await readNamed(abs, readBytes));
   }
 }
 
@@ -45,7 +71,7 @@ export const readFromDisk: ReadFn = async (request) => {
   const out = new Map<string, Uint8Array>();
   for (const f of request.files) {
     const abs = joinPath(f.root, f.path);
-    const bytes = await readOptional(abs);
+    const bytes = await readOrAbsent(abs, readBytes);
     if (bytes !== undefined) out.set(abs, bytes);
   }
   for (const f of request.finds) await walk(joinPath(f.root, f.dir), f, out);

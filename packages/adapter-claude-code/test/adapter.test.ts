@@ -8,6 +8,7 @@ import {
   mkdirSync,
   statSync,
   chmodSync,
+  symlinkSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -17,6 +18,7 @@ import type { Bundle } from '@uniqent/core';
 import {
   runConformance,
   PathEscapeError,
+  SymlinkRefusedError,
   type InstallPlan,
   EnvReferenceError,
 } from '@uniqent/adapter-sdk';
@@ -162,6 +164,21 @@ describe('claudeCodeAdapter.export', () => {
       expect(validateBundle(captured).ok).toBe(true);
     } finally {
       rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses to capture a symlinked skill dir instead of silently dropping it', async () => {
+    const root = tmp();
+    const shared = tmp();
+    try {
+      mkdirSync(join(shared, 'foo'));
+      writeFileSync(join(shared, 'foo/SKILL.md'), '---\nname: foo\n---\nShared.\n');
+      mkdirSync(join(root, '.claude/skills'), { recursive: true });
+      symlinkSync(join(shared, 'foo'), join(root, '.claude/skills/foo'));
+      await expect(claudeCodeAdapter.export({ root })).rejects.toThrow(SymlinkRefusedError);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+      rmSync(shared, { recursive: true, force: true });
     }
   });
 

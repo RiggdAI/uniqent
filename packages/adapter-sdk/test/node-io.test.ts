@@ -2,7 +2,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { OWNER_ONLY, readFromDisk, writeToDisk } from '../src/index';
+import {
+  FileReadError,
+  OWNER_ONLY,
+  readFromDisk,
+  SymlinkRefusedError,
+  writeToDisk,
+} from '../src/index';
 
 let root: string;
 const text = (s: string) => new TextEncoder().encode(s);
@@ -29,30 +35,50 @@ describe('readFromDisk', () => {
     expect(new TextDecoder().decode(read.get(join(root, 'a.md')))).toBe('A');
   });
 
-  it('rethrows errors other than a missing file', async () => {
+  it('wraps errors other than a missing file with the path and code', async () => {
     await mkdir(join(root, 'dir'));
-    await expect(readFromDisk({ files: [{ root, path: 'dir' }], finds: [] })).rejects.toThrow(
-      /EISDIR/,
+    const err = await readFromDisk({ files: [{ root, path: 'dir' }], finds: [] }).catch(
+      (e: unknown) => e,
     );
+    expect(err).toBeInstanceOf(FileReadError);
+    expect(err).toMatchObject({ path: join(root, 'dir'), code: 'EISDIR' });
+    expect((err as Error).message).toContain(join(root, 'dir'));
+    expect((err as Error).cause).toBeInstanceOf(Error);
   });
 
-  it('finds a file at any depth, skipping dot dirs, skipDirs and symlinked dirs', async () => {
+  it('finds a file at any depth, skipping dot dirs and skipDirs', async () => {
+    for (const dir of ['skills/a', 'skills/b/nested', 'skills/.git', 'skills/node_modules/x'])
+      await mkdir(join(root, dir), { recursive: true });
+    for (const dir of ['skills/a', 'skills/b/nested', 'skills/.git', 'skills/node_modules/x'])
+      await writeFile(join(root, dir, 'SKILL.md'), dir);
+    // A symlink outside the find dir is never walked, so it is irrelevant.
+    await symlink(join(root, 'skills'), join(root, 'elsewhere'));
+    const read = await readFromDisk({
+      files: [],
+      finds: [{ root, dir: 'skills', fileName: 'SKILL.md', skipDirs: ['node_modules'] }],
+    });
+    expect([...read.keys()].sort()).toEqual([
+      join(root, 'skills/a/SKILL.md'),
+      join(root, 'skills/b/nested/SKILL.md'),
+    ]);
+  });
+
+  it('refuses a symlinked dir or file under a find dir, naming it', async () => {
     const outside = await mkdtemp(join(tmpdir(), 'uq-node-io-out-'));
     try {
-      for (const dir of ['skills/a', 'skills/b/nested', 'skills/.git', 'skills/node_modules/x'])
-        await mkdir(join(root, dir), { recursive: true });
-      for (const dir of ['skills/a', 'skills/b/nested', 'skills/.git', 'skills/node_modules/x'])
-        await writeFile(join(root, dir, 'SKILL.md'), dir);
       await writeFile(join(outside, 'SKILL.md'), 'outside');
-      await symlink(outside, join(root, 'skills', 'linked'));
-      const read = await readFromDisk({
-        files: [],
-        finds: [{ root, dir: 'skills', fileName: 'SKILL.md', skipDirs: ['node_modules'] }],
+      await mkdir(join(root, 'skills/a'), { recursive: true });
+      const find = { root, dir: 'skills', fileName: 'SKILL.md', skipDirs: [] };
+      await symlink(outside, join(root, 'skills/linked'));
+      await expect(readFromDisk({ files: [], finds: [find] })).rejects.toMatchObject({
+        name: 'SymlinkRefusedError',
+        path: join(root, 'skills/linked'),
       });
-      expect([...read.keys()].sort()).toEqual([
-        join(root, 'skills/a/SKILL.md'),
-        join(root, 'skills/b/nested/SKILL.md'),
-      ]);
+      await rm(join(root, 'skills/linked'));
+      await symlink(join(outside, 'SKILL.md'), join(root, 'skills/a/SKILL.md'));
+      const err = await readFromDisk({ files: [], finds: [find] }).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(SymlinkRefusedError);
+      expect((err as Error).message).toContain(join(root, 'skills/a/SKILL.md'));
     } finally {
       await rm(outside, { recursive: true, force: true });
     }
