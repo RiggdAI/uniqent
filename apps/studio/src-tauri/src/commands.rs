@@ -280,9 +280,13 @@ pub async fn pick_folder(
     Ok(Some(canonical.to_string_lossy().into_owned()))
 }
 
-/// Read a picked vault folder's markdown notes (see vault::walk_vault for the limits).
+/// Read a picked vault folder's markdown notes (see vault::walk_vault for the limits). Async so
+/// the walk runs off the main thread and a large vault doesn't freeze the UI.
 #[tauri::command]
-pub fn read_vault(s: State<AppState>, dir: String) -> Result<Vec<crate::vault::VaultFile>, String> {
+pub async fn read_vault(
+    s: State<'_, AppState>,
+    dir: String,
+) -> Result<Vec<crate::vault::VaultFile>, String> {
     let root = crate::vault::granted_dir(&s.granted_dirs.lock().unwrap(), &dir)?;
     crate::vault::walk_vault(&root, &crate::vault::DEFAULT_LIMITS)
 }
