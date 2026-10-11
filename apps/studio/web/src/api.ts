@@ -1,8 +1,13 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { TargetId } from '@uniqent/builder/brain';
-import type { Translation } from '@uniqent/adapter-sdk/pure';
 import * as native from './native';
-import { applyInstall, planInstall, previewInstall } from './install';
+import {
+  applyInstall,
+  planInstall,
+  previewInstall,
+  reviewOf,
+  type ReviewedInstall,
+} from './install';
 
 import type {
   StudioState,
@@ -219,11 +224,17 @@ export const api = {
   /** The writes and notes the typed credentials produce, writing nothing (shown before confirming). */
   installPreview: (target: TargetId, root: string, creds: Record<string, string>) =>
     isNative
-      ? previewInstall(target, root, creds)
-      : needsNative<Translation>('reviewing install changes'),
-  install: (target: TargetId, root: string, creds: Record<string, string>) =>
+      ? previewInstall(target, root, creds).then(reviewOf)
+      : needsNative<ReviewedInstall>('reviewing install changes'),
+  /** Installs only when the result still matches `reviewed` (see applyInstall). */
+  install: (
+    target: TargetId,
+    root: string,
+    creds: Record<string, string>,
+    reviewed: ReviewedInstall,
+  ) =>
     isNative
-      ? applyInstall(target, root, creds)
+      ? applyInstall(target, root, creds, reviewed)
       : post<InstallResult>('/api/install', { target, root, creds }),
   frameworkHomes: () =>
     isNative ? native.frameworkHomes() : needsNative<FrameworkHomes>('finding agent frameworks'),

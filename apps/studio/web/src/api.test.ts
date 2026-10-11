@@ -131,7 +131,9 @@ describe('api shim (native)', () => {
   it('installs natively: the session draft is validated before anything is read', async () => {
     invokeMock.mockResolvedValue([]); // bundle_files: an empty draft has no manifest
     const { api } = await import('./api');
-    await expect(api.install('hermes', '/root', {})).rejects.toThrow(/brain is invalid/);
+    await expect(api.install('hermes', '/root', {}, { writes: [], notes: [] })).rejects.toThrow(
+      /brain is invalid/,
+    );
     expect(invokeMock.mock.calls).toEqual([['bundle_files', undefined]]);
   });
 

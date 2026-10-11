@@ -57,15 +57,37 @@ export const readViaRust: ReadFn = async (request) => {
   return read;
 };
 
+/** Writing into `root` failed after earlier roots of the same install were written (paths only). */
+export class PartialInstallError extends Error {
+  constructor(
+    readonly root: string,
+    readonly writtenRoots: string[],
+    cause: Error,
+  ) {
+    super(
+      `writing into ${root} failed after ${writtenRoots.join(', ')} were already written: ${cause.message}`,
+      { cause },
+    );
+    this.name = 'PartialInstallError';
+  }
+}
+
 /** write_outputs per distinct root, in the translation's order. */
 export async function writeViaRust(writes: OutputWrite[]): Promise<void> {
+  const written: string[] = [];
   for (const root of distinct(writes.map((w) => w.root))) {
-    await call<string[]>('write_outputs', {
-      root,
-      writes: writes
-        .filter((w) => w.root === root)
-        .map((w) => ({ path: w.path, bytesBase64: toBase64(w.bytes), mode: w.mode })),
-    });
+    try {
+      await call<string[]>('write_outputs', {
+        root,
+        writes: writes
+          .filter((w) => w.root === root)
+          .map((w) => ({ path: w.path, bytesBase64: toBase64(w.bytes), mode: w.mode })),
+      });
+    } catch (e) {
+      if (written.length === 0) throw e;
+      throw new PartialInstallError(root, written, e as Error);
+    }
+    written.push(root);
   }
 }
 
@@ -128,14 +150,55 @@ export async function previewInstall(
   return pure.translate(bundle, read, resolved, ctx);
 }
 
-/** Re-read, re-translate (validates before the first write) and hand the writes to Rust. */
+/**
+ * What the user reviewed, without the bytes (they can hold credential values): each write's
+ * location, mode and SHA-256, in write order, and every note.
+ */
+export interface ReviewedInstall {
+  writes: Array<{ root: string; path: string; mode: OutputWrite['mode']; sha256: string }>;
+  notes: string[];
+}
+
+async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new Uint8Array(bytes)));
+  return Array.from(digest, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** A translation's reviewable fingerprint (see ReviewedInstall). */
+export async function reviewOf(t: Translation): Promise<ReviewedInstall> {
+  const writes = await Promise.all(
+    t.writes.map(async (w) => ({
+      root: w.root,
+      path: w.path,
+      mode: w.mode,
+      sha256: await sha256Hex(w.bytes),
+    })),
+  );
+  return { writes, notes: [...t.notes] };
+}
+
+/** The install would differ from what the user reviewed (the draft or the target files changed). */
+export class ReviewOutdatedError extends Error {
+  constructor() {
+    super('The brain or the target files changed since you reviewed; review the changes again');
+    this.name = 'ReviewOutdatedError';
+  }
+}
+
+/**
+ * Re-read, re-translate (validates before the first write) and hand the writes to Rust — only
+ * when the result is exactly what was reviewed (else ReviewOutdatedError, nothing written).
+ */
 export async function applyInstall(
   target: TargetId,
   root: string,
   resolved: ResolvedCredentials,
+  reviewed: ReviewedInstall,
 ): Promise<InstallResult> {
   const { bundle, pure, ctx, read } = await prepare(target, root);
   const t = pure.translate(bundle, read, resolved, ctx);
+  if (JSON.stringify(await reviewOf(t)) !== JSON.stringify(reviewed))
+    throw new ReviewOutdatedError();
   await writeViaRust(t.writes);
   return { written: t.writes.map((w) => displayPath(ctx.root, w)), notes: t.notes };
 }
