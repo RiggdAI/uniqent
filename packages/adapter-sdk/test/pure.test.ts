@@ -66,6 +66,23 @@ describe('gatherInputs', () => {
     expect([...read.keys()]).toEqual(['/r/a', '/r/b']);
     expect(asked).toEqual(['a', 'b']);
   });
+  it('tells the adapter which files earlier rounds already asked for', async () => {
+    const seen: string[][] = [];
+    await gatherInputs(
+      (_r, asked) => {
+        seen.push([...asked]);
+        return {
+          files: [
+            { root: '/r', path: 'a' },
+            ...(asked.has('/r/a') ? [{ root: '/r', path: 'b' }] : []),
+          ],
+          finds: [{ root: '/r', dir: 'd', fileName: 'X', skipDirs: [] }],
+        };
+      },
+      async (): Promise<ReadFiles> => new Map(),
+    );
+    expect(seen).toEqual([[], ['/r/a'], ['/r/a', '/r/b']]);
+  });
   it('throws InputsUnsettledError when requests never settle', async () => {
     let n = 0;
     await expect(

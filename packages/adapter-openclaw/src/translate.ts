@@ -2,6 +2,7 @@ import type { Bundle } from '@uniqent/core/pure';
 import {
   assertMcpCredentialScope,
   assertNoEnvReferences,
+  confineRelative,
   displayPath,
   joinPath,
   OWNER_ONLY,
@@ -92,23 +93,47 @@ export function workspaceOf(ctx: TargetContext, loaded: LoadedConfig): string {
   return resolveWorkspace(ctx, configuredWorkspace(loaded.file, loaded.config));
 }
 
+/**
+ * The workspace once openclaw.json has been asked for (its `agents.defaults.workspace`, else the
+ * default), or undefined before that — so only the workspace OpenClaw really uses is ever read.
+ */
+export function knownWorkspace(
+  read: ReadFiles,
+  ctx: TargetContext,
+  asked: ReadonlySet<string>,
+): string | undefined {
+  if (!asked.has(joinPath(ctx.root, CONFIG_FILE))) return undefined;
+  return workspaceOf(ctx, loadConfig(read, ctx));
+}
+
 const bundleSkills = (bundle: Bundle): string[] =>
   bundle.list().filter((p) => p.startsWith(`${SKILLS_DIR}/`));
 
 /**
- * Files the install reads: openclaw.json and .env in the state dir, plus the managed workspace
- * files and every bundle skill target in the workspace that openclaw.json names — so the first
- * round (nothing read yet) asks for the default workspace and a configured one adds a second
- * round. A hostile skill path throws PathEscapeError here, before anything is read.
+ * Files the install reads: openclaw.json and .env in the state dir, then (once openclaw.json is
+ * read) the managed workspace files and every bundle skill target in the workspace it names.
+ * A hostile skill path throws PathEscapeError in the first round, before anything is read.
  */
-export function inputs(bundle: Bundle, read: ReadFiles, ctx: TargetContext): InputRequest {
-  const workspace = workspaceOf(ctx, loadConfig(read, ctx));
-  const files: FileRef[] = [
+export function inputs(
+  bundle: Bundle,
+  read: ReadFiles,
+  ctx: TargetContext,
+  asked: ReadonlySet<string>,
+): InputRequest {
+  const skills = bundleSkills(bundle);
+  const state: FileRef[] = [
     { root: ctx.root, path: CONFIG_FILE },
     { root: ctx.root, path: ENV_FILE },
-    ...[...SECTION_FILES, ...bundleSkills(bundle)].map((name) =>
-      workspaceRef(ctx, workspace, name),
-    ),
+  ];
+  const workspace = knownWorkspace(read, ctx, asked);
+  if (workspace === undefined) {
+    // Confinement does not depend on the base, so the not-yet-known workspace is not needed.
+    for (const path of skills) confineRelative(ctx.root, path);
+    return { files: state, finds: [] };
+  }
+  const files: FileRef[] = [
+    ...state,
+    ...[...SECTION_FILES, ...skills].map((name) => workspaceRef(ctx, workspace, name)),
   ];
   return { files, finds: [] };
 }

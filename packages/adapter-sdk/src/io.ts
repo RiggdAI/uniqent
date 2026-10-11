@@ -48,11 +48,20 @@ export interface Translation {
   notes: string[];
 }
 
-/** One framework target's pure logic, shared verbatim by the CLI (Node) and Studio (webview). */
+/**
+ * One framework target's pure logic, shared verbatim by the CLI (Node) and Studio (webview).
+ * `inputs`/`captureInputs` get `asked`: the `joinPath(root, path)` keys of every file requested
+ * in earlier rounds, so an adapter can tell "not read yet" from "read and absent".
+ */
 export interface PureAdapter {
   id: string;
   displayName: string;
-  inputs(bundle: Bundle, read: ReadFiles, ctx: TargetContext): InputRequest;
+  inputs(
+    bundle: Bundle,
+    read: ReadFiles,
+    ctx: TargetContext,
+    asked: ReadonlySet<string>,
+  ): InputRequest;
   plan(bundle: Bundle, read: ReadFiles, ctx: TargetContext): InstallPlan;
   translate(
     bundle: Bundle,
@@ -60,7 +69,7 @@ export interface PureAdapter {
     resolved: ResolvedCredentials,
     ctx: TargetContext,
   ): Translation;
-  captureInputs(read: ReadFiles, ctx: TargetContext): InputRequest;
+  captureInputs(read: ReadFiles, ctx: TargetContext, asked: ReadonlySet<string>): InputRequest;
   capture(read: ReadFiles, ctx: TargetContext): Bundle;
 }
 
@@ -90,21 +99,23 @@ const findKey = (f: FindRef) =>
 
 /**
  * Read what `next` asks for until it asks for nothing new (each file/find is read once), so an
- * adapter can request files whose location depends on files already read.
+ * adapter can request files whose location depends on files already read. `next` also gets the
+ * keys of the files earlier rounds asked for (see PureAdapter).
  */
 export async function gatherInputs(
-  next: (read: ReadFiles) => InputRequest,
+  next: (read: ReadFiles, asked: ReadonlySet<string>) => InputRequest,
   readFn: ReadFn,
 ): Promise<ReadFiles> {
   const read = new Map<string, Uint8Array>();
-  const asked = new Set<string>();
+  const askedFiles = new Set<string>();
+  const askedFinds = new Set<string>();
   for (let round = 0; round < MAX_ROUNDS; round++) {
-    const req = next(read);
-    const files = req.files.filter((f) => !asked.has(fileKey(f)));
-    const finds = req.finds.filter((f) => !asked.has(findKey(f)));
+    const req = next(read, new Set(askedFiles));
+    const files = req.files.filter((f) => !askedFiles.has(fileKey(f)));
+    const finds = req.finds.filter((f) => !askedFinds.has(findKey(f)));
     if (files.length === 0 && finds.length === 0) return read;
-    files.forEach((f) => asked.add(fileKey(f)));
-    finds.forEach((f) => asked.add(findKey(f)));
+    files.forEach((f) => askedFiles.add(fileKey(f)));
+    finds.forEach((f) => askedFinds.add(findKey(f)));
     for (const [k, v] of await readFn({ files, finds })) read.set(k, v);
   }
   throw new InputsUnsettledError(MAX_ROUNDS);

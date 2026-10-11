@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Brain } from '@uniqent/builder';
-import { gatherInputs, joinPath, type ReadFiles } from '@uniqent/adapter-sdk/pure';
+import type { Bundle } from '@uniqent/core';
+import { gatherInputs, joinPath, PathEscapeError, type ReadFiles } from '@uniqent/adapter-sdk/pure';
 import { openClawPure } from '../src/pure';
 
 const META = {
@@ -29,11 +30,13 @@ const ctx = { root: '/s', home: '/home/u', cwd: '/work' };
 const enc = new TextEncoder();
 const config = (workspace: string) =>
   enc.encode(JSON.stringify({ agents: { defaults: { workspace } } }));
+/** openclaw.json already asked for (round 2 onwards). */
+const configAsked: ReadonlySet<string> = new Set(['/s/openclaw.json']);
 
 /** Settle `inputs()` against an in-memory disk. */
 function gather(disk: Map<string, Uint8Array>): Promise<ReadFiles> {
   return gatherInputs(
-    (r) => openClawPure.inputs(bundle, r, ctx),
+    (r, asked) => openClawPure.inputs(bundle, r, ctx, asked),
     async (req) =>
       new Map(
         req.files.flatMap((f) => {
@@ -49,7 +52,7 @@ describe('openClawPure (no disk)', () => {
     const disk = new Map([['/s/openclaw.json', config('~/clawd')]]);
     const rounds: string[][] = [];
     const read = await gatherInputs(
-      (r) => openClawPure.inputs(bundle, r, ctx),
+      (r, asked) => openClawPure.inputs(bundle, r, ctx, asked),
       async (req) => {
         rounds.push(req.files.map((f) => `${f.root}|${f.path}`));
         return new Map(
@@ -60,24 +63,43 @@ describe('openClawPure (no disk)', () => {
         );
       },
     );
+    expect(rounds[0]).toEqual(['/s|openclaw.json', '/s|.env']);
     expect(rounds[1]).toContain('/home/u/clawd|SOUL.md');
+    expect(rounds.flat().filter((f) => f.startsWith('/s|workspace/'))).toEqual([]);
     const t = openClawPure.translate(bundle, read, resolved, ctx);
     expect(t.writes.find((w) => w.path === 'SOUL.md')?.root).toBe('/home/u/clawd');
     expect(t.writes.find((w) => w.path === '.env')).toMatchObject({ root: '/s', mode: 0o600 });
   });
 
-  it('roots the default workspace at the state dir', () => {
-    const files = openClawPure.inputs(bundle, new Map(), ctx).files;
+  it('roots the default workspace at the state dir once openclaw.json is known absent', () => {
+    const files = openClawPure.inputs(bundle, new Map(), ctx, configAsked).files;
     expect(files).toContainEqual({ root: '/s', path: 'workspace/SOUL.md' });
     expect(files).toContainEqual({ root: '/s', path: 'workspace/skills/triage/SKILL.md' });
   });
 
   it('resolves a relative configured workspace against the cwd', () => {
     const read = new Map([['/s/openclaw.json', config('ws/../claw')]]);
-    expect(openClawPure.inputs(bundle, read, ctx).files).toContainEqual({
+    expect(openClawPure.inputs(bundle, read, ctx, configAsked).files).toContainEqual({
       root: '/work/claw',
       path: 'MEMORY.md',
     });
+  });
+
+  it('expands ~//x under the home dir, like OpenClaw', () => {
+    const read = new Map([['/s/openclaw.json', config('~//clawd')]]);
+    expect(openClawPure.inputs(bundle, read, ctx, configAsked).files).toContainEqual({
+      root: '/home/u/clawd',
+      path: 'SOUL.md',
+    });
+  });
+
+  it('refuses a hostile skill path into a workspace outside the state dir', () => {
+    const evil = 'skills/../../escape.md';
+    const hostile = Object.assign(Object.create(bundle) as Bundle, {
+      list: () => [...bundle.list(), evil],
+    });
+    const read = new Map([['/s/openclaw.json', config('/elsewhere/claw')]]);
+    expect(() => openClawPure.inputs(hostile, read, ctx, configAsked)).toThrow(PathEscapeError);
   });
 
   it('reports replacing an existing, different skill file', async () => {
@@ -104,7 +126,7 @@ describe('openClawPure (no disk)', () => {
       ['/s/workspace/MEMORY.md', enc.encode('- prefers pnpm\n- Episodic: met Bob\n')],
     ]);
     const read = await gatherInputs(
-      (r) => openClawPure.captureInputs(r, ctx),
+      (r, asked) => openClawPure.captureInputs(r, ctx, asked),
       async (req) =>
         new Map(
           req.files.flatMap((f) => {

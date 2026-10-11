@@ -104,7 +104,7 @@ export function nodeContext(root: string): TargetContext {
  */
 export function nodeAdapter(pure: PureAdapter, detect: Adapter['detect']): Adapter {
   const gather = (bundle: Bundle, ctx: TargetContext) =>
-    gatherInputs((read) => pure.inputs(bundle, read, ctx), readFromDisk);
+    gatherInputs((read, asked) => pure.inputs(bundle, read, ctx, asked), readFromDisk);
   return {
     id: pure.id,
     displayName: pure.displayName,
@@ -122,7 +122,10 @@ export function nodeAdapter(pure: PureAdapter, detect: Adapter['detect']): Adapt
     },
     async export({ root }) {
       const ctx = nodeContext(root);
-      const read = await gatherInputs((r) => pure.captureInputs(r, ctx), readFromDisk);
+      const read = await gatherInputs(
+        (r, asked) => pure.captureInputs(r, ctx, asked),
+        readFromDisk,
+      );
       // Pure capture keeps every memory item it finds; the export never carries private ones.
       return scrubPrivateMemory(pure.capture(read, ctx)).bundle;
     },

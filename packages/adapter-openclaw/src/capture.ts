@@ -11,7 +11,7 @@ import { parseMemoryMarkdown, parseProfile } from '@uniqent/builder/memory';
 import type { CredentialRequirement, McpServer } from '@uniqent/spec';
 import { objectAt, OpenClawConfigError } from './config.js';
 import type { JsonObject, JsonValue } from './config.js';
-import { CONFIG_FILE, loadConfig, SKILLS_DIR, workspaceOf } from './translate.js';
+import { CONFIG_FILE, knownWorkspace, loadConfig, SKILLS_DIR, workspaceOf } from './translate.js';
 import { withoutMarkers, workspaceRef } from './workspace.js';
 
 /**
@@ -172,9 +172,17 @@ const WORKSPACE_FILES = ['SOUL.md', 'IDENTITY.md', 'AGENTS.md', 'USER.md', 'MEMO
 const SKILL_FILE = 'SKILL.md';
 const SKILL_RE = /^([^/]+)\/SKILL\.md$/;
 
-/** Files a capture reads: openclaw.json, the workspace files it maps, every SKILL.md under skills/. */
-export function captureInputs(read: ReadFiles, ctx: TargetContext): InputRequest {
-  const workspace = workspaceOf(ctx, loadConfig(read, ctx));
+/**
+ * Files a capture reads: openclaw.json, then (once it is read) the workspace files it maps and
+ * every SKILL.md under skills/ — only in the workspace openclaw.json names.
+ */
+export function captureInputs(
+  read: ReadFiles,
+  ctx: TargetContext,
+  asked: ReadonlySet<string>,
+): InputRequest {
+  const workspace = knownWorkspace(read, ctx, asked);
+  if (workspace === undefined) return { files: [{ root: ctx.root, path: CONFIG_FILE }], finds: [] };
   const skills = workspaceRef(ctx, workspace, SKILLS_DIR);
   return {
     files: [

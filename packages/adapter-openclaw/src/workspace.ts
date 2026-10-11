@@ -43,7 +43,8 @@ export function resolveWorkspace(ctx: TargetContext, configured: string | undefi
   if (configured === undefined) return joinPath(ctx.root, 'workspace');
   const trimmed = configured.trim();
   if (trimmed === '~') return ctx.home;
-  if (trimmed.startsWith('~/')) return resolvePosix(ctx.home, trimmed.slice(2));
+  // `~//x` is `$HOME/x` (path.join semantics), not the absolute `/x`.
+  if (trimmed.startsWith('~/')) return resolvePosix(ctx.home, trimmed.slice(2).replace(/^\/+/, ''));
   return resolvePosix(ctx.cwd, trimmed);
 }
 
