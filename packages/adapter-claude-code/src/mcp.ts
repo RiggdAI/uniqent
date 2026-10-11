@@ -1,6 +1,7 @@
 import type { McpServer } from '@uniqent/spec';
 import { resolvePlaceholders } from '@uniqent/core';
 import type { Bundle } from '@uniqent/core';
+import { assertMcpCredentialScope } from '@uniqent/adapter-sdk';
 import type { ResolvedCredentials } from '@uniqent/adapter-sdk';
 
 const CREDENTIAL_REF_RE = /\$\{credentialRef:([^}]+)\}/g;
@@ -13,20 +14,6 @@ export class McpConfigParseError extends Error {
   ) {
     super(`cannot merge into ${file}: ${reason}. Fix or remove the file, then re-run the install.`);
     this.name = 'McpConfigParseError';
-  }
-}
-
-/** An MCP server references a credential whose manifest `consumedBy` does not list that server. */
-export class CredentialScopeError extends Error {
-  constructor(
-    readonly serverId: string,
-    readonly ref: string,
-  ) {
-    super(
-      `mcp server "${serverId}" references credential "${ref}", but the manifest does not declare ` +
-        `it as consumedBy "mcp:${serverId}"; refusing to inject a credential into a server it was not granted to`,
-    );
-    this.name = 'CredentialScopeError';
   }
 }
 
@@ -79,12 +66,10 @@ export function scopedCredentials(
   server: McpServer,
   resolved: ResolvedCredentials,
 ): ResolvedCredentials {
-  const consumer = `mcp:${server.id}`;
-  const credentials = bundle.manifest().credentials;
+  const refs = serverCredentialRefs(server);
+  assertMcpCredentialScope(bundle, server.id, refs);
   const scoped: ResolvedCredentials = {};
-  for (const ref of serverCredentialRefs(server)) {
-    const granted = credentials.some((c) => c.ref === ref && c.consumedBy.includes(consumer));
-    if (!granted) throw new CredentialScopeError(server.id, ref);
+  for (const ref of refs) {
     const value = resolved[ref];
     if (value !== undefined) scoped[ref] = value;
   }

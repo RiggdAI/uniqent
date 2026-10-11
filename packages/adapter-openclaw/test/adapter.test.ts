@@ -13,7 +13,7 @@ import { join } from 'node:path';
 import { Brain } from '@uniqent/builder';
 import { validateBundle } from '@uniqent/core';
 import type { Bundle } from '@uniqent/core';
-import { PathEscapeError, runConformance } from '@uniqent/adapter-sdk';
+import { CredentialScopeError, PathEscapeError, runConformance } from '@uniqent/adapter-sdk';
 import {
   openClawAdapter,
   ManagedSectionError,
@@ -276,6 +276,33 @@ describe('openClawAdapter', () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  it('refuses a credential in an MCP server its consumedBy does not list', async () => {
+    const brain = makeBrain();
+    brain.addMcpServer({
+      id: 'other',
+      transport: 'stdio',
+      command: 'other-mcp',
+      env: { TOKEN: '${credentialRef:github_pat}' },
+      auth: { type: 'none' },
+      tools: { include: 'all' },
+    });
+    // The builder attributes placeholder users to consumedBy, so hand-narrow the manifest.
+    const bundle = brain.toBundle();
+    const manifest = bundle.manifest();
+    bundle.set(
+      'uniqent.json',
+      JSON.stringify({
+        ...manifest,
+        credentials: manifest.credentials.map((c) =>
+          c.ref === 'github_pat' ? { ...c, consumedBy: ['mcp:github'] } : c,
+        ),
+      }),
+    );
+    await expect(openClawAdapter.plan(bundle, { root: tmpdir() })).rejects.toBeInstanceOf(
+      CredentialScopeError,
+    );
   });
 
   it('rejects a bundle path that escapes the workspace (defense in depth behind core)', async () => {

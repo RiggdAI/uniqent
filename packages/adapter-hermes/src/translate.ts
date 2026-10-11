@@ -1,5 +1,6 @@
 import type { Bundle } from '@uniqent/core';
 import {
+  assertMcpCredentialScope,
   requiredCredentialRefs,
   resolveInside,
   type InstallPlan,
@@ -182,7 +183,9 @@ export function translate(bundle: Bundle, home: HermesHome, root: string): Trans
 
   const servers = bundle.mcpServers();
   for (const s of servers) {
-    for (const ref of mcpCredentialRefs(s)) bind(envName(ref), ref, `mcp:${s.id}`);
+    const refs = mcpCredentialRefs(s);
+    assertMcpCredentialScope(bundle, s.id, refs);
+    for (const ref of refs) bind(envName(ref), ref, `mcp:${s.id}`);
     const authLoss = unmappedAuth(s);
     if (authLoss !== undefined)
       lossiness.push({ component: `mcp:${s.id}`, action: 'dropped', issue: authLoss });

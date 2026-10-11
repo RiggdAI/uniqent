@@ -5,3 +5,4 @@
 export * from './types.js';
 export * from './conformance.js';
 export * from './paths.js';
+export * from './credentials.js';

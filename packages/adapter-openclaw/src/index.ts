@@ -2,7 +2,11 @@ import { chmod, mkdir, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, relative } from 'node:path';
 import type { Bundle } from '@uniqent/core';
-import { requiredCredentialRefs, resolveInside } from '@uniqent/adapter-sdk';
+import {
+  assertMcpCredentialScope,
+  requiredCredentialRefs,
+  resolveInside,
+} from '@uniqent/adapter-sdk';
 import type {
   Adapter,
   DetectResult,
@@ -157,6 +161,7 @@ async function draftInstall(bundle: Bundle, root: string): Promise<Draft> {
     ) ?? {};
   const mcpEntries: Record<string, JsonObject> = {};
   for (const s of servers) {
+    assertMcpCredentialScope(bundle, s.id, mcpCredentialRefs(s));
     const entry = toOpenClawMcp(s);
     mcpEntries[s.id] = entry;
     const prior = objectAt(configPath, existingServers, s.id, `mcp.servers.${s.id}`);

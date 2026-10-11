@@ -281,5 +281,6 @@ export const claudeCodeAdapter: Adapter = {
 };
 
 export { toClaudeMcpEntry };
-export { McpConfigParseError, CredentialScopeError } from './mcp.js';
+export { McpConfigParseError } from './mcp.js';
+export { CredentialScopeError } from '@uniqent/adapter-sdk';
 export { ManagedSectionError, MANAGED_BEGIN, MANAGED_END } from './agents-md.js';

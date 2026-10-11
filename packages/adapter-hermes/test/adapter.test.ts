@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Brain } from '@uniqent/builder';
 import { validateBundle } from '@uniqent/core';
-import { PathEscapeError, runConformance } from '@uniqent/adapter-sdk';
+import { CredentialScopeError, PathEscapeError, runConformance } from '@uniqent/adapter-sdk';
 import { claudeCodeAdapter } from '@uniqent/adapter-claude-code';
 import { hermesAdapter, skillTarget } from '../src/index';
 import { ENTRY_DELIMITER, MEMORY_MAX } from '../src/memory';
@@ -212,6 +212,32 @@ describe('hermesAdapter.apply', () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  it('refuses a credential in an MCP server its consumedBy does not list', async () => {
+    const b = Brain.create(META);
+    b.addMcpFromCatalog('github');
+    b.addMcpServer({
+      id: 'other',
+      transport: 'stdio',
+      command: 'other-mcp',
+      env: { TOKEN: '${credentialRef:github_pat}' },
+      auth: { type: 'none' },
+      tools: { include: 'all' },
+    });
+    // The builder attributes placeholder users to consumedBy, so hand-narrow the manifest.
+    const bundle = b.toBundle();
+    const manifest = bundle.manifest();
+    bundle.set(
+      'uniqent.json',
+      JSON.stringify({
+        ...manifest,
+        credentials: manifest.credentials.map((c) => ({ ...c, consumedBy: ['mcp:github'] })),
+      }),
+    );
+    await expect(hermesAdapter.plan(bundle, { root: tmpdir() })).rejects.toBeInstanceOf(
+      CredentialScopeError,
+    );
   });
 
   it('rejects a skill path that escapes skills/', () => {
