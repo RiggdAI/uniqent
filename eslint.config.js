@@ -34,6 +34,7 @@ export default tseslint.config(
       'packages/adapter-sdk/src/{pure,pure-paths,credentials,io,types}.ts',
       'packages/builder/src/{brain,brain-entry,derive,scrub,detect-markers}.ts',
       'packages/builder/src/catalog/**/*.ts',
+      'packages/adapter-hermes/src/{pure,translate,capture,config,env,mcp,memory,channels}.ts',
     ],
     rules: {
       'no-restricted-imports': [
