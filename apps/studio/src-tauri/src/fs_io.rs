@@ -49,18 +49,18 @@ pub const DEFAULT_IO_LIMITS: IoLimits = IoLimits {
     max_total_bytes: 64 << 20,
 };
 
-/// Root-relative POSIX path → normal components. Err for empty, absolute, `.`/`..`, `\`, NUL.
+/// Root-relative POSIX path → normal components. Err for empty, absolute, `.`/`..`, `\`, NUL,
+/// `:` (a Windows `C:` segment would replace the root).
 pub fn relative_components(path: &str) -> Result<Vec<String>, String> {
     let segments: Vec<&str> = path.split('/').collect();
-    let unsafe_path = path.contains('\\')
-        || path.contains('\0')
+    let unsafe_path = path.contains(['\\', '\0', ':'])
         || segments
             .iter()
             .any(|s| s.is_empty() || *s == "." || *s == "..");
     if unsafe_path {
         return Err(format!(
             "\"{path}\" is not a safe relative path: it must stay inside the root \
-             (no leading /, no empty, . or .. segments, no \\ or NUL)"
+             (no leading /, no empty, . or .. segments, no \\, : or NUL)"
         ));
     }
     Ok(segments.into_iter().map(String::from).collect())
@@ -150,7 +150,8 @@ fn walk(
     Ok(())
 }
 
-/// Read `abs` (never through a symlink, within the limits) and append it as `rel`.
+/// Read `abs` (never through a symlink, within the limits) and append it as `rel`, once: a file
+/// both named and found is read and counted a single time (like the TS map keyed by path).
 fn read_one(
     abs: &Path,
     rel: &str,
@@ -158,6 +159,9 @@ fn read_one(
     out: &mut Vec<ReadFile>,
     total: &mut u64,
 ) -> Result<(), String> {
+    if out.iter().any(|f| f.path == rel) {
+        return Ok(());
+    }
     let label = abs.display().to_string();
     if out.len() >= limits.max_files {
         return Err(format!(
@@ -208,8 +212,9 @@ fn plan_write(root: &Path, write: &OutputWrite) -> Result<Planned, String> {
 }
 
 /// Validate every write first (path, base64, mode ∈ {None, Some(0o600)}, no duplicates), then
-/// write each atomically: temp file in the same dir → fsync → rename. `Some(0o600)` creates the
-/// temp 0600; `None` copies an existing target's permissions, else creates 0666 & ~umask.
+/// write each atomically: a 0600 temp file in the same dir → final mode → fsync → rename. The
+/// final mode is 0600 for `Some(0o600)`; for `None` an existing target's permissions, else
+/// 0666 & ~umask (what the CLI's `writeFile` creates).
 /// Returns the written paths. Never follows or replaces through a symlinked parent.
 pub fn write_outputs(root: &Path, writes: &[OutputWrite]) -> Result<Vec<String>, String> {
     let planned = writes
@@ -252,41 +257,53 @@ fn write_one(root: &Path, comps: &[String], bytes: &[u8], mode: Option<u32>) -> 
         Err(e) if e.kind() == ErrorKind::NotFound => None,
         Err(e) => return Err(format!("cannot stat {}: {e}", target.display())),
     };
+    let final_mode = match (mode, existing) {
+        (Some(_), _) => std::fs::Permissions::from_mode(OWNER_ONLY),
+        (None, Some(p)) => p,
+        (None, None) => std::fs::Permissions::from_mode(0o666 & !process_umask()),
+    };
     let mut suffix = [0u8; 6];
     getrandom::fill(&mut suffix).map_err(|e| format!("OS random source unavailable: {e}"))?;
     let name = comps.last().expect("a relative path has a component");
     let tmp = parent.join(format!(".{name}.uniqent-{}", hex::encode(suffix)));
-    let create_mode = if mode == Some(OWNER_ONLY) {
-        OWNER_ONLY
-    } else {
-        0o666
-    };
+    // Every temp starts owner-only, so no other user can open it while the bytes go in.
+    let mut f = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(OWNER_ONLY)
+        .open(&tmp)
+        .map_err(|e| format!("cannot create a temp file in {}: {e}", parent.display()))?;
     let result = (|| {
-        let mut f = std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .mode(create_mode)
-            .open(&tmp)
-            .map_err(|e| format!("cannot create a temp file in {}: {e}", parent.display()))?;
         f.write_all(bytes)
-            .and_then(|_| f.sync_all())
             .map_err(|e| format!("cannot write {}: {e}", target.display()))?;
-        let set_mode = if mode == Some(OWNER_ONLY) {
-            std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(OWNER_ONLY))
-        } else if let Some(p) = existing {
-            std::fs::set_permissions(&tmp, p)
-        } else {
-            Ok(())
-        };
-        set_mode.map_err(|e| format!("cannot set the mode of {}: {e}", target.display()))?;
+        f.set_permissions(final_mode)
+            .map_err(|e| format!("cannot set the mode of {}: {e}", target.display()))?;
+        f.sync_all()
+            .map_err(|e| format!("cannot write {}: {e}", target.display()))?;
         std::fs::rename(&tmp, &target)
             .map_err(|e| format!("cannot replace {}: {e}", target.display()))
     })();
     if result.is_err() {
-        // The write's own error is what matters; a leftover temp file is the lesser problem.
+        // The temp file is ours (created above). The write's own error is what matters; a
+        // leftover temp file is the lesser problem.
         let _ = std::fs::remove_file(&tmp);
     }
     result
+}
+
+/// The process umask, read once. Reading it means setting it: the swap briefly sets 0o077, so a
+/// file another thread creates in that instant only ever comes out stricter, never looser.
+#[cfg(unix)]
+fn process_umask() -> u32 {
+    static UMASK: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
+    *UMASK.get_or_init(|| {
+        // SAFETY: umask only swaps the process file-mode creation mask and cannot fail.
+        let old = unsafe { libc::umask(0o077) };
+        unsafe { libc::umask(old) };
+        #[allow(clippy::unnecessary_cast)] // mode_t is u16 on macOS, u32 on Linux
+        let old = old as u32;
+        old
+    })
 }
 
 #[cfg(not(unix))]
@@ -327,27 +344,29 @@ pub struct HomeEnv {
 }
 
 impl HomeEnv {
-    /// `HOME` is required; an empty variable counts as unset (the CLI's `||`).
+    /// `HOME` is required and must be absolute. An empty variable counts as unset (the CLI's
+    /// `||`); a framework variable is kept as given and checked by `safe_home` when it is used.
     pub fn from_process() -> Result<Self, String> {
-        let home = env_dir("HOME")?
+        let home = env_path("HOME")
             .ok_or("HOME is not set; Studio needs it to find the framework folders")?;
+        if !home.is_absolute() {
+            return Err(format!(
+                "HOME is \"{}\"; it must be an absolute path",
+                home.display()
+            ));
+        }
         Ok(Self {
             home,
-            hermes_home: env_dir("HERMES_HOME")?,
-            openclaw_state_dir: env_dir("OPENCLAW_STATE_DIR")?,
+            hermes_home: env_path("HERMES_HOME"),
+            openclaw_state_dir: env_path("OPENCLAW_STATE_DIR"),
         })
     }
 }
 
-fn env_dir(name: &str) -> Result<Option<PathBuf>, String> {
-    match std::env::var_os(name).filter(|v| !v.is_empty()) {
-        None => Ok(None),
-        Some(v) if Path::new(&v).is_absolute() => Ok(Some(PathBuf::from(v))),
-        Some(v) => Err(format!(
-            "{name} is \"{}\"; it must be an absolute path",
-            v.to_string_lossy()
-        )),
-    }
+fn env_path(name: &str) -> Option<PathBuf> {
+    std::env::var_os(name)
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
 }
 
 /// ("hermes", $HERMES_HOME or ~/.hermes), ("openclaw", $OPENCLAW_STATE_DIR or ~/.openclaw) — cli/src/targets.ts defaultRoot rules.
@@ -410,16 +429,44 @@ fn canonical_through_ancestor(path: &Path) -> Result<PathBuf, String> {
     }
 }
 
+/// A framework home's canonical form. Refused when it is not absolute or contains the user's
+/// home folder (`/`, `$HOME` or an ancestor): allowing it would allow every folder.
+pub fn safe_home(id: &str, path: &Path, home: &Path) -> Result<PathBuf, String> {
+    let canonical = canonical_through_ancestor(path)
+        .map_err(|e| format!("the {id} folder is unusable: {e}"))?;
+    if canonical_through_ancestor(home)?.starts_with(&canonical) {
+        return Err(format!(
+            "the {id} folder {} contains your home folder, so Studio will not use it; point \
+             HERMES_HOME / OPENCLAW_STATE_DIR (or the symlink) at a folder of its own",
+            path.display()
+        ));
+    }
+    Ok(canonical)
+}
+
 /// `root` must be absolute; canonicalized through its nearest existing ancestor (the rest must be
-/// normal components). Allowed when it equals or lies under a granted folder or a framework home.
-pub fn allowed_root(root: &str, granted: &[PathBuf], homes: &[PathBuf]) -> Result<PathBuf, String> {
+/// normal components). Allowed when it equals or lies under a granted folder (already canonical:
+/// stored by `pick_folder`, never re-resolved) or a `safe_home` framework home. An unusable home
+/// does not block other roots; it is named in the refusal.
+pub fn allowed_root(root: &str, granted: &[PathBuf], env: &HomeEnv) -> Result<PathBuf, String> {
     let candidate = canonical_through_ancestor(Path::new(root))?;
-    for allowed in granted.iter().chain(homes) {
-        if candidate.starts_with(canonical_through_ancestor(allowed)?) {
-            return Ok(candidate);
+    if granted.iter().any(|g| candidate.starts_with(g)) {
+        return Ok(candidate);
+    }
+    let mut unusable = Vec::new();
+    for (id, path) in framework_homes(env) {
+        match safe_home(id, &path, &env.home) {
+            Ok(home) if candidate.starts_with(&home) => return Ok(candidate),
+            Ok(_) => {}
+            Err(e) => unusable.push(e),
         }
     }
-    Err(format!(
+    let refusal = format!(
         "{root} is outside the folders Studio may use; pick it with \"Choose folder…\" first"
-    ))
+    );
+    if unusable.is_empty() {
+        Err(refusal)
+    } else {
+        Err(format!("{refusal} ({})", unusable.join("; ")))
+    }
 }

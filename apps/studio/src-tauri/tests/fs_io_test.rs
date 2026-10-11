@@ -30,6 +30,9 @@ fn rejects_paths_that_leave_the_root() {
         "",
         "./a",
         "a//b",
+        "a\0b",
+        "C:x",
+        "skills/c:/x",
     ] {
         let err = write_outputs(d.path(), &[w(bad, "x", None)]).unwrap_err();
         assert!(err.contains(bad) || bad.is_empty(), "{err}");
@@ -137,7 +140,11 @@ fn reads_omit_absent_files_and_finds_skip_dot_and_skip_dirs() {
     fs::write(d.path().join("SOUL.md"), "soul").unwrap();
     let got = read_inputs(
         d.path(),
-        &["SOUL.md".into(), "missing.md".into()],
+        &[
+            "SOUL.md".into(),
+            "missing.md".into(),
+            "skills/a/SKILL.md".into(),
+        ],
         &[skills_find()],
         &DEFAULT_IO_LIMITS,
     )
@@ -150,6 +157,7 @@ fn reads_omit_absent_files_and_finds_skip_dot_and_skip_dirs() {
     );
     let soul = got.iter().find(|f| f.path == "SOUL.md").unwrap();
     assert_eq!(soul.bytes_base64, b64(b"soul"));
+    // "skills/a/SKILL.md" was both named and found: returned (and counted) once.
 }
 
 /// Like the CLI's find walk: a symlink under a find dir is refused by name, never followed or
@@ -183,36 +191,30 @@ fn only_granted_folders_and_framework_homes_are_allowed_roots() {
         hermes_home: None,
         openclaw_state_dir: None,
     };
-    let homes: Vec<_> = framework_homes(&env).into_iter().map(|(_, p)| p).collect();
     let granted = vec![picked.path().canonicalize().unwrap()];
     // A framework home that does not exist yet is allowed (first install creates it).
     assert!(allowed_root(
         home.path().join(".hermes").to_str().unwrap(),
         &granted,
-        &homes
+        &env
     )
     .is_ok());
     assert!(allowed_root(
         home.path().join(".openclaw/workspace").to_str().unwrap(),
         &granted,
-        &homes
+        &env
     )
     .is_ok());
-    assert!(allowed_root(
-        picked.path().join("proj").to_str().unwrap(),
-        &granted,
-        &homes
-    )
-    .is_ok());
+    assert!(allowed_root(picked.path().join("proj").to_str().unwrap(), &granted, &env).is_ok());
     for bad in [home.path().join(".ssh"), home.path().to_path_buf()] {
-        let err = allowed_root(bad.to_str().unwrap(), &granted, &homes).unwrap_err();
+        let err = allowed_root(bad.to_str().unwrap(), &granted, &env).unwrap_err();
         assert!(err.contains("Choose folder"), "{err}");
     }
-    assert!(allowed_root("relative/dir", &granted, &homes).is_err());
+    assert!(allowed_root("relative/dir", &granted, &env).is_err());
     assert!(allowed_root(
         &format!("{}/.hermes/../.ssh", home.path().display()),
         &granted,
-        &homes
+        &env
     )
     .is_err());
 }
@@ -245,4 +247,117 @@ fn folder_markers_name_what_exists_and_refuse_nested_names() {
     );
     assert!(folder_markers(d.path(), &["a/b".into()]).is_err());
     assert!(folder_markers(d.path(), &["..".into()]).is_err());
+}
+
+#[test]
+fn rejects_duplicate_writes_and_invalid_base64_naming_only_the_path() {
+    let d = tempfile::tempdir().unwrap();
+    let err = write_outputs(d.path(), &[w("a.md", "x", None), w("a.md", "y", None)]).unwrap_err();
+    assert!(err.contains("a.md") && err.contains("twice"), "{err}");
+    let bad = OutputWrite {
+        path: "b.md".into(),
+        bytes_base64: "SECRET!!not-base64".into(),
+        mode: None,
+    };
+    let err = write_outputs(d.path(), &[bad]).unwrap_err();
+    assert!(err.contains("b.md") && !err.contains("SECRET"), "{err}");
+    assert_eq!(fs::read_dir(d.path()).unwrap().count(), 0);
+}
+
+fn env_with(home: &std::path::Path, hermes: Option<&str>, openclaw: Option<&str>) -> HomeEnv {
+    HomeEnv {
+        home: home.into(),
+        hermes_home: hermes.map(Into::into),
+        openclaw_state_dir: openclaw.map(Into::into),
+    }
+}
+
+/// A home at `/`, at $HOME or above it would make every folder an allowed root.
+#[test]
+fn a_framework_home_containing_the_user_home_is_refused() {
+    let home = tempfile::tempdir().unwrap();
+    let ssh = home.path().join(".ssh");
+    let home_str = home.path().to_str().unwrap();
+    let parent = home.path().parent().unwrap().to_str().unwrap();
+    for hermes in ["/", home_str, parent] {
+        let env = env_with(home.path(), Some(hermes), None);
+        let err = allowed_root(ssh.to_str().unwrap(), &[], &env).unwrap_err();
+        assert!(err.contains("contains your home folder"), "{hermes}: {err}");
+        // The other framework's home stays usable.
+        assert!(allowed_root(home.path().join(".openclaw").to_str().unwrap(), &[], &env).is_ok());
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn a_framework_home_symlinked_to_the_user_home_is_refused() {
+    let home = tempfile::tempdir().unwrap();
+    std::os::unix::fs::symlink(home.path(), home.path().join(".hermes")).unwrap();
+    let env = env_with(home.path(), None, None);
+    let ssh = home.path().join(".ssh");
+    let err = allowed_root(ssh.to_str().unwrap(), &[], &env).unwrap_err();
+    assert!(err.contains("contains your home folder"), "{err}");
+}
+
+#[test]
+fn a_relative_framework_home_blocks_only_itself_and_is_named() {
+    let home = tempfile::tempdir().unwrap();
+    let picked = tempfile::tempdir().unwrap();
+    let granted = vec![picked.path().canonicalize().unwrap()];
+    let env = env_with(home.path(), Some("relative/hermes"), None);
+    let proj = picked.path().join("proj");
+    assert!(allowed_root(proj.to_str().unwrap(), &granted, &env).is_ok());
+    let oc = home.path().join(".openclaw");
+    assert!(allowed_root(oc.to_str().unwrap(), &granted, &env).is_ok());
+    let ssh = home.path().join(".ssh");
+    let err = allowed_root(ssh.to_str().unwrap(), &granted, &env).unwrap_err();
+    assert!(
+        err.contains("Choose folder") && err.contains("relative/hermes"),
+        "{err}"
+    );
+}
+
+#[test]
+fn a_granted_folder_does_not_allow_a_sibling_sharing_its_prefix() {
+    let home = tempfile::tempdir().unwrap();
+    let picked = tempfile::tempdir().unwrap();
+    let granted = vec![picked.path().canonicalize().unwrap()];
+    let env = env_with(home.path(), None, None);
+    let sibling = format!("{}c", picked.path().display());
+    assert!(allowed_root(&sibling, &granted, &env)
+        .unwrap_err()
+        .contains("Choose folder"));
+}
+
+/// The grant is the canonical folder picked, never re-resolved: swapping it for a symlink to
+/// elsewhere must not move the grant there.
+#[cfg(unix)]
+#[test]
+fn a_granted_folder_replaced_by_a_symlink_does_not_move_the_grant() {
+    let home = tempfile::tempdir().unwrap();
+    let base = tempfile::tempdir().unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    let picked = base.path().join("picked");
+    fs::create_dir(&picked).unwrap();
+    let granted = vec![picked.canonicalize().unwrap()];
+    let env = env_with(home.path(), None, None);
+    fs::remove_dir(&picked).unwrap();
+    std::os::unix::fs::symlink(outside.path(), &picked).unwrap();
+    for root in [picked.join("proj"), outside.path().join("proj")] {
+        let err = allowed_root(root.to_str().unwrap(), &granted, &env).unwrap_err();
+        assert!(err.contains("Choose folder"), "{err}");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn a_dangling_symlink_ancestor_is_refused() {
+    let home = tempfile::tempdir().unwrap();
+    let picked = tempfile::tempdir().unwrap();
+    let granted = vec![picked.path().canonicalize().unwrap()];
+    let env = env_with(home.path(), None, None);
+    std::os::unix::fs::symlink(picked.path().join("gone"), picked.path().join("dang")).unwrap();
+    let root = picked.path().join("dang/proj");
+    let err = allowed_root(root.to_str().unwrap(), &granted, &env).unwrap_err();
+    assert!(err.contains("dangling"), "{err}");
 }

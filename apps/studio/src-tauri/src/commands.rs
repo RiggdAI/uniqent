@@ -296,11 +296,7 @@ pub async fn read_vault(
 /// `root` canonicalized, if it is a folder picked this session or a framework home (or under one).
 fn allowed(s: &State<AppState>, root: &str) -> Result<PathBuf, String> {
     let env = crate::fs_io::HomeEnv::from_process()?;
-    let homes: Vec<PathBuf> = crate::fs_io::framework_homes(&env)
-        .into_iter()
-        .map(|(_, p)| p)
-        .collect();
-    crate::fs_io::allowed_root(root, &s.granted_dirs.lock().unwrap(), &homes)
+    crate::fs_io::allowed_root(root, &s.granted_dirs.lock().unwrap(), &env)
 }
 
 /// Async so a large read/write runs off the main thread (same reason as `read_vault`).
@@ -339,15 +335,25 @@ fn home_present(id: &str, root: &std::path::Path) -> Result<bool, String> {
     }
 }
 
-/// `{ home, targets: [{ id, root, present }], claudeCodeUser }` (`claudeCodeUser`: `~/.claude` exists).
+/// `{ home, targets: [{ id, root, present, error }], claudeCodeUser }`: `error` (else null) says why
+/// a home is unusable (see `fs_io::safe_home`; then `present` is false); `claudeCodeUser`:
+/// `~/.claude` exists.
 #[tauri::command]
 pub fn framework_homes() -> Result<Value, String> {
     let env = crate::fs_io::HomeEnv::from_process()?;
     let targets = crate::fs_io::framework_homes(&env)
         .into_iter()
         .map(|(id, root)| {
-            let present = home_present(id, &root)?;
-            Ok(serde_json::json!({ "id": id, "root": root.to_string_lossy(), "present": present }))
+            let (present, error) = match crate::fs_io::safe_home(id, &root, &env.home) {
+                Ok(_) => (home_present(id, &root)?, None),
+                Err(e) => (false, Some(e)),
+            };
+            Ok(serde_json::json!({
+                "id": id,
+                "root": root.to_string_lossy(),
+                "present": present,
+                "error": error,
+            }))
         })
         .collect::<Result<Vec<Value>, String>>()?;
     let claude = env.home.join(".claude");
