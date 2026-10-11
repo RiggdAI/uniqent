@@ -133,7 +133,8 @@ export async function publishMemory(
   registry: string,
 ): Promise<{ result: { slug: string; factCount: number; url?: string; persisted?: boolean } }> {
   const reg = registry || DEFAULT_MEMORY_REGISTRY;
-  const token = typedToken || (await call<string | null>('registry_token', { registry: reg }));
+  const token =
+    typedToken.trim() || (await call<string | null>('registry_token', { registry: reg }));
   if (!token) {
     throw new Error(`not signed in to ${reg}: run \`uniqent login\` or paste a publish token`);
   }

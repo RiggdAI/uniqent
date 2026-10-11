@@ -29,7 +29,7 @@ Uniqent is a **complete, open-source platform for portable AI agents** — an n8
 - **Schema/validation:** `zod` for runtime validation + generate JSON Schema from it (`zod-to-json-schema`).
 - **Archive:** `tar` + gzip for `.uniqent` files (a `.uniqent` is a gzipped tar with a defined layout).
 - **Signing:** `@noble/ed25519` (Ed25519 keypairs; detached signature over a canonical digest of bundle contents).
-- **Studio (web builder):** **local-first** — a small local Node server exposing the builder engine + core (file I/O, secret-scan, sign, install), with a browser UI (React + Vite; Tailwind or similar). Launched locally (e.g. `npx @uniqent/studio` / `uniqent studio`); opens in the user's browser. No data leaves the machine.
+- **Studio (web builder):** **local-first** — a small local Node server exposing the builder engine + core (file I/O, secret-scan, sign, install), with a browser UI (React + Vite; Tailwind or similar). Launched locally (e.g. `npx @uniqent/studio` / `uniqent studio`); opens in the user's browser. No data leaves the machine. _(Current state: Studio is now a native Tauri desktop app — React UI + Rust backend, no local server or browser mode; see `apps/studio/README.md`.)_
 - **CLI:** `commander` (or `clipanion`). The CLI is a **secondary / power-user + automation surface** that reuses the same `builder` and `core` packages as Studio. Keep it thin; logic lives in core packages.
 - **Testing:** `vitest`. Every package ships unit tests; adapters ship round-trip integration tests; the builder engine is tested headlessly (no UI) so the UI rests on a proven core.
 - **Lint/format:** eslint + prettier. CI must run lint + typecheck + build + test on every PR.

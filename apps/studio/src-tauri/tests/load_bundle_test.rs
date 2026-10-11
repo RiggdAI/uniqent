@@ -129,10 +129,13 @@ fn reports_blank_readme_empty_profile_values_and_repeated_credential_refs() {
     let (_, dropped) = Session::load_bundle(&bundle_from(&[
         ("uniqent.json", &manifest),
         ("README.md", "  \n"),
-        ("memory/profile.json", r#"{"name":"Ada","nick":""}"#),
+        (
+            "memory/profile.json",
+            r#"{"name":"Ada","nick":"","bio":"  "}"#,
+        ),
     ]))
     .unwrap();
-    for needle in ["README.md", "\"nick\"", "\"api_key\""] {
+    for needle in ["README.md", "\"nick\"", "\"bio\"", "\"api_key\""] {
         assert!(
             dropped.iter().any(|d| d.contains(needle)),
             "{needle} not reported: {dropped:?}"

@@ -1,6 +1,5 @@
 import type { TargetId } from '@uniqent/builder/brain';
 import * as native from './native';
-import { call } from './native';
 import { captureAgent } from './capture';
 import {
   applyInstall,
@@ -21,6 +20,8 @@ import type {
   ImportedMemoryItem,
   OpenedBundle,
 } from './types';
+
+const { call } = native;
 
 export const api = {
   state: () => call<StudioState>('state'),

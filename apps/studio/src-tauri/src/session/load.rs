@@ -4,8 +4,8 @@ use base64::Engine;
 use serde_json::{json, Map, Value};
 
 use super::{
-    cron_problem, is_valid_slug, validate_credential, validate_importance, validate_visibility,
-    Session, MEMORY_KINDS, POLICIES,
+    cron_problem, is_valid_slug, profile_field_kept, validate_credential, validate_importance,
+    validate_visibility, Session, MEMORY_KINDS, POLICIES,
 };
 use crate::core::bundle::{paths, Bundle};
 
@@ -82,8 +82,8 @@ fn bad_optional(obj: &Value, fields: &[FieldCheck]) -> Option<String> {
         .map(|(key, _)| format!("{key} has the wrong type ({})", json_type(&obj[*key])))
 }
 
-/// Why `s` is not a spec McpServer, or `None`.
-fn mcp_server_problem(s: &Value) -> Option<String> {
+/// Why `s` is not a spec McpServer, or `None`. Shared by loading and `add_custom_mcp`.
+pub(super) fn mcp_server_problem(s: &Value) -> Option<String> {
     if !is_non_empty_string(&s["id"]) {
         return Some(format!(
             "id must be a non-empty string, got {}",
@@ -113,10 +113,10 @@ fn mcp_server_problem(s: &Value) -> Option<String> {
     if let Some(problem) = bad_optional(s, &optional) {
         return Some(problem);
     }
-    if transport != "stdio" && !s["url"].is_string() {
+    if transport != "stdio" && !is_non_empty_string(&s["url"]) {
         return Some(format!("transport \"{transport}\" requires a url"));
     }
-    if transport == "stdio" && !s["command"].is_string() {
+    if transport == "stdio" && !is_non_empty_string(&s["command"]) {
         return Some("transport \"stdio\" requires a command".into());
     }
     let auth = &s["auth"];
@@ -134,7 +134,7 @@ fn mcp_server_problem(s: &Value) -> Option<String> {
     if let Some(problem) = bad_optional(auth, &auth_fields) {
         return Some(format!("auth.{problem}"));
     }
-    if auth_type == "header" && !auth["headerName"].is_string() {
+    if auth_type == "header" && !is_non_empty_string(&auth["headerName"]) {
         return Some("auth type \"header\" requires headerName".into());
     }
     let include = &s["tools"]["include"];
@@ -390,13 +390,13 @@ fn duplicate_refs(credentials: &[Value]) -> Vec<String> {
     repeated
 }
 
-/// The quoted names of a profile's empty-string fields (`set_profile` drops them).
+/// The quoted names of a profile's blank fields (`set_profile` drops them).
 fn empty_fields(profile: &Value) -> Vec<String> {
     profile
         .as_object()
         .map(|m| {
             m.iter()
-                .filter(|(_, v)| v.as_str() == Some(""))
+                .filter(|(k, v)| !profile_field_kept(k, v.as_str().unwrap_or("")))
                 .map(|(k, _)| format!("\"{k}\""))
                 .collect()
         })
@@ -573,7 +573,7 @@ impl Session {
         let empty = profile.as_ref().map(empty_fields).unwrap_or_default();
         if !empty.is_empty() {
             dropped.push(format!(
-                "{PROFILE}: empty field(s) {} left out — Studio keeps no empty profile values",
+                "{PROFILE}: blank field(s) {} left out — Studio keeps no blank profile names or values",
                 empty.join(", ")
             ));
         }

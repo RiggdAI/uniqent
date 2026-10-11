@@ -29,6 +29,7 @@ export function catalogView(): CatalogView {
       kind: e.channel.kind,
       credential: e.credential?.ref,
     })),
+    // Must match `TargetId` in packages/builder/src/detect-markers.ts (one adapter per target).
     targets: ['claude-code', 'hermes', 'openclaw'],
   };
 }

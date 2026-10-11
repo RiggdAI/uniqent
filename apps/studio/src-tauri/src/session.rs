@@ -78,6 +78,11 @@ const CRON_FIELDS: [(&str, u32, u32); 5] = [
     ("day-of-week", 0, 7),
 ];
 
+/// Whether a profile field survives `set_profile`: its trimmed name and trimmed value are non-empty.
+fn profile_field_kept(name: &str, value: &str) -> bool {
+    !name.trim().is_empty() && !value.trim().is_empty()
+}
+
 /// Explain why `expr` is not a standard 5-field cron expression (numbers, ranges, lists, steps,
 /// `*`), each value within its field's range in `CRON_FIELDS`, or `None` when it is valid.
 pub fn cron_problem(expr: &str) -> Option<String> {
@@ -455,19 +460,19 @@ impl Session {
     }
 
     /// Add custom MCP server. Merges tools:{include:'all'} as default.
+    /// Errors (adding nothing) when the result is not a spec McpServer, naming the field.
     pub fn add_custom_mcp(&mut self, input: Value) -> Result<(), String> {
-        let id = input["id"]
-            .as_str()
-            .ok_or("custom MCP must have an id")?
-            .to_string();
-
         // Build server: start with tools default, then overlay input fields
         let mut server = json!({"tools": {"include": "all"}});
-        if let (Value::Object(base), Value::Object(extra)) = (&mut server, input.clone()) {
+        if let (Value::Object(base), Value::Object(extra)) = (&mut server, input) {
             for (k, v) in extra {
                 base.insert(k, v);
             }
         }
+        if let Some(problem) = load::mcp_server_problem(&server) {
+            return Err(format!("custom MCP server: {problem}"));
+        }
+        let id = server["id"].as_str().unwrap_or_default().to_string();
 
         // Dedup by id: remove old, append new
         self.mcp.retain(|s| s["id"].as_str().unwrap_or("") != id);
@@ -726,8 +731,9 @@ impl Session {
         Ok(())
     }
 
-    /// Set profile: an object of text fields with distinct (trimmed) names. Empty values are
-    /// dropped; an empty profile clears it. Errors (changing nothing) on any other shape.
+    /// Set profile: an object of text fields with distinct (trimmed) names. Names and values are
+    /// trimmed; fields `profile_field_kept` rejects are dropped; an empty profile clears it.
+    /// Errors (changing nothing) on any other shape.
     pub fn set_profile(&mut self, profile: Value) -> Result<(), String> {
         let Value::Object(map) = profile else {
             return Err(format!(
@@ -746,8 +752,11 @@ impl Session {
             seen.push(key);
         }
         let cleaned: Map<String, Value> = map
-            .into_iter()
-            .filter(|(_, v)| v.as_str() != Some(""))
+            .iter()
+            .filter_map(|(k, v)| {
+                let value = v.as_str().unwrap_or("");
+                profile_field_kept(k, value).then(|| (k.trim().to_string(), json!(value.trim())))
+            })
             .collect();
         self.profile = if cleaned.is_empty() {
             None

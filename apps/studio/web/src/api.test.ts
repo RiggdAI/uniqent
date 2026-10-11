@@ -273,6 +273,39 @@ describe('api shim (native)', () => {
     expect((err as Error).message).toMatch(/not chosen in this session/);
   });
 
+  it('pulls a memory pack into the session with its kinds preserved', async () => {
+    httpFetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          facts: [
+            { kind: 'decision', text: 'use [[Postgres]] #db' },
+            { kind: 'fact', text: 'tune it for OLTP' },
+          ],
+        }),
+      ),
+    );
+    invokeMock.mockResolvedValue({ manifest: {}, validation: { ok: true } });
+    const { api } = await import('./api');
+    await api.addMemoryPack('platform', 'https://reg');
+    expect(String(httpFetchMock.mock.calls[0]?.[0])).toBe('https://reg/api/v1/memory/platform');
+    expect(invokeMock).toHaveBeenCalledWith('import_memory', {
+      payload: {
+        items: [
+          { kind: 'decision', text: 'use [[Postgres]] #db' },
+          { kind: 'fact', text: 'tune it for OLTP' },
+        ],
+      },
+    });
+  });
+
+  it('treats a whitespace-only typed token as none and uses the stored login', async () => {
+    invokeMock.mockImplementation(async (cmd: string) => (cmd === 'registry_token' ? null : null));
+    const { api } = await import('./api');
+    await expect(api.publishMemory('   ', 'https://uniqent.ai')).rejects.toThrow(/uniqent login/);
+    expect(invokeMock).toHaveBeenCalledWith('registry_token', { registry: 'https://uniqent.ai' });
+    expect(httpFetchMock).not.toHaveBeenCalled();
+  });
+
   it('says to log in when publishing without any token', async () => {
     invokeMock.mockImplementation(async (cmd: string) => (cmd === 'registry_token' ? null : null));
     const { api } = await import('./api');
