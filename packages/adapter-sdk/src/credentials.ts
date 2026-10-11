@@ -1,4 +1,17 @@
-import type { Bundle } from '@uniqent/core';
+import type { Bundle } from '@uniqent/core/pure';
+
+/**
+ * Credential refs a target must resolve: every manifest credential consumed by a component
+ * of one of `consumerKinds` (e.g. `mcp`, `channel`). Uses the manifest's `consumedBy`, so refs
+ * used anywhere in a server (auth, stdio `env`, headers) are covered, not just `auth.credentialRef`.
+ */
+export function requiredCredentialRefs(bundle: Bundle, consumerKinds: string[]): string[] {
+  const prefixes = consumerKinds.map((k) => `${k}:`);
+  return bundle
+    .manifest()
+    .credentials.filter((c) => c.consumedBy.some((x) => prefixes.some((p) => x.startsWith(p))))
+    .map((c) => c.ref);
+}
 
 /** An MCP server references a credential whose manifest `consumedBy` does not list that server. */
 export class CredentialScopeError extends Error {

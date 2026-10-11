@@ -380,6 +380,9 @@ importers:
 
   packages/adapter-sdk:
     dependencies:
+      '@uniqent/builder':
+        specifier: workspace:^
+        version: link:../builder
       '@uniqent/core':
         specifier: workspace:^
         version: link:../core

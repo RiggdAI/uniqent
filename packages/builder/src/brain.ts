@@ -1,5 +1,5 @@
-import { Bundle, PATHS, validateBundle } from '@uniqent/core';
-import type { ValidationResult } from '@uniqent/core';
+import { Bundle, PATHS, validateBundle } from '@uniqent/core/pure';
+import type { ValidationResult } from '@uniqent/core/pure';
 import {
   MemoryItem,
   McpServer,

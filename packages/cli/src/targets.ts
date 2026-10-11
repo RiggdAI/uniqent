@@ -18,13 +18,4 @@ export function defaultRoot(target: string, env: RootEnv, home: string, cwd: str
   throw new Error(`no default root for unknown target "${target}"`);
 }
 
-/** What to do after a successful install into `root` (the brain is picked up on (re)start). */
-export function nextStep(target: string, root: string): string {
-  if (target === 'claude-code')
-    return `Open ${root} in Claude Code (run \`claude\` there) to use the brain.`;
-  if (target === 'hermes')
-    return `Start Hermes (\`hermes\`; use HERMES_HOME=${root} if that is not your default ~/.hermes). If lossiness lists dropped tasks, schedule them with the \`hermes cron create …\` commands shown there.`;
-  if (target === 'openclaw')
-    return `Restart the OpenClaw gateway so it loads the brain (use OPENCLAW_STATE_DIR=${root} if that is not your default ~/.openclaw).`;
-  throw new Error(`no next-step text for unknown target "${target}"`);
-}
+export { nextStep } from '@uniqent/builder';

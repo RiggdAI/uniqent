@@ -1,4 +1,4 @@
-import type { Bundle } from '@uniqent/core';
+import type { Bundle } from '@uniqent/core/pure';
 
 export interface DetectResult {
   present: boolean;

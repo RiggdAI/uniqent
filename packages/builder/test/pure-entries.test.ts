@@ -8,10 +8,15 @@ const ENTRIES = [
   resolve(root, 'core/dist/pure.js'),
   resolve(root, 'builder/dist/hubs-entry.js'),
   resolve(root, 'builder/dist/memory-entry.js'),
+  resolve(root, 'builder/dist/brain-entry.js'),
+  resolve(root, 'adapter-sdk/dist/pure.js'),
 ];
 const RESOLVE: Record<string, string> = {
   '@uniqent/core/pure': resolve(root, 'core/dist/pure.js'),
   '@uniqent/spec': resolve(root, 'spec/dist/index.js'),
+  '@uniqent/builder/memory': resolve(root, 'builder/dist/memory-entry.js'),
+  '@uniqent/builder/brain': resolve(root, 'builder/dist/brain-entry.js'),
+  '@uniqent/adapter-sdk/pure': resolve(root, 'adapter-sdk/dist/pure.js'),
 };
 
 /** Every problem (node: import, Buffer, process, non-pure workspace import) reachable from `entry`. */
