@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, existsSync, writeFileSync, statSync } from 'node:fs';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { mkdtempSync, rmSync, existsSync, writeFileSync, readFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -184,6 +186,37 @@ describe('cli hardening', () => {
       expect(fetched).toBe(false);
     } finally {
       globalThis.fetch = orig;
+    }
+  });
+
+  it('checks every redirect hop: refuses one to plain http, caps loops, follows safe ones', async () => {
+    const dir = tmp();
+    const bytes = readFileSync(await signedFile(dir));
+    const server = createServer((req, res) => {
+      const location: Record<string, string> = {
+        '/insecure': 'http://example.com/dev.uniqent',
+        '/loop': '/loop',
+        '/safe': '/dev.uniqent',
+      };
+      const to = location[req.url ?? ''];
+      if (to) res.writeHead(302, { location: to }).end();
+      else res.writeHead(200).end(bytes);
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    try {
+      const insecure = capture();
+      expect(await run(['inspect', `${base}/insecure`], insecure.io)).toBe(1);
+      expect(insecure.errs.join('\n')).toContain(
+        'refusing insecure URL http://example.com/dev.uniqent',
+      );
+      const loop = capture();
+      expect(await run(['inspect', `${base}/loop`], loop.io)).toBe(1);
+      expect(loop.errs.join('\n')).toContain('more than 5 redirects');
+      expect(await run(['inspect', `${base}/safe`], capture().io)).toBe(0);
+    } finally {
+      server.close();
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 
