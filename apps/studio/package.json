@@ -18,6 +18,7 @@
     "native:build": "tauri build",
     "fixtures": "tsx scripts/emit-fixtures.ts && prettier --write fixtures",
     "fixtures:core": "tsx scripts/emit-core-fixtures.ts && prettier --write fixtures/core",
+    "fixtures:install": "tsx scripts/emit-install-fixtures.ts && prettier --write fixtures/install",
     "fixtures:ports": "tsx scripts/emit-port-fixtures.ts && prettier --write fixtures/ports"
   },
   "dependencies": {
@@ -53,6 +54,7 @@
     "@types/node": "^22",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@uniqent/cli": "workspace:^",
     "@vitejs/plugin-react": "^6.1.1",
     "happy-dom": "^20.14.6",
     "react": "^19.3.0",

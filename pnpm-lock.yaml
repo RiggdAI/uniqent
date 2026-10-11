@@ -281,6 +281,9 @@ importers:
       '@types/react-dom':
         specifier: ^19.3.0
         version: 19.3.0(@types/react@19.3.0)
+      '@uniqent/cli':
+        specifier: workspace:^
+        version: link:../../packages/cli
       '@vitejs/plugin-react':
         specifier: ^6.1.1
         version: 6.1.1(vite@8.3.1(@types/node@22.20.4)(esbuild@0.28.0)(jiti@1.21.7)(tsx@4.23.15)(yaml@2.9.1))
@@ -326,7 +329,7 @@ importers:
     devDependencies:
       vitest:
         specifier: ^5.0.2
-        version: 5.0.2(@types/node@22.19.19)(vite@8.3.1(@types/node@22.19.19)(esbuild@0.28.0)(jiti@1.21.7)(tsx@4.22.3)(yaml@2.9.1))
+        version: 5.0.2(@types/node@22.19.19)(happy-dom@20.14.6)(vite@8.3.1(@types/node@22.19.19)(esbuild@0.28.0)(jiti@1.21.7)(tsx@4.22.3)(yaml@2.9.1))
 
   packages/adapter-hermes:
     dependencies:
@@ -351,7 +354,7 @@ importers:
         version: link:../adapter-claude-code
       vitest:
         specifier: ^5.0.2
-        version: 5.0.2(@types/node@22.19.19)(vite@8.3.1(@types/node@22.19.19)(esbuild@0.28.0)(jiti@1.21.7)(tsx@4.22.3)(yaml@2.9.1))
+        version: 5.0.2(@types/node@22.19.19)(happy-dom@20.14.6)(vite@8.3.1(@types/node@22.19.19)(esbuild@0.28.0)(jiti@1.21.7)(tsx@4.22.3)(yaml@2.9.1))
 
   packages/adapter-openclaw:
     dependencies:
@@ -373,7 +376,7 @@ importers:
     devDependencies:
       vitest:
         specifier: ^5.0.2
-        version: 5.0.2(@types/node@22.19.19)(vite@8.3.1(@types/node@22.19.19)(esbuild@0.28.0)(jiti@1.21.7)(tsx@4.22.3)(yaml@2.9.1))
+        version: 5.0.2(@types/node@22.19.19)(happy-dom@20.14.6)(vite@8.3.1(@types/node@22.19.19)(esbuild@0.28.0)(jiti@1.21.7)(tsx@4.22.3)(yaml@2.9.1))
 
   packages/adapter-sdk:
     dependencies:
@@ -383,7 +386,7 @@ importers:
     devDependencies:
       vitest:
         specifier: ^5.0.2
-        version: 5.0.2(@types/node@22.19.19)(vite@8.3.1(@types/node@22.19.19)(esbuild@0.28.0)(jiti@1.21.7)(tsx@4.22.3)(yaml@2.9.1))
+        version: 5.0.2(@types/node@22.19.19)(happy-dom@20.14.6)(vite@8.3.1(@types/node@22.19.19)(esbuild@0.28.0)(jiti@1.21.7)(tsx@4.22.3)(yaml@2.9.1))
 
   packages/builder:
     dependencies:
@@ -399,7 +402,7 @@ importers:
     devDependencies:
       vitest:
         specifier: ^5.0.2
-        version: 5.0.2(@types/node@22.19.19)(vite@8.3.1(@types/node@22.19.19)(esbuild@0.28.0)(jiti@1.21.7)(tsx@4.22.3)(yaml@2.9.1))
+        version: 5.0.2(@types/node@22.19.19)(happy-dom@20.14.6)(vite@8.3.1(@types/node@22.19.19)(esbuild@0.28.0)(jiti@1.21.7)(tsx@4.22.3)(yaml@2.9.1))
 
   packages/cli:
     dependencies:
@@ -427,7 +430,7 @@ importers:
         version: 4.23.15
       vitest:
         specifier: ^5.0.2
-        version: 5.0.2(@types/node@22.19.19)(vite@8.3.1(@types/node@22.19.19)(esbuild@0.28.0)(jiti@1.21.7)(tsx@4.23.15)(yaml@2.9.1))
+        version: 5.0.2(@types/node@22.19.19)(happy-dom@20.14.6)(vite@8.3.1(@types/node@22.19.19)(esbuild@0.28.0)(jiti@1.21.7)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/core:
     dependencies:
@@ -443,7 +446,7 @@ importers:
     devDependencies:
       vitest:
         specifier: ^5.0.2
-        version: 5.0.2(@types/node@22.19.19)(vite@8.3.1(@types/node@22.19.19)(esbuild@0.28.0)(jiti@1.21.7)(tsx@4.22.3)(yaml@2.9.1))
+        version: 5.0.2(@types/node@22.19.19)(happy-dom@20.14.6)(vite@8.3.1(@types/node@22.19.19)(esbuild@0.28.0)(jiti@1.21.7)(tsx@4.22.3)(yaml@2.9.1))
 
   packages/spec:
     dependencies:
@@ -456,7 +459,7 @@ importers:
         version: 4.23.15
       vitest:
         specifier: ^5.0.2
-        version: 5.0.2(@types/node@22.19.19)(vite@8.3.1(@types/node@22.19.19)(esbuild@0.28.0)(jiti@1.21.7)(tsx@4.23.15)(yaml@2.9.1))
+        version: 5.0.2(@types/node@22.19.19)(happy-dom@20.14.6)(vite@8.3.1(@types/node@22.19.19)(esbuild@0.28.0)(jiti@1.21.7)(tsx@4.23.15)(yaml@2.9.1))
 
 packages:
 
@@ -4279,7 +4282,7 @@ snapshots:
       tsx: 4.23.15
       yaml: 2.9.1
 
-  vitest@5.0.2(@types/node@22.19.19)(vite@8.3.1(@types/node@22.19.19)(esbuild@0.28.0)(jiti@1.21.7)(tsx@4.22.3)(yaml@2.9.1)):
+  vitest@5.0.2(@types/node@22.19.19)(happy-dom@20.14.6)(vite@8.3.1(@types/node@22.19.19)(esbuild@0.28.0)(jiti@1.21.7)(tsx@4.22.3)(yaml@2.9.1)):
     dependencies:
       '@types/chai': 5.2.3
       '@vitest/mocker': 5.0.2(vite@8.3.1(@types/node@22.19.19)(esbuild@0.28.0)(jiti@1.21.7)(tsx@4.22.3)(yaml@2.9.1))
@@ -4297,10 +4300,11 @@ snapshots:
       why-is-node-running: 3.2.2
     optionalDependencies:
       '@types/node': 22.19.19
+      happy-dom: 20.14.6
     transitivePeerDependencies:
       - msw
 
-  vitest@5.0.2(@types/node@22.19.19)(vite@8.3.1(@types/node@22.19.19)(esbuild@0.28.0)(jiti@1.21.7)(tsx@4.23.15)(yaml@2.9.1)):
+  vitest@5.0.2(@types/node@22.19.19)(happy-dom@20.14.6)(vite@8.3.1(@types/node@22.19.19)(esbuild@0.28.0)(jiti@1.21.7)(tsx@4.23.15)(yaml@2.9.1)):
     dependencies:
       '@types/chai': 5.2.3
       '@vitest/mocker': 5.0.2(vite@8.3.1(@types/node@22.19.19)(esbuild@0.28.0)(jiti@1.21.7)(tsx@4.23.15)(yaml@2.9.1))
@@ -4318,6 +4322,7 @@ snapshots:
       why-is-node-running: 3.2.2
     optionalDependencies:
       '@types/node': 22.19.19
+      happy-dom: 20.14.6
     transitivePeerDependencies:
       - msw
 
