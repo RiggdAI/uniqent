@@ -114,6 +114,18 @@ describe('hermesAdapter.apply', () => {
     }
   });
 
+  it('writes policies to SOUL.md when the bundle has no persona', async () => {
+    const root = tmp();
+    try {
+      const b = Brain.create(META);
+      b.setPolicies('Never push to main.');
+      await install(root, b.toBundle(), {});
+      expect(read(root, 'SOUL.md')).toBe('## Policies\n\nNever push to main.\n');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('skips an oversized high-importance fact but keeps filling, and reports it', async () => {
     const root = tmp();
     try {

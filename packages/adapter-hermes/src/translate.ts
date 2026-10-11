@@ -119,16 +119,23 @@ export function translate(bundle: Bundle, home: HermesHome, root: string): Trans
   };
 
   const persona = bundle.persona();
-  if (persona !== undefined) {
-    const policies = bundle.policies();
+  const policies = bundle.policies();
+  const policiesMd = policies ? `## Policies\n\n${policies.trim()}\n` : undefined;
+  // SOUL.md is Hermes' only prompt file, so policies go there even without a persona.
+  const soul =
+    persona === undefined
+      ? policiesMd
+      : policiesMd === undefined
+        ? persona
+        : `${persona.trim()}\n\n${policiesMd}`;
+  if (soul !== undefined)
     add(
       SOUL_FILE,
       home.soul === undefined
         ? 'identity / system prompt'
         : 'identity / system prompt (replaces existing SOUL.md)',
-      policies ? `${persona.trim()}\n\n## Policies\n\n${policies.trim()}\n` : persona,
+      soul,
     );
-  }
 
   const limits = memoryLimits(home.config);
   const facts = bundle.memoryFacts();

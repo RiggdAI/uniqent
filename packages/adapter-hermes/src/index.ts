@@ -111,8 +111,8 @@ export const hermesAdapter: Adapter = {
     for (const f of all) {
       const target = resolveInside(root, f.path);
       await mkdir(dirname(target), { recursive: true });
-      await writeFile(target, f.content);
-      // .env holds real secrets: owner-only, also when it already existed with a wider mode.
+      // .env holds real secrets: created owner-only; chmod also tightens a pre-existing file.
+      await writeFile(target, f.content, { mode: f.path === ENV_FILE ? 0o600 : 0o666 });
       if (f.path === ENV_FILE) await chmod(target, 0o600);
     }
 
