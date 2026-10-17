@@ -12,7 +12,6 @@ import {
 import type {
   StudioState,
   CatalogView,
-  ExportResult,
   TaskInput,
   McpHubResult,
   McpNormalizePreview,
@@ -57,7 +56,6 @@ export const api = {
   memoryGraph: () => call<MemoryGraph>('memory_graph'),
   getProfile: () => call<{ profile: Record<string, string> }>('get_profile'),
   setProfile: (profile: Record<string, string>) => call<StudioState>('set_profile', { profile }),
-  export: (sign: boolean) => call<ExportResult>('export', { sign }),
 
   // ── Hubs, publish, vault, skill-from-URL (shared pure TS + Rust, see native.ts) ──
   memoryHub: (query: string, registry?: string) => native.memoryHub(query, registry ?? ''),

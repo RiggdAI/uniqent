@@ -125,13 +125,6 @@ export interface TaskInput {
   prompt?: string;
 }
 
-export interface ExportResult {
-  filename: string;
-  bytesBase64: string;
-  signed: boolean;
-  verified: boolean;
-}
-
 export interface McpHubResult {
   source: string;
   entry: {

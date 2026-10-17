@@ -313,19 +313,6 @@ describe('api shim (native)', () => {
     expect(httpFetchMock).not.toHaveBeenCalled();
   });
 
-  it('routes export through invoke with sign arg', async () => {
-    invokeMock.mockResolvedValue({
-      filename: 'my-brain.uniqent',
-      bytesBase64: 'abc=',
-      signed: true,
-      verified: true,
-      validation: { ok: true, errors: [], warnings: [] },
-    });
-    const { api } = await import('./api');
-    await api.export(true);
-    expect(invokeMock).toHaveBeenCalledWith('export', { sign: true });
-  });
-
   it('has no HTTP fallback left', async () => {
     const src = (await import('node:fs')).readFileSync(
       new URL('./api.ts', import.meta.url),
