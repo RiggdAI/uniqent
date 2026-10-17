@@ -84,6 +84,25 @@ fn secret_files_end_up_owner_only_and_others_keep_their_mode() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn a_kept_mode_drops_setuid_setgid_and_sticky_bits() {
+    let d = tempfile::tempdir().unwrap();
+    let path = d.path().join("run.sh");
+    fs::write(&path, "old").unwrap();
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o5755)).unwrap();
+    assert_eq!(
+        fs::metadata(&path).unwrap().permissions().mode() & 0o7777,
+        0o5755,
+        "the OS kept the setuid + sticky bits on the seed"
+    );
+    write_outputs(d.path(), &[w("run.sh", "new", None)]).unwrap();
+    assert_eq!(
+        fs::metadata(&path).unwrap().permissions().mode() & 0o7777,
+        0o755
+    );
+}
+
 #[test]
 fn validates_everything_before_writing_anything() {
     let d = tempfile::tempdir().unwrap();

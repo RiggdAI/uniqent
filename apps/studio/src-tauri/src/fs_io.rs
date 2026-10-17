@@ -234,7 +234,7 @@ fn plan_write(root: &Path, write: &OutputWrite) -> Result<Planned, String> {
 
 /// Validate every write first (path, base64, mode ∈ {None, Some(0o600)}, no duplicates), then
 /// write each atomically: a 0600 temp file in the same dir → final mode → fsync → rename. The
-/// final mode is 0600 for `Some(0o600)`; for `None` an existing target's permissions, else
+/// final mode is 0600 for `Some(0o600)`; for `None` an existing target's permission bits, else
 /// 0666 & ~umask (what the CLI's `writeFile` creates).
 /// Returns the written paths. Never follows or replaces through a symlinked parent. Unlike the
 /// CLI's in-place `writeFile`, the rename replaces the file: hardlinks to it are broken and its
@@ -282,7 +282,8 @@ fn write_one(root: &Path, comps: &[String], bytes: &[u8], mode: Option<u32>) -> 
     };
     let final_mode = match (mode, existing) {
         (Some(_), _) => std::fs::Permissions::from_mode(OWNER_ONLY),
-        (None, Some(p)) => p,
+        // Only the permission bits: setuid/setgid/sticky never carry over to the replacement.
+        (None, Some(p)) => std::fs::Permissions::from_mode(p.mode() & 0o777),
         (None, None) => std::fs::Permissions::from_mode(0o666 & !process_umask()),
     };
     let mut suffix = [0u8; 6];
@@ -314,14 +315,14 @@ fn write_one(root: &Path, comps: &[String], bytes: &[u8], mode: Option<u32>) -> 
     result
 }
 
-/// The process umask, read once. Reading it means setting it: the swap briefly sets 0o077, so a
+/// The process umask, read once. Reading it means setting it: the swap briefly sets 0o777, so a
 /// file another thread creates in that instant only ever comes out stricter, never looser.
 #[cfg(unix)]
 fn process_umask() -> u32 {
     static UMASK: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
     *UMASK.get_or_init(|| {
         // SAFETY: umask only swaps the process file-mode creation mask and cannot fail.
-        let old = unsafe { libc::umask(0o077) };
+        let old = unsafe { libc::umask(0o777) };
         unsafe { libc::umask(old) };
         #[allow(clippy::unnecessary_cast)] // mode_t is u16 on macOS, u32 on Linux
         let old = old as u32;
