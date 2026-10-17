@@ -17,9 +17,12 @@ import { DroppedLines } from './DroppedLines';
 export function CapturePanel({
   dir,
   apply,
+  onReplaced,
 }: {
   dir: string | null;
   apply: (p: Promise<StudioState>) => void;
+  /** Called once the captured brain replaced the session. */
+  onReplaced: () => void;
 }) {
   const [result, setResult] = useState<CaptureResult | null>(null);
   const [err, setErr] = useState('');
@@ -42,6 +45,7 @@ export function CapturePanel({
     try {
       const res = await api.capture(t, r);
       apply(Promise.resolve(res.state));
+      onReplaced();
       setResult(res);
     } catch (e) {
       setErr(errorText(e));

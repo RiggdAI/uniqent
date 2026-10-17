@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fromBase64, toBase64 } from './bytes';
-import { captureAgent, routeDrop } from './capture';
+import { captureAgent, openStep, routeDrop } from './capture';
+import type { StudioState } from './types';
 
 const enc = (s: string) => new TextEncoder().encode(s);
 const dec = (b64: string) => new TextDecoder().decode(fromBase64(b64));
@@ -124,5 +125,77 @@ describe('routeDrop', () => {
       ]),
     ).toEqual({ kind: 'unsupported' });
     expect(routeDrop([])).toEqual({ kind: 'unsupported' });
+  });
+});
+
+/** A fresh session's state (Rust Session::new): no components, README or avatar. */
+function freshState(): StudioState {
+  return {
+    manifest: {
+      name: 'my-brain',
+      displayName: 'My Brain',
+      version: '0.1.0',
+      description: 'A portable agent brain.',
+      license: 'CC0-1.0',
+      tags: [],
+      components: {
+        identity: false,
+        memory: { facts: 0, episodic: 0, hasProfile: false },
+        skills: [],
+        mcp: [],
+        tools: [],
+        tasks: [],
+        channels: [],
+      },
+      credentials: [],
+      permissions: {
+        filesystem: { read: [], write: [] },
+        network: { endpoints: [] },
+        autonomy: 'suggest',
+        spawnsProcesses: false,
+      },
+      compatibility: { targets: [] },
+    },
+    validation: { ok: true, errors: [], warnings: [] },
+  };
+}
+
+describe('openStep', () => {
+  it('opens straight away over an empty brain', () => {
+    expect(openStep(freshState())).toBe('open');
+  });
+
+  it('asks before replacing a brain that holds anything the user built', () => {
+    const fresh = freshState();
+    const c = fresh.manifest.components;
+    const built: StudioState[] = [
+      {
+        ...fresh,
+        persona: '# P',
+        manifest: { ...fresh.manifest, components: { ...c, identity: true } },
+      },
+      { ...fresh, manifest: { ...fresh.manifest, components: { ...c, skills: ['triage'] } } },
+      { ...fresh, manifest: { ...fresh.manifest, components: { ...c, mcp: ['github'] } } },
+      { ...fresh, manifest: { ...fresh.manifest, components: { ...c, channels: ['telegram'] } } },
+      { ...fresh, manifest: { ...fresh.manifest, components: { ...c, tasks: ['task-1'] } } },
+      {
+        ...fresh,
+        manifest: {
+          ...fresh.manifest,
+          components: { ...c, memory: { facts: 1, episodic: 0, hasProfile: false } },
+        },
+      },
+      {
+        ...fresh,
+        manifest: {
+          ...fresh.manifest,
+          components: { ...c, memory: { facts: 0, episodic: 0, hasProfile: true } },
+        },
+      },
+      { ...fresh, readme: '# About' },
+      { ...fresh, avatar: 'data:image/png;base64,AA==' },
+    ];
+    for (const state of built)
+      expect(openStep(state), JSON.stringify(state)).toBe('confirm-replace');
   });
 });

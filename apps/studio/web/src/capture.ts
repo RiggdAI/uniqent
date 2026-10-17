@@ -2,7 +2,7 @@
  * Capture an agent from the native app, in the CLI's `uniqent export` order: read the framework
  * setup (Rust `read_inputs`) → the adapter's pure capture → scrub episodic and personal memory →
  * the fail-closed secret scan and validation → load it as the session (Rust `load_bundle_files`).
- * Also the pure routing of a window drop.
+ * Also the pure routing of a window drop and of an Open over the current brain.
  */
 import { scanForSecrets, validateBundle } from '@uniqent/core/pure';
 import { gatherInputs } from '@uniqent/adapter-sdk/pure';
@@ -10,7 +10,15 @@ import { scrubPrivateMemory, type ScrubReport, type TargetId } from '@uniqent/bu
 import { toBase64 } from './bytes';
 import { PURE_ADAPTERS, readViaRust, targetContext } from './install';
 import { call } from './native';
-import type { LoadedBundle, StudioState } from './types';
+import type { LoadedBundle, Manifest, StudioState } from './types';
+
+/** No persona, profile, memory facts, skills, MCP servers, tools, channels or tasks. */
+function hasNoComponents(c: Manifest['components']): boolean {
+  const counts = [c.skills, c.mcp, c.tools, c.channels, c.tasks].map((list) => list.length);
+  return (
+    !c.identity && !c.memory.hasProfile && c.memory.facts === 0 && counts.every((n) => n === 0)
+  );
+}
 
 export interface CaptureResult {
   state: StudioState;
@@ -49,9 +57,7 @@ export async function captureAgent(target: TargetId, root: string): Promise<Capt
       `captured bundle is invalid: ${validation.errors.map((e) => e.message).join('; ')}`,
     );
   // Loading replaces the current brain: never with an empty one from a wrong folder.
-  const c = bundle.manifest().components;
-  const counts = [c.skills, c.mcp, c.tools, c.channels, c.tasks].map((list) => list.length);
-  if (!c.identity && !c.memory.hasProfile && c.memory.facts === 0 && counts.every((n) => n === 0))
+  if (hasNoComponents(bundle.manifest().components))
     throw new CaptureRefusedError(
       `found nothing to capture from ${pure.displayName} at ${root} (no persona, skills, MCP servers, memory, profile, tools, channels or tasks); check the framework and folder`,
     );
@@ -81,4 +87,14 @@ export function routeDrop(items: DroppedItem[]): DropAction {
   if (item.kind === 'dir') return { kind: 'choose-vault-or-capture', dir: item.path };
   if (item.path.endsWith('.uniqent')) return { kind: 'open-bundle', path: item.path };
   return { kind: 'unsupported' };
+}
+
+/**
+ * Opening a bundle replaces the brain: straight away when the brain holds nothing the user built
+ * (no component, README or avatar; the default name and description don't count), else only
+ * after the user confirms.
+ */
+export function openStep(state: StudioState): 'open' | 'confirm-replace' {
+  const empty = hasNoComponents(state.manifest.components) && !state.readme && !state.avatar;
+  return empty ? 'open' : 'confirm-replace';
 }

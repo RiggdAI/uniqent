@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { ReactFlow, Background, BackgroundVariant, type Node } from '@xyflow/react';
 import { listen } from '@tauri-apps/api/event';
 import {
@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import type { StudioState, CatalogView, OpenedBundle } from './types';
 import { api } from './api';
-import { routeDrop, type DropAction, type DroppedItem } from './capture';
+import { openStep, routeDrop, type DropAction, type DroppedItem } from './capture';
 import { DroppedLines } from './DroppedLines';
 import { buildGraph } from './canvas/graph';
 import { nodeTypes } from './canvas/nodes';
@@ -21,6 +21,9 @@ import { Palette } from './Palette';
 import { Inspector } from './Inspector';
 import { Button } from './components/ui/button';
 import { cn, errorText } from './lib/utils';
+
+/** Where a bundle to open comes from: the native open dialog or a file Rust granted from a drop. */
+type OpenSource = { kind: 'dialog' } | { kind: 'dropped'; path: string };
 
 // Lazy-loaded so the force-graph/d3 weight only ships when the brain is opened.
 const MemoryBrain = lazy(() => import('./MemoryBrain').then((m) => ({ default: m.MemoryBrain })));
@@ -41,6 +44,13 @@ export function App() {
   const [dropRefused, setDropRefused] = useState<string[]>([]);
   // A dropped folder handed to the vault or capture panel.
   const [droppedDir, setDroppedDir] = useState<string | null>(null);
+  // An Open waiting for the user to confirm it may replace the current brain.
+  const [confirmOpen, setConfirmOpen] = useState<OpenSource | null>(null);
+  // The current state for the drop listener, which is registered once.
+  const stateRef = useRef<StudioState | null>(null);
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
   const [paletteCollapsed, setPaletteCollapsed] = useState(
     () => localStorage.getItem('uq.palette.collapsed') === '1',
   );
@@ -69,8 +79,11 @@ export function App() {
         const action = routeDrop(e.payload);
         if (action.kind === 'open-bundle') {
           setDrop(null);
-          void openWith(api.openDroppedBundle(action.path));
-        } else setDrop(action);
+          requestOpen({ kind: 'dropped', path: action.path });
+        } else {
+          setConfirmOpen(null);
+          setDrop(action);
+        }
       }),
       listen<string[]>('studio://drop-refused', (e) => setDropRefused(e.payload)),
     ];
@@ -113,6 +126,22 @@ export function App() {
     } finally {
       setBusy(false);
     }
+  }
+
+  function startOpen(source: OpenSource): void {
+    setConfirmOpen(null);
+    void openWith(source.kind === 'dialog' ? api.openBundle() : api.openDroppedBundle(source.path));
+  }
+
+  /** Open now over an empty brain, else ask first: opening replaces the brain (see openStep). */
+  function requestOpen(source: OpenSource): void {
+    const current = stateRef.current;
+    if (!current) {
+      setError('Studio is still loading the brain; open the bundle again in a moment');
+      return;
+    }
+    if (openStep(current) === 'open') startOpen(source);
+    else setConfirmOpen(source);
   }
 
   /** Hand a dropped folder to the vault import or capture panel. */
@@ -195,7 +224,10 @@ export function App() {
             variant="outline"
             size="sm"
             disabled={busy}
-            onClick={() => openWith(api.openBundle())}
+            onClick={() => {
+              setDrop(null);
+              requestOpen({ kind: 'dialog' });
+            }}
           >
             <FolderOpen className="size-4" /> <span className="hidden sm:inline">Open…</span>
           </Button>
@@ -269,6 +301,7 @@ export function App() {
             apply={apply}
             onClose={() => setSelection(null)}
             droppedDir={droppedDir}
+            onReplaced={() => setOpened(null)}
           />
         </div>
       )}
@@ -298,7 +331,11 @@ export function App() {
         <span className="text-muted-foreground">·</span>
         <span className="text-muted-foreground">{credsRequired} credential(s) required</span>
         {exportMsg && <span className="ml-auto truncate text-muted-foreground">{exportMsg}</span>}
-        {error && <span className="ml-auto truncate text-destructive">{error}</span>}
+        {error && (
+          <span title={error} className="ml-auto truncate text-destructive">
+            {error}
+          </span>
+        )}
       </footer>
 
       {issuesOpen && !v.ok && (
@@ -350,7 +387,7 @@ export function App() {
         </div>
       )}
 
-      {(drop || dropRefused.length > 0) && (
+      {(drop || dropRefused.length > 0 || confirmOpen) && (
         <div
           data-testid="drop-panel"
           className="absolute left-1/2 top-17 z-30 w-[min(28rem,calc(100vw-1.5rem))] -translate-x-1/2 space-y-2 rounded-xl border bg-card/95 p-3 text-xs shadow-lg backdrop-blur-sm"
@@ -370,6 +407,7 @@ export function App() {
               onClick={() => {
                 setDrop(null);
                 setDropRefused([]);
+                setConfirmOpen(null);
               }}
             >
               <X className="size-4" />
@@ -393,6 +431,35 @@ export function App() {
               >
                 Capture agent
               </Button>
+            </div>
+          )}
+          {confirmOpen && (
+            <div className="space-y-2">
+              <p data-testid="open-replace-warning">
+                Opening{' '}
+                {confirmOpen.kind === 'dropped' ? <code>{confirmOpen.path}</code> : 'a bundle'}{' '}
+                replaces the current brain, {state.manifest.displayName}; Studio does not keep it.
+                Export it first to keep it.
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  data-testid="open-replace-confirm"
+                  variant="outline"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => startOpen(confirmOpen)}
+                >
+                  Open — replaces the current brain
+                </Button>
+                <Button
+                  data-testid="open-replace-cancel"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setConfirmOpen(null)}
+                >
+                  Cancel
+                </Button>
+              </div>
             </div>
           )}
           {drop?.kind === 'unsupported' && (

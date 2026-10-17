@@ -28,6 +28,8 @@ interface InspectorProps {
   onClose: () => void;
   /** A folder dropped on the window, for the 'vault' and 'capture' panels (else null). */
   droppedDir: string | null;
+  /** A capture replaced the brain: App drops what described the old one (the Open report). */
+  onReplaced: () => void;
 }
 
 function Field({
@@ -68,7 +70,7 @@ function RichEditor(props: { value: string; onChange: (md: string) => void; test
 function PersonaEditor({
   state,
   apply,
-}: Omit<InspectorProps, 'selection' | 'onClose' | 'droppedDir'>) {
+}: Omit<InspectorProps, 'selection' | 'onClose' | 'droppedDir' | 'onReplaced'>) {
   const [persona, setPersona] = useState(state.persona ?? '');
   const dirty = persona !== (state.persona ?? '');
   return (
@@ -94,7 +96,7 @@ function PersonaEditor({
 function MemoryEditor({
   state,
   apply,
-}: Omit<InspectorProps, 'selection' | 'onClose' | 'droppedDir'>) {
+}: Omit<InspectorProps, 'selection' | 'onClose' | 'droppedDir' | 'onReplaced'>) {
   const [text, setText] = useState('');
   const [addError, setAddError] = useState('');
   const [importance, setImportance] = useState('0.5');
@@ -445,7 +447,7 @@ function VaultImportPanel({
 function ConfigEditor({
   state,
   apply,
-}: Omit<InspectorProps, 'selection' | 'onClose' | 'droppedDir'>) {
+}: Omit<InspectorProps, 'selection' | 'onClose' | 'droppedDir' | 'onReplaced'>) {
   const m = state.manifest;
   const [name, setName] = useState(m.name);
   const [displayName, setDisplayName] = useState(m.displayName);
@@ -1689,7 +1691,7 @@ function titleFor(selection: string): string {
 }
 
 export function Inspector(props: InspectorProps) {
-  const { selection, state, catalog, apply, onClose, droppedDir } = props;
+  const { selection, state, catalog, apply, onClose, droppedDir, onReplaced } = props;
   return (
     <aside className="flex h-full flex-col">
       <div className="flex h-12 shrink-0 items-center justify-between border-b px-4">
@@ -1733,7 +1735,12 @@ export function Inspector(props: InspectorProps) {
         {selection === 'hub-skills' && <HubSkillPanel apply={apply} />}
         {selection === 'install' && <InstallPanel />}
         {selection === 'capture' && (
-          <CapturePanel key={droppedDir ?? ''} dir={droppedDir} apply={apply} />
+          <CapturePanel
+            key={droppedDir ?? ''}
+            dir={droppedDir}
+            apply={apply}
+            onReplaced={onReplaced}
+          />
         )}
         {selection === 'vault' && (
           <VaultImportPanel key={droppedDir ?? ''} apply={apply} initialDir={droppedDir} />
