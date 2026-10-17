@@ -1,7 +1,8 @@
 name: Studio release
 
 # Build the native Studio as a universal macOS DMG and attach it to a GitHub Release.
-# Tag with:  git tag studio-v0.1.0 && git push origin studio-v0.1.0  (must match tauri.conf.json "version")
+# Tag with:  git tag studio-v0.1.0 && git push origin studio-v0.1.0  (must match tauri.conf.json "version",
+# which must equal the src-tauri Cargo.toml package version)
 # Signing, notarization and updater artifacts run only when their secrets exist.
 on:
   push:
@@ -45,11 +46,58 @@ jobs:
 
       - name: Tag matches the app version
         run: |
-          want="studio-v$(node -p "require('./apps/studio/src-tauri/tauri.conf.json').version")"
-          if [ "$GITHUB_REF_NAME" != "$want" ]; then
-            echo "::error::tag $GITHUB_REF_NAME does not match tauri.conf.json version ($want)"
+          app="$(node -p "require('./apps/studio/src-tauri/tauri.conf.json').version")"
+          crate="$(awk -F'"' '/^\[/ { pkg = ($0 == "[package]") } pkg && /^version *=/ { print $2; exit }' apps/studio/src-tauri/Cargo.toml)"
+          if [ "$GITHUB_REF_NAME" != "studio-v$app" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match tauri.conf.json version (studio-v$app)"
             exit 1
           fi
+          if [ "$crate" != "$app" ]; then
+            echo "::error::apps/studio/src-tauri/Cargo.toml version (${crate:-none found}) does not match tauri.conf.json version ($app)"
+            exit 1
+          fi
+
+      - name: Apple secrets are complete
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          # Report names only, never values. Signing needs the certificate, its password and the
+          # identity; notarization needs the Apple ID, its app password and the team id.
+          missing=()
+          if [ -n "$APPLE_CERTIFICATE" ]; then
+            [ -n "$APPLE_CERTIFICATE_PASSWORD" ] || missing+=("APPLE_CERTIFICATE_PASSWORD (needed with APPLE_CERTIFICATE)")
+            [ -n "$APPLE_SIGNING_IDENTITY" ] || missing+=("APPLE_SIGNING_IDENTITY (needed with APPLE_CERTIFICATE)")
+          fi
+          if [ -n "$APPLE_ID" ]; then
+            [ -n "$APPLE_PASSWORD" ] || missing+=("APPLE_PASSWORD (needed with APPLE_ID)")
+            [ -n "$APPLE_TEAM_ID" ] || missing+=("APPLE_TEAM_ID (needed with APPLE_ID)")
+          fi
+          if [ "${#missing[@]}" -gt 0 ]; then
+            joined="$(printf '%s, ' "${missing[@]}")"
+            echo "::error::Apple secrets are half-configured; missing: ${joined%, }"
+            exit 1
+          fi
+
+      - name: Release does not exist yet
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if out="$(gh release view "$GITHUB_REF_NAME" --json tagName 2>&1)"; then
+            echo "::error::release $GITHUB_REF_NAME already exists; delete it (gh release delete $GITHUB_REF_NAME) or push a new tag"
+            exit 1
+          fi
+          case "$out" in
+            *"release not found"*) ;;
+            *)
+              echo "::error::cannot check whether release $GITHUB_REF_NAME exists: $out"
+              exit 1
+              ;;
+          esac
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
