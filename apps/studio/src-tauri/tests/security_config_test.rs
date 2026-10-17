@@ -11,16 +11,12 @@ fn csp_is_strict_and_capabilities_are_minimal() {
             .unwrap();
     let csp = &conf["app"]["security"]["csp"];
     assert!(csp.is_object(), "csp must not be null");
-    let script = csp["script-src"].as_str().unwrap();
-    assert!(
-        !script.contains("unsafe-inline") && !script.contains("unsafe-eval"),
-        "{script}"
-    );
-    assert_eq!(csp["object-src"], "'none'");
-    assert!(!csp["connect-src"]
-        .as_str()
-        .unwrap()
-        .contains("http://localhost"));
+    assert_eq!(csp["script-src"], "'self'");
+    assert_eq!(csp["img-src"], "'self' data:");
+    assert_eq!(csp["connect-src"], "ipc: http://ipc.localhost");
+    for directive in ["frame-src", "base-uri", "form-action", "object-src"] {
+        assert_eq!(csp[directive], "'none'", "{directive}");
+    }
 
     let caps: Value = serde_json::from_str(
         &std::fs::read_to_string(dir.join("capabilities/default.json")).unwrap(),
@@ -44,7 +40,14 @@ fn csp_is_strict_and_capabilities_are_minimal() {
             "http:default"
         ]
     );
-    assert!(ids
+    let http = caps["permissions"]
+        .as_array()
+        .unwrap()
         .iter()
-        .all(|i| !i.starts_with("fs:") && !i.starts_with("shell:") && !i.starts_with("dialog:")));
+        .find(|p| p["identifier"] == "http:default")
+        .unwrap();
+    assert_eq!(
+        http["allow"],
+        serde_json::json!([{ "url": "https://*" }, { "url": "https://*/*" }])
+    );
 }
