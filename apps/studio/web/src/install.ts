@@ -19,7 +19,7 @@ import {
   type TargetContext,
   type Translation,
 } from '@uniqent/adapter-sdk/pure';
-import type { TargetId } from '@uniqent/builder/brain';
+import { describeMcpServers, type TargetId } from '@uniqent/builder/brain';
 import { claudeCodePure } from '@uniqent/adapter-claude-code/pure';
 import { hermesPure } from '@uniqent/adapter-hermes/pure';
 import { openClawPure } from '@uniqent/adapter-openclaw/pure';
@@ -130,10 +130,16 @@ async function prepare(target: TargetId, root: string): Promise<Prepared> {
   return { bundle, pure, ctx, read };
 }
 
-/** Credential-free dry run (writes + lossiness + required credentials). */
-export async function planInstall(target: TargetId, root: string): Promise<InstallPlan> {
+/**
+ * Credential-free dry run (writes + lossiness + required credentials) plus, like the CLI's plan,
+ * exactly what each MCP server will run or contact (`mcpServers`).
+ */
+export async function planInstall(
+  target: TargetId,
+  root: string,
+): Promise<InstallPlan & { mcpServers: string[] }> {
   const { bundle, pure, ctx, read } = await prepare(target, root);
-  return pure.plan(bundle, read, ctx);
+  return { ...pure.plan(bundle, read, ctx), mcpServers: describeMcpServers(bundle) };
 }
 
 /**

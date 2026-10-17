@@ -32,7 +32,7 @@ export default tseslint.config(
       'packages/builder/src/{hubs,memory}/**/*.ts',
       'packages/builder/src/{hubs-entry,memory-entry}.ts',
       'packages/adapter-sdk/src/{pure,pure-paths,credentials,io,types}.ts',
-      'packages/builder/src/{brain,brain-entry,derive,scrub,detect-markers}.ts',
+      'packages/builder/src/{brain,brain-entry,derive,scrub,detect-markers,describe-mcp}.ts',
       'packages/builder/src/catalog/**/*.ts',
       'packages/adapter-hermes/src/{pure,translate,capture,config,env,mcp,memory,channels}.ts',
       'packages/adapter-claude-code/src/{pure,translate,capture,mcp,agents-md}.ts',

@@ -12,3 +12,4 @@ export * from './featured.js';
 export * from './detect.js';
 export * from './scrub.js';
 export * from './detect-markers.js';
+export * from './describe-mcp.js';

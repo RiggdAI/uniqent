@@ -81,6 +81,8 @@ export interface CatalogView {
 export interface InstallPlan {
   writes: Array<{ path: string; summary: string }>;
   mcpRegistrations: string[];
+  /** describeMcpServers: the command each MCP server runs or the URL it contacts (refs, no values). */
+  mcpServers: string[];
   channelRegistrations: string[];
   lossiness: Array<{ component: string; issue: string; action: string }>;
   requiresCredentials: string[];

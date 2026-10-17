@@ -134,8 +134,17 @@ export function InstallPanel() {
               </li>
             ))}
           </ul>
-          {plan.mcpRegistrations.length > 0 && (
-            <div>MCP servers registered: {plan.mcpRegistrations.join(', ')}</div>
+          {plan.mcpServers.length > 0 && (
+            <div>
+              <div>MCP servers (these commands/URLs will be registered with the agent):</div>
+              <ul data-testid="install-plan-mcp" className="space-y-1">
+                {plan.mcpServers.map((line, i) => (
+                  <li key={i}>
+                    <code className="break-all">{line}</code>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
           {plan.channelRegistrations.length > 0 && (
             <div>Channels registered: {plan.channelRegistrations.join(', ')}</div>

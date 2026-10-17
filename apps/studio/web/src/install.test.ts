@@ -153,6 +153,17 @@ describe('Studio install (pure adapters over the Rust I/O commands)', () => {
     expect(new TextDecoder().decode(fromBase64(env!.bytesBase64))).toContain('GITHUB_PAT=v1');
   });
 
+  it('plans show what each MCP server runs or contacts, naming credential refs only', async () => {
+    const b = brain();
+    b.addMcpFromCatalog('filesystem');
+    bundleFiles = filesOf(b);
+    const plan = await planInstall('claude-code', '/p');
+    expect(plan.mcpServers).toEqual([
+      'github  streamable-http https://api.githubcopilot.com/mcp/  auth=bearer:github_pat',
+      'filesystem  runs: npx -y @modelcontextprotocol/server-filesystem "${HOME}"',
+    ]);
+  });
+
   it('previews a replaced .env value before writing anything', async () => {
     disk.set('/home/u/.hermes/.env', enc('GITHUB_PAT=old\n'));
     const t = await previewInstall('hermes', '/home/u/.hermes', {
