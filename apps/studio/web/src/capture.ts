@@ -6,19 +6,16 @@
  */
 import { scanForSecrets, validateBundle } from '@uniqent/core/pure';
 import { gatherInputs } from '@uniqent/adapter-sdk/pure';
-import { scrubPrivateMemory, type ScrubReport, type TargetId } from '@uniqent/builder/brain';
+import {
+  hasNoComponents,
+  scrubPrivateMemory,
+  type ScrubReport,
+  type TargetId,
+} from '@uniqent/builder/brain';
 import { toBase64 } from './bytes';
 import { PURE_ADAPTERS, readViaRust, targetContext } from './install';
 import { call } from './native';
-import type { LoadedBundle, Manifest, StudioState } from './types';
-
-/** No persona, profile, memory facts, skills, MCP servers, tools, channels or tasks. */
-function hasNoComponents(c: Manifest['components']): boolean {
-  const counts = [c.skills, c.mcp, c.tools, c.channels, c.tasks].map((list) => list.length);
-  return (
-    !c.identity && !c.memory.hasProfile && c.memory.facts === 0 && counts.every((n) => n === 0)
-  );
-}
+import type { LoadedBundle, StudioState } from './types';
 
 export interface CaptureResult {
   state: StudioState;

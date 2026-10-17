@@ -27,6 +27,18 @@ export function deriveComponents(input: ComponentsInput): Components {
   };
 }
 
+/** No persona, profile, memory, skills, MCP servers, tools, channels or tasks. */
+export function hasNoComponents(c: Components): boolean {
+  const counts = [c.skills, c.mcp, c.tools, c.channels, c.tasks].map((list) => list.length);
+  return (
+    !c.identity &&
+    !c.memory.hasProfile &&
+    c.memory.facts === 0 &&
+    c.memory.episodic === 0 &&
+    counts.every((n) => n === 0)
+  );
+}
+
 /**
  * Derive the permission scope from the brain's content: network endpoints from MCP http URLs,
  * process spawning from stdio servers, autonomy from the runtime config. `declared` holds what

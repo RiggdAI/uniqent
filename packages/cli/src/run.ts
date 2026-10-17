@@ -32,6 +32,7 @@ import {
   featuredBrains,
   detectTarget,
   AmbiguousTargetError,
+  hasNoComponents,
 } from '@uniqent/builder';
 import type { VaultFile, MemoryPackUpload, TargetGuess } from '@uniqent/builder';
 import { saveToken, clearToken, resolveToken } from './credentials.js';
@@ -786,18 +787,7 @@ async function exportCmd(args: string[], io: CliIo): Promise<number> {
   }
 
   const m = bundle.manifest();
-  const c = m.components;
-  if (
-    !c.identity &&
-    c.skills.length === 0 &&
-    c.mcp.length === 0 &&
-    c.memory.facts === 0 &&
-    c.memory.episodic === 0 &&
-    !c.memory.hasProfile &&
-    c.tools.length === 0 &&
-    c.channels.length === 0 &&
-    c.tasks.length === 0
-  ) {
+  if (hasNoComponents(m.components)) {
     io.error(
       `export: found nothing to capture from ${adapter.displayName} at ${root} (no persona, skills, MCP servers, memory, profile, tools, channels or tasks); check --root and --from`,
     );
