@@ -21,6 +21,7 @@ jobs:
       COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
       BUNDLE: apps/studio/src-tauri/target/universal-apple-darwin/release/bundle
       MAX_DMG_KB: '15360'
+      MAX_APP_KB: '30720'
     steps:
       - uses: actions/checkout@v4
 
@@ -86,11 +87,18 @@ jobs:
           dmg="$(ls "$BUNDLE"/dmg/*.dmg)"
           app_kb="$(du -sk "$app" | cut -f1)"
           dmg_kb="$(du -sk "$dmg" | cut -f1)"
-          echo "Uniqent Studio.app: ${app_kb} KB, $(basename "$dmg"): ${dmg_kb} KB (budget ${MAX_DMG_KB} KB)"
+          echo "Uniqent Studio.app: ${app_kb} KB (budget ${MAX_APP_KB} KB)"
+          echo "$(basename "$dmg"): ${dmg_kb} KB (budget ${MAX_DMG_KB} KB)"
+          over=0
+          if [ "$app_kb" -gt "$MAX_APP_KB" ]; then
+            echo "::error::Uniqent Studio.app is ${app_kb} KB, over the ${MAX_APP_KB} KB budget"
+            over=1
+          fi
           if [ "$dmg_kb" -gt "$MAX_DMG_KB" ]; then
             echo "::error::DMG is ${dmg_kb} KB, over the ${MAX_DMG_KB} KB budget"
-            exit 1
+            over=1
           fi
+          exit "$over"
 
       - name: Publish the GitHub Release
         env:

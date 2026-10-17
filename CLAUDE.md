@@ -131,9 +131,13 @@ default).
   port. Gotchas: Finder-launched apps do not inherit shell env vars, so `$HERMES_HOME` /
   `$OPENCLAW_STATE_DIR` set in a shell rc are not seen (Studio falls back to `~/.hermes` / `~/.openclaw`
   and "Choose folder…"); an OpenClaw workspace outside every allowed folder requires "Choose folder…"
-  (never auto-allowed); a framework home that is relative, `/`, `$HOME` or an ancestor of `$HOME` is
-  shown as unusable with its error. Release: `.github/workflows/studio-release.yml` on `studio-v*` tags
-  builds a universal DMG (`native:build:universal`; measured 13.5 MB, gate 15 MB), unsigned unless
+  (never auto-allowed); a relative OpenClaw `agents.defaults.workspace` resolves against the home
+  folder in Studio but against the current directory in the CLI; a framework home that is relative,
+  `/`, `$HOME` or an ancestor of `$HOME` is shown as unusable with its error, and a picked/dropped
+  folder like that authorises no install/capture root. Known limitation: during install the webview
+  reads the target's existing credential files (`.env`, `.mcp.json`) to merge them (translate runs
+  in the webview by design); the strict CSP limits exposure to a compromised bundled dependency. Release: `.github/workflows/studio-release.yml` on `studio-v*` tags
+  builds a universal DMG (`native:build:universal`; measured 13.5 MB; gates: DMG 15 MB, universal .app 30 MB), unsigned unless
   signing/notarization/updater secrets exist.
 - **Install** — `@uniqent/adapter-sdk` (Adapter interface + conformance harness) +
   `@uniqent/adapter-claude-code` (skills→`.claude/skills`, persona+memory→a managed

@@ -10,7 +10,8 @@ Prereqs: Rust (`rustup`), Xcode CLT.
 - `pnpm --filter @uniqent/studio native:build` — Studio.app + DMG (src-tauri/target/release/bundle)
 - `pnpm --filter @uniqent/studio native:build:universal` — universal (arm64 + x86_64) macOS build
 - `pnpm --filter @uniqent/studio fixtures` — regenerate `catalog*.json` from the builder catalogs
-  (Rust embeds them); `state-*.json` are frozen Rust goldens
+  (Rust embeds them); `fixtures/state-*.json` are hand-maintained frozen Rust goldens (no
+  generator: edit them by hand, and review the diff, only when session state intentionally changes)
 
 Native scope (Phase 4): Studio is native-only (strict CSP, minimal capabilities, no server or localhost
 port) and covers content building, hubs, vault, publish, install-to-agent (Claude Code, Hermes,
