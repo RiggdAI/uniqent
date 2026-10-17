@@ -70,8 +70,9 @@ fn bad_optional(obj: &Value, fields: &[FieldCheck]) -> Option<String> {
         .map(|(key, _)| format!("{key} has the wrong type ({})", json_type(&obj[*key])))
 }
 
-/// Why `s` is not a spec McpServer, or `None`. Shared by loading and `add_custom_mcp`.
-pub(super) fn mcp_server_problem(s: &Value) -> Option<String> {
+/// Why `s` is not a spec McpServer, or `None`. Shared by loading, `add_custom_mcp` and the MCP
+/// config normalizer.
+pub(crate) fn mcp_server_problem(s: &Value) -> Option<String> {
     if !is_non_empty_string(&s["id"]) {
         return Some(format!(
             "id must be a non-empty string, got {}",

@@ -142,6 +142,20 @@ function buildNormalizeCases(): PortCase[] {
   // 17. A server with neither command nor url is reported, not invented
   tc('no-command-no-url', { mcpServers: { ghost: { args: ['x'] } } });
 
+  // 18. Empty strings fail the schema like missing fields do (canonical command/url, headerName)
+  tc('canonical-empty-command', {
+    id: 'x',
+    transport: 'stdio',
+    command: '',
+    auth: { type: 'none' },
+  });
+  tc('canonical-empty-url', { id: 'x', transport: 'sse', url: '', auth: { type: 'none' } });
+  tc('remote-empty-secret-header-name', {
+    mcpServers: {
+      svc: { url: 'https://api.x.com/mcp', headers: { '': 'sk-abcdefghijklmnopqrstuvwxyz0123' } },
+    },
+  });
+
   return cases;
 }
 

@@ -10,6 +10,7 @@ use crate::core::secret_scan::is_likely_secret_value;
 use crate::core::signing::{generate_keypair, sign, verify, Keypair};
 
 mod load;
+pub(crate) use load::mcp_server_problem;
 
 /// Validate `name` against the Slug pattern: `^[a-z0-9][a-z0-9-]*$`
 fn is_valid_slug(s: &str) -> bool {
