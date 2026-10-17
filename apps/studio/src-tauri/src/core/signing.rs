@@ -17,12 +17,14 @@ pub struct VerifyResult {
     pub public_key: Option<String>,
 }
 
-pub fn generate_keypair() -> Keypair {
-    let sk = SigningKey::generate(&mut rand::rngs::OsRng);
-    Keypair {
+pub fn generate_keypair() -> Result<Keypair, String> {
+    let mut seed = [0u8; 32];
+    getrandom::fill(&mut seed).map_err(|e| format!("OS random source unavailable: {e}"))?;
+    let sk = SigningKey::from_bytes(&seed);
+    Ok(Keypair {
         private_key: hex::encode(sk.to_bytes()),
         public_key: hex::encode(sk.verifying_key().to_bytes()),
-    }
+    })
 }
 
 fn signing_key(private_key_hex: &str) -> Result<SigningKey, String> {

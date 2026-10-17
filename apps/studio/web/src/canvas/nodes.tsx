@@ -12,7 +12,7 @@ import {
 import type { ComponentType } from 'react';
 import { cn } from '../lib/utils';
 
-const handleClass = '!h-2 !w-2 !rounded-full !border !border-border !bg-muted-foreground/40';
+const handleClass = 'h-2! w-2! rounded-full! border! border-border! bg-muted-foreground/40!';
 
 export function AgentNode({ data, selected }: NodeProps) {
   const d = data as { displayName: string; valid: boolean };
@@ -57,7 +57,7 @@ export function ComponentNode({ data, selected }: NodeProps) {
   return (
     <div
       className={cn(
-        'w-48 rounded-lg border bg-card px-4 py-3 shadow-sm transition-colors',
+        'w-48 rounded-lg border bg-card px-4 py-3 shadow-xs transition-colors',
         selected ? 'border-primary ring-1 ring-primary' : 'border-border hover:border-primary/50',
       )}
     >
@@ -77,7 +77,7 @@ export function CredentialNode({ data, selected }: NodeProps) {
   return (
     <div
       className={cn(
-        'w-48 rounded-lg border border-dashed bg-card px-4 py-3 shadow-sm transition-colors',
+        'w-48 rounded-lg border border-dashed bg-card px-4 py-3 shadow-xs transition-colors',
         selected ? 'border-primary' : 'border-border',
       )}
     >

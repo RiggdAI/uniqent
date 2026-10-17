@@ -32,8 +32,8 @@
     "@uniqent/core": "workspace:^"
   },
   "devDependencies": {
-    "tsx": "^4.19.2",
-    "vitest": "^3.0.0"
+    "tsx": "^4.23.15",
+    "vitest": "^5.0.2"
   },
   "publishConfig": {
     "access": "public"

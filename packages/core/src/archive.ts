@@ -1,10 +1,17 @@
 import { gzipSync, gunzipSync } from 'node:zlib';
 import { mkdir, readFile, readdir, writeFile, lstat } from 'node:fs/promises';
 import { dirname, join, relative, sep } from 'node:path';
-import { pack as tarPack, extract as tarExtract, type Headers } from 'tar-stream';
+import { pack as tarPack, extract as tarExtract, type Header } from 'tar-stream';
 import { Bundle, PATHS, assertBundlePath } from './bundle.js';
 import { assertValid } from './validate.js';
 import { scanForSecrets } from './secret-scan.js';
+
+/** tar-stream types stream chunks as unknown; they are Buffers at runtime — assert, don't cast. */
+function asChunk(c: unknown): Buffer {
+  if (!Buffer.isBuffer(c))
+    throw new TypeError(`tar stream emitted a non-Buffer chunk: ${typeof c}`);
+  return c;
+}
 import { SecretScanError, BundleFormatError } from './errors.js';
 
 export interface PackOptions {
@@ -19,7 +26,7 @@ export async function pack(bundle: Bundle, opts: PackOptions = {}): Promise<Uint
 
   const tar = tarPack();
   const chunks: Buffer[] = [];
-  tar.on('data', (c: Buffer) => chunks.push(c));
+  tar.on('data', (c) => chunks.push(asChunk(c)));
   const done = new Promise<void>((resolve, reject) => {
     tar.on('end', resolve);
     tar.on('error', reject);
@@ -74,7 +81,7 @@ function gunzipBounded(input: Uint8Array): Buffer {
 
 /** Throw BundleFormatError unless the entry is a new regular file (or a directory) at a safe path. */
 function assertArchiveEntry(
-  header: Headers,
+  header: Header,
   entryNumber: number,
   seen: ReadonlyMap<string, Uint8Array>,
 ): void {
@@ -125,7 +132,7 @@ export async function unpack(input: Uint8Array): Promise<Bundle> {
         return;
       }
       const parts: Buffer[] = [];
-      stream.on('data', (c: Buffer) => parts.push(c));
+      stream.on('data', (c) => parts.push(asChunk(c)));
       stream.on('end', () => {
         files.set(header.name, new Uint8Array(Buffer.concat(parts)));
         next();

@@ -51,7 +51,9 @@ export async function fetchIndex(
   try {
     json = JSON.parse(new TextDecoder().decode(bytes));
   } catch (e) {
-    throw new Error(`registry at ${location} is not valid JSON: ${(e as Error).message}`);
+    throw new Error(`registry at ${location} is not valid JSON: ${(e as Error).message}`, {
+      cause: e,
+    });
   }
   const bundles = (json as { bundles?: unknown }).bundles;
   if (!Array.isArray(bundles)) throw new Error(`registry at ${location} has no "bundles" array`);

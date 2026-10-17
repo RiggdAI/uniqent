@@ -17,3 +17,6 @@ dist-web/
 
 # stray screenshots at repo root (committed ones live in docs/img/)
 /*.png
+
+# superpowers plan-execution workspaces (ledgers, briefs)
+.superpowers/

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { IsoUtcDateTime } from './common.js';
 
 export const MemoryKind = z.enum(['fact', 'decision', 'preference', 'milestone', 'episodic']);
 export type MemoryKind = z.infer<typeof MemoryKind>;
@@ -10,7 +11,7 @@ export const MemoryItem = z.object({
   text: z.string(),
   /** Provenance: where this came from. */
   source: z.string().optional(),
-  createdAt: z.string().datetime(),
+  createdAt: IsoUtcDateTime,
   /** 0..1; used when a target must prioritize/truncate under memory limits. */
   importance: z.number().min(0).max(1).optional(),
   /** Privacy tier; export scrubs "personal" (and episodic) by default. */

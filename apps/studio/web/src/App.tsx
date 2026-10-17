@@ -108,7 +108,7 @@ export function App() {
             variant={BackgroundVariant.Dots}
             gap={20}
             size={1}
-            className="!bg-background"
+            className="bg-background!"
           />
         </ReactFlow>
       </div>
@@ -129,7 +129,7 @@ export function App() {
             U
           </span>
           <span className="hidden sm:inline">Uniqent</span>
-          <span className="bg-gradient-to-r from-primary to-fuchsia-400 bg-clip-text text-transparent">
+          <span className="bg-linear-to-r from-primary to-fuchsia-400 bg-clip-text text-transparent">
             Studio
           </span>
         </div>
@@ -170,7 +170,7 @@ export function App() {
       {/* Floating palette */}
       <div
         className={cn(
-          'absolute bottom-14 left-3 top-[4.25rem] z-10 overflow-hidden rounded-xl border bg-card/80 shadow-lg backdrop-blur transition-[width] duration-200',
+          'absolute bottom-14 left-3 top-17 z-10 overflow-hidden rounded-xl border bg-card/80 shadow-lg backdrop-blur-sm transition-[width] duration-200',
           paletteCollapsed ? 'w-14' : 'w-56',
         )}
       >
@@ -187,7 +187,7 @@ export function App() {
 
       {/* Floating inspector */}
       {selection && (
-        <div className="absolute bottom-14 left-3 right-3 top-[4.25rem] z-10 overflow-hidden rounded-xl border bg-card/80 shadow-lg backdrop-blur sm:left-auto sm:w-80">
+        <div className="absolute bottom-14 left-3 right-3 top-17 z-10 overflow-hidden rounded-xl border bg-card/80 shadow-lg backdrop-blur-sm sm:left-auto sm:w-80">
           <Inspector
             selection={selection}
             state={state}
@@ -229,7 +229,7 @@ export function App() {
       {issuesOpen && !v.ok && (
         <div
           data-testid="issues-panel"
-          className="absolute bottom-14 left-3 z-30 max-h-72 w-[min(32rem,calc(100vw-1.5rem))] overflow-auto rounded-xl border bg-card/95 p-3 text-xs shadow-lg backdrop-blur"
+          className="absolute bottom-14 left-3 z-30 max-h-72 w-[min(32rem,calc(100vw-1.5rem))] overflow-auto rounded-xl border bg-card/95 p-3 text-xs shadow-lg backdrop-blur-sm"
         >
           <p className="mb-2 font-medium text-destructive">
             The bundle is invalid — fix these before export or install:
@@ -243,7 +243,7 @@ export function App() {
                   </span>
                   {e.path && <span className="font-mono text-muted-foreground">{e.path}</span>}
                 </div>
-                <p className="break-words">{e.message}</p>
+                <p className="wrap-break-word">{e.message}</p>
               </li>
             ))}
           </ul>

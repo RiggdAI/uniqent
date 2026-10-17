@@ -124,7 +124,8 @@ export class Bundle {
   }
 
   manifest(): TManifest {
-    const r = Manifest.safeParse(this.parseJson(PATHS.manifest));
+    // reportInput puts the offending value on each issue (e.g. an unsupported specVersion).
+    const r = Manifest.safeParse(this.parseJson(PATHS.manifest), { reportInput: true });
     if (!r.success)
       throw new BundleFormatError(`${PATHS.manifest} failed schema: ${r.error.message}`);
     return r.data;

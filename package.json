@@ -5,7 +5,7 @@
   "description": "Open standard + toolchain for portable AI agents.",
   "license": "Apache-2.0",
   "type": "module",
-  "packageManager": "pnpm@11.4.0",
+  "packageManager": "pnpm@12.6.0",
   "engines": {
     "node": ">=22.13"
   },
@@ -19,12 +19,12 @@
     "release": "pnpm build && pnpm -r --filter \"./packages/*\" publish --no-git-checks"
   },
   "devDependencies": {
-    "@eslint/js": "^9.17.0",
-    "@types/node": "^22.10.2",
-    "eslint": "^9.17.0",
-    "prettier": "^3.4.2",
-    "typescript": "^5.7.2",
-    "typescript-eslint": "^8.18.1",
-    "vitest": "^3.0.0"
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.19.19",
+    "eslint": "^10.11.0",
+    "prettier": "^3.9.9",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.70.1",
+    "vitest": "^5.0.2"
   }
 }

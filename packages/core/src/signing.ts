@@ -40,7 +40,7 @@ export function publicKeyFingerprint(publicKeyHex: string): string {
 }
 
 export async function generateKeypair(): Promise<Keypair> {
-  const priv = ed.utils.randomPrivateKey();
+  const priv = ed.utils.randomSecretKey();
   const pub = await ed.getPublicKeyAsync(priv);
   return { privateKey: toHex(priv), publicKey: toHex(pub) };
 }

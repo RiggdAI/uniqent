@@ -67,11 +67,13 @@
               "properties": {
                 "facts": {
                   "type": "integer",
-                  "minimum": 0
+                  "minimum": 0,
+                  "maximum": 9007199254740991
                 },
                 "episodic": {
                   "type": "integer",
-                  "minimum": 0
+                  "minimum": 0,
+                  "maximum": 9007199254740991
                 },
                 "hasProfile": {
                   "type": "boolean"
@@ -129,11 +131,130 @@
         "credentials": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/CredentialRequirement"
+            "type": "object",
+            "properties": {
+              "ref": {
+                "type": "string",
+                "minLength": 1
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "apiKey",
+                  "bearer",
+                  "header",
+                  "oauth2",
+                  "envVar"
+                ]
+              },
+              "consumedBy": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "required": {
+                "type": "boolean"
+              },
+              "help": {
+                "type": "string"
+              },
+              "oauth": {
+                "type": "object",
+                "properties": {
+                  "authorizationUrl": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "scopes": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "note": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "ref",
+              "label",
+              "type",
+              "consumedBy",
+              "required"
+            ],
+            "additionalProperties": false
           }
         },
         "permissions": {
-          "$ref": "#/definitions/PermissionScope"
+          "type": "object",
+          "properties": {
+            "filesystem": {
+              "type": "object",
+              "properties": {
+                "read": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "write": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "read",
+                "write"
+              ],
+              "additionalProperties": false
+            },
+            "network": {
+              "type": "object",
+              "properties": {
+                "endpoints": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "endpoints"
+              ],
+              "additionalProperties": false
+            },
+            "autonomy": {
+              "type": "string",
+              "enum": [
+                "manual",
+                "suggest",
+                "auto"
+              ]
+            },
+            "spawnsProcesses": {
+              "type": "boolean"
+            },
+            "notes": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "filesystem",
+            "network",
+            "autonomy",
+            "spawnsProcesses"
+          ],
+          "additionalProperties": false
         },
         "compatibility": {
           "type": "object",
@@ -337,6 +458,9 @@
               },
               "env": {
                 "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
                 "additionalProperties": {
                   "type": "string"
                 }
@@ -432,7 +556,7 @@
         },
         "createdAt": {
           "type": "string",
-          "format": "date-time"
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|02-(?:0[1-9]|1\\d|2[0-8])))T(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?Z$"
         },
         "importance": {
           "type": "number",
@@ -440,12 +564,12 @@
           "maximum": 1
         },
         "visibility": {
+          "default": "shareable",
           "type": "string",
           "enum": [
             "shareable",
             "personal"
-          ],
-          "default": "shareable"
+          ]
         },
         "tags": {
           "type": "array",
@@ -464,6 +588,9 @@
     },
     "MemoryProfile": {
       "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
       "additionalProperties": {}
     },
     "ChannelsFile": {
@@ -495,6 +622,9 @@
               },
               "config": {
                 "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
                 "additionalProperties": {}
               },
               "description": {
@@ -531,6 +661,9 @@
               },
               "config": {
                 "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
                 "additionalProperties": {}
               },
               "description": {
@@ -562,7 +695,7 @@
           "minLength": 1
         },
         "trigger": {
-          "anyOf": [
+          "oneOf": [
             {
               "type": "object",
               "properties": {
@@ -626,6 +759,9 @@
             },
             "params": {
               "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
               "additionalProperties": {}
             }
           },
@@ -666,7 +802,12 @@
           "additionalProperties": false
         },
         "autonomy": {
-          "$ref": "#/definitions/PermissionScope/properties/autonomy"
+          "type": "string",
+          "enum": [
+            "manual",
+            "suggest",
+            "auto"
+          ]
         },
         "toolAllowlist": {
           "type": "array",
@@ -676,6 +817,9 @@
         },
         "defaults": {
           "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
           "additionalProperties": {}
         }
       },
@@ -706,7 +850,7 @@
         },
         "signedAt": {
           "type": "string",
-          "format": "date-time"
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|02-(?:0[1-9]|1\\d|2[0-8])))T(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?Z$"
         }
       },
       "required": [

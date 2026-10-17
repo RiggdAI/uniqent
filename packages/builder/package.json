@@ -26,10 +26,10 @@
   "dependencies": {
     "@uniqent/core": "workspace:^",
     "@uniqent/spec": "workspace:^",
-    "zod": "^3.23.8"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
-    "vitest": "^3.0.0"
+    "vitest": "^5.0.2"
   },
   "publishConfig": {
     "access": "public"

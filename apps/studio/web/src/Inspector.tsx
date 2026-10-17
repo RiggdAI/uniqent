@@ -697,7 +697,7 @@ function TaskEditor({ apply }: { apply: (p: Promise<StudioState>) => void }) {
         <Label>Trigger</Label>
         <select
           data-testid="task-trigger"
-          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
           value={triggerType}
           onChange={(e) => setTriggerType(e.target.value as 'schedule' | 'event' | 'manual')}
         >
@@ -754,7 +754,7 @@ function TaskEditor({ apply }: { apply: (p: Promise<StudioState>) => void }) {
 }
 
 const selectClass =
-  'flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+  'flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring';
 
 function CustomSkillEditor({ apply }: { apply: (p: Promise<StudioState>) => void }) {
   const [name, setName] = useState('');

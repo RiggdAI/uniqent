@@ -1,6 +1,6 @@
 {
   "name": "@uniqent/spec",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "The canonical .uniqent bundle schema (source of truth).",
   "license": "Apache-2.0",
   "type": "module",
@@ -27,12 +27,11 @@
     "gen": "tsx scripts/gen.ts"
   },
   "dependencies": {
-    "zod": "^3.23.8",
-    "zod-to-json-schema": "^3.23.5"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
-    "tsx": "^4.19.2",
-    "vitest": "^3.0.0"
+    "tsx": "^4.23.15",
+    "vitest": "^5.0.2"
   },
   "publishConfig": {
     "access": "public"

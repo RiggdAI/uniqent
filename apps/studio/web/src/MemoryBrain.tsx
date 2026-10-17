@@ -180,7 +180,7 @@ export function MemoryBrain({ open, onClose }: { open: boolean; onClose: () => v
   const empty = !loading && graph !== null && graph.nodes.length === 0;
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-background/70 p-6 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 grid place-items-center bg-background/70 p-6 backdrop-blur-xs">
       <div className="flex h-full max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border bg-card shadow-2xl">
         <div className="flex h-12 shrink-0 items-center gap-3 border-b px-4">
           <div className="flex shrink-0 items-center gap-2 text-sm font-semibold">
@@ -294,7 +294,7 @@ export function MemoryBrain({ open, onClose }: { open: boolean; onClose: () => v
                 </Suspense>
               )}
               {filtering && (
-                <div className="absolute left-3 top-3 flex items-center gap-2 rounded-md border bg-card/90 px-2 py-1 text-xs shadow backdrop-blur">
+                <div className="absolute left-3 top-3 flex items-center gap-2 rounded-md border bg-card/90 px-2 py-1 text-xs shadow-sm backdrop-blur-sm">
                   <span className="text-muted-foreground" data-testid="brain-filter-count">
                     showing {activeIds.size} of {graph.nodes.length}
                   </span>

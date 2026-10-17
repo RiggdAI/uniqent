@@ -37,8 +37,10 @@ interface ZodIssueLike {
   path: Array<string | number>;
   message: string;
   code: string;
-  expected?: unknown;
-  received?: unknown;
+  /** Zod 4 `invalid_value`: the allowed values. */
+  values?: unknown[];
+  /** The offending value (core parses the manifest with `reportInput`). */
+  input?: unknown;
 }
 
 function isZodIssueList(v: unknown): v is ZodIssueLike[] {
@@ -70,8 +72,8 @@ export function readableMessage(message: string): string[] {
   if (!isZodIssueList(parsed)) return [safe(message)];
   return parsed.map((i) => {
     const where = i.path.length > 0 ? i.path.join('.') : '(root)';
-    if (where === 'specVersion' && i.code === 'invalid_literal')
-      return `unsupported spec version ${safe(JSON.stringify(i.received))} (this uniqent reads ${safe(JSON.stringify(i.expected))}); upgrade uniqent`;
+    if (where === 'specVersion' && i.code === 'invalid_value' && i.values)
+      return `unsupported spec version ${safe(JSON.stringify(i.input))} (this uniqent reads ${safe(i.values.map((v) => JSON.stringify(v)).join(' or '))}); upgrade uniqent`;
     return `${safe(m[1] as string)}: ${safe(where)}: ${safe(i.message)}`;
   });
 }

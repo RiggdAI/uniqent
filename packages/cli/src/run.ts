@@ -127,7 +127,7 @@ async function unpackFrom(bytes: Uint8Array, source: string): Promise<Bundle> {
   } catch (e) {
     const code = (e as NodeJS.ErrnoException).code;
     if (typeof code === 'string' && code.startsWith('Z_'))
-      throw new Error(`not a .uniqent (gzip) file: ${source}`);
+      throw new Error(`not a .uniqent (gzip) file: ${source}`, { cause: e });
     throw e;
   }
 }
@@ -640,7 +640,7 @@ async function loadPrivateKey(path: string): Promise<string> {
   try {
     raw = await readFile(path, 'utf8');
   } catch (e) {
-    throw new Error(`cannot read key file ${path}: ${(e as Error).message}`);
+    throw new Error(`cannot read key file ${path}: ${(e as Error).message}`, { cause: e });
   }
   let kp: unknown;
   try {
