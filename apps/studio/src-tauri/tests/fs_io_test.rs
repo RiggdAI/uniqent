@@ -86,7 +86,7 @@ fn secret_files_end_up_owner_only_and_others_keep_their_mode() {
 
 #[cfg(unix)]
 #[test]
-fn a_kept_mode_drops_setuid_setgid_and_sticky_bits() {
+fn a_kept_mode_drops_setuid_and_sticky_bits() {
     let d = tempfile::tempdir().unwrap();
     let path = d.path().join("run.sh");
     fs::write(&path, "old").unwrap();

@@ -315,10 +315,10 @@ fn write_one(root: &Path, comps: &[String], bytes: &[u8], mode: Option<u32>) -> 
     result
 }
 
-/// The process umask, read once. Reading it means setting it: the swap briefly sets 0o777, so a
-/// file another thread creates in that instant only ever comes out stricter, never looser.
+/// The process umask, read once. Reading it means setting it (the swap briefly sets 0o777), so
+/// `main` calls this before any other thread starts; later calls only return the cached value.
 #[cfg(unix)]
-fn process_umask() -> u32 {
+pub fn process_umask() -> u32 {
     static UMASK: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
     *UMASK.get_or_init(|| {
         // SAFETY: umask only swaps the process file-mode creation mask and cannot fail.

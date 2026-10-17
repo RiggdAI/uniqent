@@ -6,6 +6,9 @@ use uniqent_studio::commands::{self, AppState};
 use uniqent_studio::session::Session;
 
 fn main() {
+    // Read the umask while the process is still single-threaded (reading it briefly changes it).
+    #[cfg(unix)]
+    uniqent_studio::fs_io::process_umask();
     tauri::Builder::default()
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_dialog::init())
