@@ -1,0 +1,103 @@
+name: Studio release
+
+# Build the native Studio as a universal macOS DMG and attach it to a GitHub Release.
+# Tag with:  git tag studio-v0.1.0 && git push origin studio-v0.1.0  (must match tauri.conf.json "version")
+# Signing, notarization and updater artifacts run only when their secrets exist.
+on:
+  push:
+    tags: ['studio-v*']
+
+concurrency:
+  group: studio-release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+      BUNDLE: apps/studio/src-tauri/target/universal-apple-darwin/release/bundle
+      MAX_DMG_KB: '15360'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable pnpm (corepack)
+        run: |
+          npm install -g corepack@latest
+          corepack enable
+          corepack prepare --activate
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/studio/src-tauri
+
+      - name: Tag matches the app version
+        run: |
+          want="studio-v$(node -p "require('./apps/studio/src-tauri/tauri.conf.json').version")"
+          if [ "$GITHUB_REF_NAME" != "$want" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match tauri.conf.json version ($want)"
+            exit 1
+          fi
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+      - name: Build universal app + DMG
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          # Unset secrets arrive as empty strings; Tauri must not see them at all.
+          if [ -z "$APPLE_CERTIFICATE" ]; then
+            unset APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
+            echo "::warning::no APPLE_CERTIFICATE secret: building an unsigned DMG (users right-click → Open on first launch)"
+          elif [ -z "$APPLE_ID" ]; then
+            unset APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
+            echo "::warning::signing without notarization (no APPLE_ID secret)"
+          fi
+          args=(--target universal-apple-darwin)
+          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            args+=(--config '{"bundle":{"createUpdaterArtifacts":true}}')
+          else
+            unset TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+          fi
+          pnpm --filter @uniqent/studio exec tauri build "${args[@]}"
+
+      - name: Size gate
+        run: |
+          app="$BUNDLE/macos/Uniqent Studio.app"
+          dmg="$(ls "$BUNDLE"/dmg/*.dmg)"
+          app_kb="$(du -sk "$app" | cut -f1)"
+          dmg_kb="$(du -sk "$dmg" | cut -f1)"
+          echo "Uniqent Studio.app: ${app_kb} KB, $(basename "$dmg"): ${dmg_kb} KB (budget ${MAX_DMG_KB} KB)"
+          if [ "$dmg_kb" -gt "$MAX_DMG_KB" ]; then
+            echo "::error::DMG is ${dmg_kb} KB, over the ${MAX_DMG_KB} KB budget"
+            exit 1
+          fi
+
+      - name: Publish the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          shopt -s nullglob
+          assets=("$BUNDLE"/dmg/*.dmg "$BUNDLE"/macos/*.app.tar.gz "$BUNDLE"/macos/*.app.tar.gz.sig)
+          gh release create "$GITHUB_REF_NAME" "${assets[@]}" \
+            --title "Uniqent Studio ${GITHUB_REF_NAME#studio-v}" \
+            --notes "Universal macOS build (Apple Silicon + Intel). If the app is unsigned, right-click it → Open on first launch."

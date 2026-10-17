@@ -13,6 +13,7 @@
     "dev:web": "vite --config web/vite.config.ts",
     "native:dev": "tauri dev",
     "native:build": "tauri build",
+    "native:build:universal": "tauri build --target universal-apple-darwin",
     "fixtures": "tsx scripts/emit-catalog-fixtures.ts && prettier --write fixtures/catalog.json fixtures/catalog-data.json",
     "fixtures:core": "tsx scripts/emit-core-fixtures.ts && prettier --write fixtures/core",
     "fixtures:install": "tsx scripts/emit-install-fixtures.ts && prettier --write fixtures/install",
