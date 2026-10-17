@@ -5,7 +5,7 @@ const ANSI = /\u001b\[[0-?]*[ -/]*[@-~]|\u001b\][^\u0007\u001b]*(?:\u0007|\u001b
 // C0/C1 control characters (incl. newlines, so a string can't forge extra output lines) and
 // bidi overrides that can visually reorder text.
 // eslint-disable-next-line no-control-regex
-const CONTROL = /[\u0000-\u001f\u007f-\u009f‪-‮⁦-⁩]/g;
+const CONTROL = /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g;
 
 /** Make an untrusted (bundle- or network-derived) string safe to print on one terminal line. */
 export function safe(s: string): string {
