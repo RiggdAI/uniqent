@@ -24,7 +24,8 @@ fn canonical_mutations_match_fixture() {
         "name": "fixture-brain",
         "description": "A fixture brain for cross-impl tests",
         "version": "1.2.3"
-    }));
+    }))
+    .unwrap();
     s.set_targets(vec!["claude-code".into(), "hermes".into()]);
     s.set_persona("# Persona\n\nYou are the fixture.".into());
     s.set_readme("# Readme\n\nFixture readme.".into());
@@ -64,7 +65,8 @@ fn cleared_state_matches_fixture() {
         "name": "fixture-brain",
         "description": "A fixture brain for cross-impl tests",
         "version": "1.2.3"
-    }));
+    }))
+    .unwrap();
     s.set_targets(vec!["claude-code".into(), "hermes".into()]);
     s.set_persona("# Persona\n\nYou are the fixture.".into());
     s.set_readme("# Readme\n\nFixture readme.".into());

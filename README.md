@@ -103,12 +103,12 @@ What makes it defensible — four things `.dotagents`-style sharing lacks:
 
 ### Install into any agent
 
-| Framework               | How the brain lands                                                                                     | Status  |
-| ----------------------- | ------------------------------------------------------------------------------------------------------- | ------- |
-| **Claude Code**         | skills → `.claude/skills`, persona+memory → `AGENTS.md`, MCP → `.mcp.json`                              | ✅ v1   |
-| **Hermes**              | persona → `SOUL.md`, **bounded** memory (prioritized + trimmed, reported), MCP/channels → `hermes.json` | ✅ v1   |
-| **OpenClaw**            | persona → `SOUL.md`, memory → `MEMORY.md`, skills → `skills/`, MCP/channels → `openclaw.json`           | ✅ v1   |
-| Codex · Cursor · Gemini | —                                                                                                       | planned |
+| Framework               | How the brain lands                                                                                                          | Status  |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------- |
+| **Claude Code**         | skills → `.claude/skills`, persona+memory → `AGENTS.md`, MCP → `.mcp.json`                                                   | ✅ v1   |
+| **Hermes**              | into `$HERMES_HOME`: persona → `SOUL.md`, **bounded** memory (prioritized + trimmed, reported), MCP/channels → `config.yaml` | ✅ v1   |
+| **OpenClaw**            | into the state dir: persona + memory + skills → `workspace/`, MCP/channels → `openclaw.json`                                 | ✅ v1   |
+| Codex · Cursor · Gemini | —                                                                                                                            | planned |
 
 ---
 
@@ -124,7 +124,7 @@ npm i -g @uniqent/cli      # or use npx @uniqent/cli <command>
 | `install <file\|url\|slug>`            | Install a brain into `--target <claude-code\|hermes\|openclaw>` (`--root <dir>`, `--cred ref=val`). |
 | `inspect <file>`                       | Show a bundle's manifest, components, and permissions.                                              |
 | `export --root <dir>`                  | Capture a running agent into a `.uniqent` (auto-detects the framework).                             |
-| `import-vault <dir>`                   | Turn an Obsidian / second-brain vault into a signed brain.                                          |
+| `import-vault <dir>`                   | Turn an Obsidian / second-brain vault into a brain (`--sign` / `--key <k>` to sign it).             |
 | `pack <dir>` · `validate <dir\|file>`  | Build / check a brain from a source directory.                                                      |
 | `search <q>` · `hub <mcp\|skills> <q>` | Find brains in a registry index; discover MCP servers + skills across hubs.                         |
 | `keygen` · `sign <file>`               | Generate an Ed25519 keypair; sign a bundle.                                                         |
@@ -136,16 +136,17 @@ A few real flows:
 uniqent install my-brain.uniqent --target claude-code --root .
 
 # Install straight from a raw URL (no registry needed):
-uniqent install https://example.com/dev-powerpack.uniqent --target openclaw --root .
+uniqent install https://example.com/dev-powerpack.uniqent --target openclaw --root ~/.openclaw
 
 # Or by slug from any hosted index.json:
 export UNIQENT_REGISTRY=https://raw.githubusercontent.com/RiggdAI/uniqent/main/registry/index.json
-uniqent search coding && uniqent install dev-powerpack --target hermes --root . --cred github_pat=…
+uniqent search coding && uniqent install dev-powerpack --target hermes --root ~/.hermes --cred github_pat=…
 ```
 
 ## Studio (visual builder)
 
 ```bash
+pnpm install && pnpm build             # from a clone; builds Studio and the packages it uses
 pnpm --filter @uniqent/studio start   # local-first; open the URL it prints
 ```
 

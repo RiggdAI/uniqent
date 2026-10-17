@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -23,8 +23,11 @@ async function read(): Promise<Store> {
 }
 
 async function write(store: Store): Promise<void> {
-  await mkdir(configDir(), { recursive: true });
+  await mkdir(configDir(), { recursive: true, mode: 0o700 });
+  await chmod(configDir(), 0o700);
   await writeFile(credentialsPath(), JSON.stringify(store, null, 2), { mode: 0o600 });
+  // `mode` only applies on create; tighten a pre-existing file too (it holds publish tokens).
+  await chmod(credentialsPath(), 0o600);
 }
 
 export async function loadToken(registry: string): Promise<string | undefined> {

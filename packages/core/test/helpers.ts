@@ -29,7 +29,7 @@ const MANIFEST = {
   ],
   permissions: {
     filesystem: { read: [], write: [] },
-    network: { endpoints: ['api.github.com'] },
+    network: { endpoints: ['api.githubcopilot.com'] },
     autonomy: 'suggest',
     spawnsProcesses: false,
   },

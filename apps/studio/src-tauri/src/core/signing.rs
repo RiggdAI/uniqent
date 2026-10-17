@@ -74,7 +74,7 @@ pub fn sign(bundle: &Bundle, private_key_hex: &str) -> Result<Bundle, String> {
         serde_json::to_string_pretty(&signature)
             .map_err(|e| e.to_string())?
             .into_bytes(),
-    );
+    )?;
     Ok(out)
 }
 

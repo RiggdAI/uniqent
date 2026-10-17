@@ -146,7 +146,7 @@ describe('api shim (native)', () => {
         credentials: [],
       }),
     ).rejects.toThrow(SOON);
-    await expect(api.addHubSkill('url')).rejects.toThrow(SOON);
+    await expect(api.addHubSkill('url', 'name')).rejects.toThrow(SOON);
     await expect(api.hubIndexes()).rejects.toThrow(SOON);
     await expect(api.setHubIndexes(['url'])).rejects.toThrow(SOON);
     expect(invokeMock).not.toHaveBeenCalled();

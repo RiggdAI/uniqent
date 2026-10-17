@@ -1,9 +1,12 @@
 {
   "name": "@uniqent/builder",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Framework-agnostic engine to assemble a brain into a validated .uniqent bundle.",
   "license": "Apache-2.0",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -22,7 +25,8 @@
   },
   "dependencies": {
     "@uniqent/core": "workspace:^",
-    "@uniqent/spec": "workspace:^"
+    "@uniqent/spec": "workspace:^",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "vitest": "^3.0.0"

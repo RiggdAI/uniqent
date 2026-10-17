@@ -118,22 +118,28 @@ default).
   `pnpm --filter @uniqent/studio build && pnpm --filter @uniqent/studio start` (`:4173`,
   `UNIQENT_STUDIO_PORT` to override). Verified in a real browser.
 - **Install** — `@uniqent/adapter-sdk` (Adapter interface + conformance harness) +
-  `@uniqent/adapter-claude-code` (skills→`.claude/skills`, persona+memory→`AGENTS.md`,
-  MCP→merged `.mcp.json` with locally-resolved creds injected; channels/tasks/tools reported as
-  lossiness) + `@uniqent/cli` (`uniqent inspect|install <file> --target claude-code --root <dir>
+  `@uniqent/adapter-claude-code` (skills→`.claude/skills`, persona+memory→a managed
+  `<!-- uniqent:begin/end -->` section of `AGENTS.md` (+ an `@AGENTS.md` import when a `CLAUDE.md`
+  exists, since Claude ignores AGENTS.md then), MCP→merged `.mcp.json` (0600 when it inlines
+  creds); channels/tasks/tools/episodic reported as lossiness) + `@uniqent/cli` (`uniqent inspect|install <file> --target claude-code --root <dir>
 --cred ref=val [--allow-unsigned] [--yes]`). Verified: a signed `.uniqent` installs into a
   sandbox `.claude/` end to end.
-- **Hermes** — `@uniqent/adapter-hermes`: persona→`SOUL.md`, **bounded memory** (`MEMORY.md`
-  ~2200 / `USER.md` ~1375 chars, prioritized by `importance`, truncation reported in lossiness),
-  skills→`skills/`, MCP+channels+tasks→`hermes.json` with credentials kept in `.env` (config holds
-  only `${ENV}` refs). `uniqent install --target hermes` works. **Cross-framework proven:** the
+- **Hermes** — `@uniqent/adapter-hermes` (`--root` = `$HERMES_HOME`, default `~/.hermes`; layout
+  verified against the hermes-agent source): persona→`SOUL.md`, **bounded memory**
+  (`memories/MEMORY.md` ~2200 / `memories/USER.md` ~1375 chars, `\n§\n`-delimited entries, merged
+  with existing ones, prioritized by `importance`, truncation reported in lossiness),
+  skills→`skills/`, MCP→merged into `config.yaml` `mcp_servers` (only `${ENV}` refs), secrets
+  merged into `.env` (0600, never rewritten); tasks → lossiness with a `hermes cron create` hint. `uniqent install --target hermes` works. **Cross-framework proven:** the
   same `.uniqent` installs into both Claude Code and Hermes (a test asserts both, with Claude Code
   _transforming_ memory and Hermes _truncating_ it).
-- **OpenClaw** — `@uniqent/adapter-openclaw`: persona→`SOUL.md`, memory+profile→`MEMORY.md`,
-  skills→`skills/`, MCP+channels+tasks→`openclaw.json` (creds inlined). All **three v1 adapters**
+- **OpenClaw** — `@uniqent/adapter-openclaw` (`--root` = state dir, default `~/.openclaw`):
+  `openclaw.json` (JSON5, strict schema — unknown keys stop the gateway) is merged with only
+  `mcp.servers.<id>` + telegram/discord `channels`, `${VAR}` refs with values in `<root>/.env`
+  (0600); persona/memory/profile/skills go to the workspace (`agents.defaults.workspace`, else
+  `<root>/workspace`) in managed sections; tasks → lossiness. All **three v1 adapters**
   install the same signed `.uniqent` end to end (verified via the CLI). Studio's in-app **Install**
   button and the `uniqent install --target <claude-code|hermes|openclaw>` CLI both drive them; the
-  local server is hardened (127.0.0.1-only + localhost Origin/Host guard).
+  local server is hardened (127.0.0.1-only, exact Studio Origin/Host incl. port, JSON-only mutations).
 
 **Wow first-run** — `npx @uniqent/cli try <brain>` auto-detects the running framework (filesystem probe in `packages/builder/src/detect.ts`) and one-command-installs a featured, signed, creds-free brain (the enriched `research-analyst`), ending with the manifest's `suggestedPrompts`. Featured bundles are packed+signed into `packages/cli/featured/` at build (`build:featured`); `uniqent try` reuses the shared `runInstall` pipeline in `packages/cli/src/run.ts`. Manifest gained optional `suggestedPrompts`.
 

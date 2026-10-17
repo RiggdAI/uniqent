@@ -1,102 +1,83 @@
-import { mkdir, writeFile, readFile, readdir } from 'node:fs/promises';
+import { chmod, mkdir, writeFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { Bundle } from '@uniqent/core';
-import { Brain } from '@uniqent/builder';
-import type {
-  Adapter,
-  DetectResult,
-  ExportOptions,
-  InstallOptions,
-  InstallPlan,
-  InstallResult,
-  Lossiness,
-  ResolvedCredentials,
+import {
+  resolveInside,
+  type Adapter,
+  type DetectResult,
+  type ExportOptions,
+  type InstallOptions,
+  type InstallPlan,
+  type InstallResult,
+  type Lossiness,
+  type ResolvedCredentials,
 } from '@uniqent/adapter-sdk';
-import { buildMemoryMd, buildUserMd, envName, MEMORY_MAX, USER_MAX } from './memory.js';
+import { mergeEnv } from './env.js';
+import { exportHermes } from './export.js';
+import { exists, readOptional, readOptionalBytes } from './fs.js';
+import {
+  CONFIG_FILE,
+  ENV_FILE,
+  MEMORY_FILE,
+  SOUL_FILE,
+  USER_FILE,
+  skillTarget,
+  translate,
+  type HermesHome,
+} from './translate.js';
 
-/** Credential refs consumed by an MCP server or a channel (both install into Hermes). */
-function requiredCreds(bundle: Bundle): string[] {
-  const refs = new Set<string>();
-  for (const s of bundle.mcpServers()) if (s.auth.credentialRef) refs.add(s.auth.credentialRef);
-  for (const c of bundle.channels()) if (c.credentialRef) refs.add(c.credentialRef);
-  return [...refs];
+export { MEMORY_MAX, USER_MAX, ENTRY_DELIMITER } from './memory.js';
+export { HermesConfigError } from './config.js';
+export { DuplicateSkillError } from './export.js';
+export { EnvKeyConflictError, UndeclaredCredentialError, skillTarget } from './translate.js';
+
+/** apply() was called without a value for a credential the plan requires. */
+export class MissingCredentialError extends Error {
+  constructor(readonly refs: string[]) {
+    super(`missing resolved credential(s) for Hermes install: ${refs.join(', ')}`);
+    this.name = 'MissingCredentialError';
+  }
 }
 
-function computePlan(bundle: Bundle): InstallPlan {
-  const writes = [];
-  if (bundle.persona() !== undefined)
-    writes.push({ path: 'SOUL.md', summary: 'identity / system prompt' });
+/** Hermes' home when no root is given: $HERMES_HOME, else ~/.hermes (hermes_constants.get_hermes_home). */
+function defaultHermesHome(): string {
+  const env = process.env.HERMES_HOME?.trim();
+  return env ? env : join(homedir(), '.hermes');
+}
 
-  const facts = bundle.memoryFacts();
-  const mem = buildMemoryMd(facts);
-  const lossiness: Lossiness[] = [];
-  if (facts.length > 0)
-    writes.push({ path: 'MEMORY.md', summary: `${mem.included} memory fact(s)` });
-  if (mem.dropped > 0)
-    lossiness.push({
-      component: 'memory',
-      issue: `${mem.dropped} of ${facts.length} facts dropped to fit MEMORY.md (~${MEMORY_MAX} chars); consider an external memory provider.`,
-      action: 'truncated',
-    });
-
-  const profile = bundle.memoryProfile();
-  if (profile) {
-    writes.push({ path: 'USER.md', summary: 'user profile' });
-    if (buildUserMd(profile).truncated)
-      lossiness.push({
-        component: 'memory profile',
-        issue: `USER.md truncated to ~${USER_MAX} chars.`,
-        action: 'truncated',
-      });
-  }
-
+async function readHome(bundle: Bundle, root: string): Promise<HermesHome> {
+  const read = (rel: string) => readOptional(resolveInside(root, rel));
+  const skills = new Map<string, Uint8Array>();
   for (const path of bundle.list()) {
-    if (path.startsWith('skills/')) writes.push({ path, summary: 'skill file' });
+    if (!path.startsWith('skills/')) continue;
+    const prior = await readOptionalBytes(skillTarget(root, path));
+    if (prior !== undefined) skills.set(path, prior);
   }
-
-  const servers = bundle.mcpServers();
-  const channels = bundle.channels();
-  const tasks = bundle.tasks();
-  if (servers.length || channels.length || tasks.length)
-    writes.push({ path: 'hermes.json', summary: 'mcp + channels + tasks' });
-
-  const creds = requiredCreds(bundle);
-  if (creds.length) writes.push({ path: '.env', summary: 'resolved credentials' });
-
-  if (bundle.tools().length > 0)
-    lossiness.push({
-      component: 'tools',
-      issue: 'Hermes native tool model differs; dropped.',
-      action: 'dropped',
-    });
-
   return {
-    writes,
-    mcpRegistrations: servers.map((s) => s.id),
-    channelRegistrations: channels.map((c) => c.id),
-    lossiness,
-    requiresCredentials: creds,
+    soul: await read(SOUL_FILE),
+    memory: await read(MEMORY_FILE),
+    user: await read(USER_FILE),
+    config: await read(CONFIG_FILE),
+    env: await read(ENV_FILE),
+    skills,
   };
 }
 
-interface HermesConfig {
-  identity?: string;
-  memory?: { facts?: string; user?: string };
-  mcpServers: Record<string, Record<string, unknown>>;
-  channels: Array<Record<string, unknown>>;
-  tasks: unknown[];
-}
-
+/** Installs into a Hermes Agent home: `root` is $HERMES_HOME (normally ~/.hermes). */
 export const hermesAdapter: Adapter = {
   id: 'hermes',
   displayName: 'Hermes',
 
   async detect({ root }): Promise<DetectResult> {
-    return { present: true, configRoot: root ?? process.cwd() };
+    const home = root ?? defaultHermesHome();
+    const present =
+      (await exists(join(home, CONFIG_FILE))) || (await exists(join(home, SOUL_FILE)));
+    return { present, configRoot: home };
   },
 
-  async plan(bundle: Bundle): Promise<InstallPlan> {
-    return computePlan(bundle);
+  async plan(bundle: Bundle, { root }: InstallOptions): Promise<InstallPlan> {
+    return translate(bundle, await readHome(bundle, root), root).plan;
   },
 
   async apply(
@@ -105,124 +86,43 @@ export const hermesAdapter: Adapter = {
     resolved: ResolvedCredentials,
     { root }: InstallOptions,
   ): Promise<InstallResult> {
-    const written: string[] = [];
-    const notes: string[] = [];
-    const write = async (rel: string, data: string | Uint8Array) => {
-      const target = join(root, rel);
+    const home = await readHome(bundle, root);
+    const { plan, files, env } = translate(bundle, home, root);
+    const missing = plan.requiresCredentials.filter((ref) => !resolved[ref]);
+    if (missing.length > 0) throw new MissingCredentialError(missing);
+
+    const envMerge =
+      env.length === 0
+        ? undefined
+        : mergeEnv(home.env, new Map(env.map((b) => [b.key, resolved[b.ref] ?? ''])));
+    const all =
+      envMerge === undefined ? files : [...files, { path: ENV_FILE, content: envMerge.content }];
+    const lossiness: Lossiness[] =
+      envMerge === undefined || envMerge.replaced.length === 0
+        ? plan.lossiness
+        : [
+            ...plan.lossiness,
+            {
+              component: ENV_FILE,
+              action: 'transformed',
+              issue: `replaces your existing, different value of ${envMerge.replaced.join(', ')}.`,
+            },
+          ];
+    for (const f of all) {
+      const target = resolveInside(root, f.path);
       await mkdir(dirname(target), { recursive: true });
-      await writeFile(target, data);
-      written.push(rel);
+      // .env holds real secrets: created owner-only; chmod also tightens a pre-existing file.
+      await writeFile(target, f.content, { mode: f.path === ENV_FILE ? 0o600 : 0o666 });
+      if (f.path === ENV_FILE) await chmod(target, 0o600);
+    }
+
+    return {
+      written: all.map((f) => f.path),
+      notes: lossiness.map((l) => `${l.action}: ${l.component} — ${l.issue}`),
     };
-
-    const persona = bundle.persona();
-    if (persona !== undefined) {
-      const policies = bundle.policies();
-      await write(
-        'SOUL.md',
-        policies ? `${persona.trim()}\n\n## Policies\n\n${policies.trim()}\n` : persona,
-      );
-    }
-
-    const facts = bundle.memoryFacts();
-    if (facts.length > 0) await write('MEMORY.md', buildMemoryMd(facts).content);
-    const profile = bundle.memoryProfile();
-    if (profile) await write('USER.md', buildUserMd(profile).content);
-
-    for (const path of bundle.list()) {
-      if (!path.startsWith('skills/')) continue;
-      const bytes = bundle.get(path);
-      if (bytes) await write(path, bytes);
-    }
-
-    const servers = bundle.mcpServers();
-    const channels = bundle.channels();
-    const tasks = bundle.tasks();
-    if (servers.length || channels.length || tasks.length) {
-      const config: HermesConfig = { identity: 'SOUL.md', mcpServers: {}, channels: [], tasks };
-      if (facts.length > 0 || profile) {
-        config.memory = {};
-        if (facts.length > 0) config.memory.facts = 'MEMORY.md';
-        if (profile) config.memory.user = 'USER.md';
-      }
-      for (const s of servers) {
-        const entry: Record<string, unknown> = { transport: s.transport };
-        if (s.transport === 'stdio') {
-          entry.command = s.command;
-          if (s.args) entry.args = s.args;
-          if (s.env) entry.env = s.env;
-        } else {
-          entry.url = s.url;
-        }
-        if (s.auth.credentialRef) {
-          const env = envName(s.auth.credentialRef);
-          if (s.auth.type === 'bearer') entry.headers = { Authorization: `Bearer \${${env}}` };
-          else if (s.auth.type === 'header' && s.auth.headerName)
-            entry.headers = { [s.auth.headerName]: `\${${env}}` };
-        }
-        config.mcpServers[s.id] = entry;
-      }
-      for (const c of channels) {
-        const ch: Record<string, unknown> = { id: c.id, kind: c.kind };
-        if (c.credentialRef) ch.token = `\${${envName(c.credentialRef)}}`;
-        config.channels.push(ch);
-      }
-      await write('hermes.json', JSON.stringify(config, null, 2) + '\n');
-    }
-
-    const creds = requiredCreds(bundle);
-    if (creds.length) {
-      const env = creds.map((ref) => `${envName(ref)}=${resolved[ref] ?? ''}`).join('\n') + '\n';
-      await write('.env', env);
-    }
-
-    for (const l of computePlan(bundle).lossiness)
-      notes.push(`${l.action}: ${l.component} — ${l.issue}`);
-    return { written, notes };
   },
 
   async export({ root }: ExportOptions): Promise<Bundle> {
-    const brain = Brain.create({
-      name: 'captured-hermes-agent',
-      displayName: 'Captured Hermes Agent',
-      version: '0.1.0',
-      description: 'Captured from a Hermes setup.',
-      author: { name: 'unknown' },
-      license: 'CC0-1.0',
-      tags: [],
-    });
-    try {
-      brain.setPersona(await readFile(join(root, 'SOUL.md'), 'utf8'));
-    } catch {
-      /* none */
-    }
-    try {
-      const md = await readFile(join(root, 'MEMORY.md'), 'utf8');
-      let i = 0;
-      for (const line of md.split('\n')) {
-        const m = /^-\s+(.*)$/.exec(line.trim());
-        if (m && m[1]) {
-          brain.addMemory({
-            id: `m${++i}`,
-            kind: 'fact',
-            text: m[1],
-            createdAt: '1970-01-01T00:00:00.000Z',
-          });
-        }
-      }
-    } catch {
-      /* none */
-    }
-    try {
-      for (const name of await readdir(join(root, 'skills'))) {
-        try {
-          brain.addSkill(name, await readFile(join(root, 'skills', name, 'SKILL.md'), 'utf8'));
-        } catch {
-          /* not a skill */
-        }
-      }
-    } catch {
-      /* none */
-    }
-    return brain.toBundle();
+    return exportHermes(root);
   },
 };

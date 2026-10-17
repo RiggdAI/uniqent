@@ -1,5 +1,6 @@
 import {
   Brain,
+  DuplicateMemoryIdError,
   MCP_CATALOG,
   SKILL_CATALOG,
   CHANNEL_CATALOG,
@@ -35,7 +36,8 @@ import { join, relative, sep } from 'node:path';
 const DEFAULT_MEMORY_REGISTRY = 'https://uniqent.ai';
 import { validateBundle, generateKeypair, sign, pack, verify } from '@uniqent/core';
 import type { ValidationResult, Keypair } from '@uniqent/core';
-import type { Manifest } from '@uniqent/spec';
+import { Slug } from '@uniqent/spec';
+import type { CredentialRequirement, Manifest } from '@uniqent/spec';
 import type {
   Adapter,
   InstallPlan,
@@ -62,15 +64,68 @@ const DEFAULT_META: BrainMeta = {
   tags: [],
 };
 
-/** Derive a skill name from a SKILL.md URL (…/<name>/SKILL.md or …/<name>.md). */
-function skillNameFromUrl(url: string): string {
-  try {
-    const parts = new URL(url).pathname.split('/').filter(Boolean);
-    let last = parts[parts.length - 1] ?? 'imported-skill';
-    if (/^skill\.md$/i.test(last)) last = parts[parts.length - 2] ?? 'imported-skill';
-    return last.replace(/\.md$/i, '') || 'imported-skill';
-  } catch {
-    return 'imported-skill';
+/** The `name:` declared in a SKILL.md YAML frontmatter block, if any. */
+function frontmatterName(skillMd: string): string | undefined {
+  const block = /^---\r?\n([\s\S]*?)\r?\n---/.exec(skillMd)?.[1];
+  const line = block?.split(/\r?\n/).find((l) => /^name\s*:/.test(l));
+  const value = line
+    ?.replace(/^name\s*:\s*/, '')
+    .trim()
+    .replace(/^(['"])(.*)\1$/, '$2');
+  return value ? value : undefined;
+}
+
+/**
+ * The directory holding a SKILL.md URL (or the stem of a `<name>.md` URL). GitHub URLs carry an
+ * `<owner>/<repo>/<ref>` prefix (`…/blob/<ref>` on github.com) whose ref segment (`HEAD`, a branch)
+ * is never a skill name; a SKILL.md at the repo root is named after the repo.
+ */
+function skillDirFromUrl(url: URL): string | undefined {
+  const parts = url.pathname.split('/').filter(Boolean);
+  const file = parts.pop() ?? '';
+  if (!/^skill\.md$/i.test(file)) return file.replace(/\.md$/i, '') || undefined;
+  const refEnd =
+    url.hostname === 'raw.githubusercontent.com' ? 3 : url.hostname === 'github.com' ? 4 : 0;
+  const dirs = parts.slice(refEnd);
+  return dirs[dirs.length - 1] ?? (refEnd > 0 ? parts[1] : undefined);
+}
+
+/** Name a fetched skill: its SKILL.md frontmatter `name`, else the directory it lives in. */
+function skillNameFor(url: string, skillMd: string): string {
+  const name = frontmatterName(skillMd) ?? skillDirFromUrl(new URL(url));
+  if (!name) {
+    throw new Error(
+      `cannot name the skill from ${url}: its SKILL.md has no frontmatter "name:" and the URL has no skill directory`,
+    );
+  }
+  return name;
+}
+
+/** A skill name that is not slug-safe (it becomes a directory name on install). */
+export class InvalidSkillNameError extends Error {
+  constructor(name: string) {
+    super(
+      `invalid skill name "${name}": must be slug-safe (lowercase letters, digits, hyphens; start with a letter or digit), e.g. "release-notes"`,
+    );
+    this.name = 'InvalidSkillNameError';
+  }
+}
+
+/** A skill with this name is already in the brain; adding it again would overwrite it. */
+export class DuplicateSkillError extends Error {
+  constructor(name: string) {
+    super(`a skill named "${name}" is already in this brain; remove it first to replace it`);
+    this.name = 'DuplicateSkillError';
+  }
+}
+
+/** Two MCP servers in one import resolve to the same id; importing both would drop one. */
+export class DuplicateMcpServerError extends Error {
+  constructor(id: string) {
+    super(
+      `two imported MCP servers share the id "${id}"; give each server a distinct id and import again`,
+    );
+    this.name = 'DuplicateMcpServerError';
   }
 }
 
@@ -212,13 +267,25 @@ export class StudioSession {
     return `data:${mime};base64,${Buffer.from(a.bytes).toString('base64')}`;
   }
 
+  /** Ids of every memory item in the brain (facts + episodic). */
+  private memoryIds(): Set<string> {
+    return new Set(this.brain.listMemory().map((m) => m.id));
+  }
+
+  /** The next generated memory id (`fact-N`) that is not in `taken` (e.g. an imported id). */
+  private nextFactId(taken: ReadonlySet<string>): string {
+    let id = `fact-${++this.factCounter}`;
+    while (taken.has(id)) id = `fact-${++this.factCounter}`;
+    return id;
+  }
+
   addFact(input: {
     text: string;
     importance?: number;
     visibility?: 'shareable' | 'personal';
   }): void {
     const item: Record<string, unknown> = {
-      id: `fact-${++this.factCounter}`,
+      id: this.nextFactId(this.memoryIds()),
       kind: 'fact',
       text: input.text,
       createdAt: new Date().toISOString(),
@@ -246,7 +313,7 @@ export class StudioSession {
     const items = parseMemoryMarkdown(text);
     for (const it of items) {
       this.brain.addMemory({
-        id: `fact-${++this.factCounter}`,
+        id: this.nextFactId(this.memoryIds()),
         kind: it.kind,
         text: it.text,
         createdAt: new Date().toISOString(),
@@ -255,25 +322,34 @@ export class StudioSession {
     return items.length;
   }
 
-  /** Import structured memory items (e.g. from a .jsonl export), filling missing fields. */
+  /**
+   * Import structured memory items (e.g. from a .jsonl export), filling missing fields. Blank
+   * items are skipped. Throws DuplicateMemoryIdError before adding anything when an explicit id
+   * repeats within the batch or is already in the brain.
+   */
   importItems(items: Array<Record<string, unknown>>): number {
     const KINDS = ['fact', 'decision', 'preference', 'milestone', 'episodic'];
-    let added = 0;
-    for (const raw of items) {
-      const text = typeof raw.text === 'string' ? raw.text.trim() : '';
-      if (!text) continue;
+    const kept = items.filter((raw) => typeof raw.text === 'string' && raw.text.trim());
+    const used = this.memoryIds();
+    for (const raw of kept) {
+      if (typeof raw.id !== 'string' || !raw.id) continue;
+      if (used.has(raw.id)) throw new DuplicateMemoryIdError(raw.id);
+      used.add(raw.id);
+    }
+    for (const raw of kept) {
+      const id = typeof raw.id === 'string' && raw.id ? raw.id : this.nextFactId(used);
+      used.add(id);
       const item: Record<string, unknown> = {
-        id: typeof raw.id === 'string' && raw.id ? raw.id : `fact-${++this.factCounter}`,
+        id,
         kind: typeof raw.kind === 'string' && KINDS.includes(raw.kind) ? raw.kind : 'fact',
-        text,
+        text: String(raw.text).trim(),
         createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : new Date().toISOString(),
       };
       if (typeof raw.importance === 'number') item.importance = raw.importance;
       if (raw.visibility === 'personal') item.visibility = 'personal';
       this.brain.addMemory(item);
-      added++;
     }
-    return added;
+    return kept.length;
   }
 
   /**
@@ -332,7 +408,7 @@ export class StudioSession {
     const facts = await fetchMemoryPack(registry || DEFAULT_MEMORY_REGISTRY, slug);
     for (const f of facts) {
       this.brain.addMemory({
-        id: `fact-${++this.factCounter}`,
+        id: this.nextFactId(this.memoryIds()),
         kind: f.kind || 'fact',
         text: f.text,
         createdAt: new Date().toISOString(),
@@ -391,7 +467,7 @@ export class StudioSession {
     if (result.profile && opts?.profile !== false) this.setProfile(result.profile);
     for (const it of result.items) {
       this.brain.addMemory({
-        id: `fact-${++this.factCounter}`,
+        id: this.nextFactId(this.memoryIds()),
         kind: it.kind,
         text: it.text,
         source: it.source,
@@ -418,17 +494,35 @@ export class StudioSession {
     this.brain.addSkillFromCatalog(name);
   }
 
-  /** Add a skill not in the catalog (pasted or uploaded SKILL.md). */
+  /**
+   * Add a skill not in the catalog (pasted or uploaded SKILL.md). Throws InvalidSkillNameError
+   * for a non-slug name and DuplicateSkillError when the name is taken (never overwrites).
+   */
   addCustomSkill(name: string, skillMd: string): void {
+    if (!Slug.safeParse(name).success) throw new InvalidSkillNameError(name);
+    if (this.brain.toBundle().manifest().components.skills.includes(name)) {
+      throw new DuplicateSkillError(name);
+    }
     const md = skillMd.trim() ? skillMd : `---\nname: ${name}\ndescription: ${name}\n---\n`;
     this.brain.addSkill(name, md);
   }
 
-  /** Install a skill from anywhere: fetch a SKILL.md by URL. */
-  async importSkillFromUrl(url: string): Promise<void> {
+  /** Fetch a SKILL.md by URL; throws with the status when the server does not return it. */
+  private async fetchSkillMd(url: string): Promise<string> {
     const res = await fetch(url);
-    if (!res.ok) throw new Error(`fetch failed: ${res.status} ${res.statusText}`);
-    this.addCustomSkill(skillNameFromUrl(url), await res.text());
+    if (!res.ok) throw new Error(`fetch ${url} failed: ${res.status} ${res.statusText}`);
+    return res.text();
+  }
+
+  /** Install a skill from anywhere: fetch a SKILL.md by URL, named by its frontmatter. */
+  async importSkillFromUrl(url: string): Promise<void> {
+    const skillMd = await this.fetchSkillMd(url);
+    this.addCustomSkill(skillNameFor(url, skillMd), skillMd);
+  }
+
+  /** Add a skill-hub result: fetch its SKILL.md and add it under the hub result's `name`. */
+  async importHubSkill(url: string, name: string): Promise<void> {
+    this.addCustomSkill(name, await this.fetchSkillMd(url));
   }
 
   /** Ensure a credential requirement exists for an MCP server's auth.credentialRef. */
@@ -453,18 +547,31 @@ export class StudioSession {
     this.ensureMcpCredential((input.auth ?? {}) as { type?: string; credentialRef?: string });
   }
 
-  /** Bulk-import MCP servers from any shape (a canonical list OR a pasted config blob). */
+  /**
+   * Bulk-import MCP servers from any shape (canonical servers, raw server objects, config blobs).
+   * Raw server objects are normalized as ONE batch so unnamed or alike-named ones get distinct ids
+   * (`-2`, `-3`); canonical servers and whole config blobs are normalized on their own. Throws
+   * DuplicateMcpServerError, adding nothing, when two imported servers still share an id.
+   */
   importMcpServers(servers: Array<Record<string, unknown>>): number {
-    let n = 0;
-    for (const raw of servers) {
-      const r = normalizeMcpConfig(raw);
-      for (const s of r.servers) {
-        this.brain.addMcpServer(s);
-        n++;
-      }
+    const isRawServer = (s: Record<string, unknown>): boolean =>
+      !(typeof s.id === 'string' && typeof s.transport === 'string') &&
+      !('mcpServers' in s) &&
+      !('servers' in s);
+    const results = [
+      ...servers.filter((s) => !isRawServer(s)).map((s) => normalizeMcpConfig(s)),
+      normalizeMcpConfig({ servers: servers.filter(isRawServer) }),
+    ];
+    const ids = new Set<string>();
+    for (const s of results.flatMap((r) => r.servers)) {
+      if (ids.has(s.id)) throw new DuplicateMcpServerError(s.id);
+      ids.add(s.id);
+    }
+    for (const r of results) {
+      for (const s of r.servers) this.brain.addMcpServer(s);
       for (const c of r.credentials) this.brain.addCredential(c);
     }
-    return n;
+    return ids.size;
   }
 
   /** Preview a pasted MCP config without mutating the brain. */
@@ -515,8 +622,24 @@ export class StudioSession {
     installMcpHubResult(this.brain, result);
   }
 
+  /**
+   * Remove `consumer` (e.g. "mcp:github") from every credential it used. A credential left with
+   * no consumer is dropped, so removing a server/channel never leaves an orphan requirement.
+   * `before` is the synced credential list captured before the consumer was removed.
+   */
+  private releaseCredentials(before: CredentialRequirement[], consumer: string): void {
+    for (const cred of before) {
+      if (!cred.consumedBy.includes(consumer)) continue;
+      const remaining = cred.consumedBy.filter((c) => c !== consumer);
+      if (remaining.length === 0) this.brain.removeCredential(cred.ref);
+      else this.brain.addCredential({ ...cred, consumedBy: remaining });
+    }
+  }
+
   removeMcp(id: string): void {
+    const before = this.brain.toBundle().manifest().credentials;
     this.brain.removeMcpServer(id);
+    this.releaseCredentials(before, `mcp:${id}`);
   }
 
   removeSkill(name: string): void {
@@ -528,7 +651,9 @@ export class StudioSession {
   }
 
   removeChannel(id: string): void {
+    const before = this.brain.toBundle().manifest().credentials;
     this.brain.removeChannel(id);
+    this.releaseCredentials(before, `channel:${id}`);
   }
 
   /** Create an automation/flow (scheduled, event-triggered, or manual). */

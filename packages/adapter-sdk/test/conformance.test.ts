@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Bundle } from '@uniqent/core';
+import { Bundle, PATHS } from '@uniqent/core';
 import { runConformance, type Adapter } from '../src/index';
 
 const base: Adapter = {
@@ -73,6 +73,55 @@ describe('runConformance', () => {
       const r = await runConformance(leaky, Bundle.empty(), root);
       expect(r.ok).toBe(false);
       expect(r.checks.find((c) => c.name.includes('secret'))?.pass).toBe(false);
+    });
+  });
+});
+
+describe('runConformance path + loss checks', () => {
+  it('fails when an adapter reports a write outside root', async () => {
+    const escaping: Adapter = {
+      ...base,
+      async apply(_b, _p, _r, { root }) {
+        await mkdir(root, { recursive: true });
+        await writeFile(join(root, 'out.txt'), 'deterministic');
+        return { written: ['out.txt', '../outside.txt'], notes: [] };
+      },
+    };
+    await withTmp(async (root) => {
+      const r = await runConformance(escaping, Bundle.empty(), root);
+      const check = r.checks.find((c) => c.name.includes('inside root'));
+      expect(check?.pass).toBe(false);
+      expect(check?.detail).toBe('../outside.txt');
+    });
+  });
+
+  it('fails when tasks, episodic memory, or runtime config vanish silently', async () => {
+    const bundle = Bundle.empty();
+    bundle.set(
+      'tasks/daily.json',
+      JSON.stringify({
+        id: 'daily',
+        name: 'Daily',
+        trigger: { type: 'manual' },
+        action: { kind: 'prompt', prompt: 'summarize' },
+        enabled: true,
+      }),
+    );
+    bundle.set(
+      PATHS.episodic,
+      JSON.stringify({
+        id: 'e1',
+        kind: 'episodic',
+        text: 'x',
+        createdAt: '2026-05-31T00:00:00.000Z',
+      }),
+    );
+    bundle.set(PATHS.runtime, JSON.stringify({ model: { name: 'opus' } }));
+    await withTmp(async (root) => {
+      const r = await runConformance(base, bundle, root);
+      expect(r.checks.find((c) => c.name.includes('silent loss'))?.detail).toBe(
+        'tasks, episodic memory, runtime config',
+      );
     });
   });
 });

@@ -60,11 +60,47 @@ describe('importVault', () => {
     expect(out.persona).toBe('Be terse.');
     expect(out.stats.personaFrom).toBe('AGENTS.md');
   });
+
+  it('takes persona/profile only from the vault root; nested ones are ordinary notes', () => {
+    const out = importVault([
+      { path: 'projects/webapp/CLAUDE.md', content: '# Webapp\nRun pnpm test before commit.\n' },
+      { path: 'archive/USER.md', content: 'Name: Old Me' },
+      { path: 'USER.md', content: 'Name: Max' },
+    ]);
+    expect(out.persona).toBeUndefined();
+    expect(out.profile).toEqual({ Name: 'Max' });
+    expect(out.stats.profileFrom).toBe('USER.md');
+    expect(out.items.map((i) => i.source).sort()).toEqual([
+      'archive/USER.md',
+      'projects/webapp/CLAUDE.md',
+    ]);
+  });
 });
 
 describe('parseProfile', () => {
   it('returns empty for prose-only with a single notes field', () => {
     const p = parseProfile('just some freeform text about me');
     expect(p.notes).toBe('just some freeform text about me');
+  });
+
+  it('keeps repeated keys, explicit notes + prose, URLs, and never truncates', () => {
+    const bio = 'x'.repeat(500);
+    const p = parseProfile(
+      [
+        'notes: from key',
+        'Some free prose that should survive.',
+        'Project: A',
+        'Project: B',
+        'Website: https://maxlibin.com',
+        'https://github.com/foo',
+        `Bio: ${bio}`,
+      ].join('\n'),
+    );
+    expect(p).toEqual({
+      notes: 'from key; Some free prose that should survive. https://github.com/foo',
+      Project: 'A; B',
+      Website: 'https://maxlibin.com',
+      Bio: bio,
+    });
   });
 });

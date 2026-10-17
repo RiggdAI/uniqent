@@ -1,6 +1,7 @@
+import type { Manifest, McpServer } from '@uniqent/spec';
 import { Bundle, PATHS } from './bundle.js';
 import { scanForSecrets } from './secret-scan.js';
-import { BundleValidationError } from './errors.js';
+import { BundleFormatError, BundleValidationError } from './errors.js';
 
 export interface Issue {
   path?: string;
@@ -88,9 +89,16 @@ export function validateBundle(bundle: Bundle): ValidationResult {
     } catch {
       // parse errors already recorded above
     }
+
+    // 4. Manifest claims (components + permissions) match the actual content.
+    try {
+      errors.push(...manifestContentIssues(manifest, bundle));
+    } catch (e) {
+      if (!(e instanceof BundleFormatError)) throw e; // parse errors already recorded above
+    }
   }
 
-  // 4. Secret-scan.
+  // 5. Secret-scan.
   for (const f of scanForSecrets(bundle)) {
     errors.push({
       path: f.path,
@@ -100,6 +108,138 @@ export function validateBundle(bundle: Bundle): ValidationResult {
   }
 
   return { ok: errors.length === 0, errors, warnings };
+}
+
+function missingIssues(
+  component: string,
+  declared: readonly string[],
+  actual: Set<string>,
+): Issue[] {
+  return declared
+    .filter((id) => !actual.has(id))
+    .map((id) => ({
+      path: PATHS.manifest,
+      code: 'manifest-mismatch',
+      message: `components.${component} declares "${id}" but the bundle has no such ${component} entry`,
+    }));
+}
+
+function undeclaredIssues(
+  component: string,
+  declared: Set<string>,
+  actual: readonly string[],
+): Issue[] {
+  return actual
+    .filter((id) => !declared.has(id))
+    .map((id) => ({
+      path: PATHS.manifest,
+      code: 'manifest-mismatch',
+      message: `bundle contains ${component} "${id}" but components.${component} does not declare it`,
+    }));
+}
+
+/** Report ids declared in the manifest but absent from content, and present but undeclared. */
+function idListIssues(
+  component: string,
+  declared: readonly string[],
+  actual: readonly string[],
+): Issue[] {
+  return [
+    ...missingIssues(component, declared, new Set(actual)),
+    ...undeclaredIssues(component, new Set(declared), actual),
+  ];
+}
+
+function countIssue(field: string, declared: number | boolean, actual: number | boolean): Issue[] {
+  return declared === actual
+    ? []
+    : [
+        {
+          path: PATHS.manifest,
+          code: 'manifest-mismatch',
+          message: `components.${field} is ${declared} but the bundle content has ${actual}`,
+        },
+      ];
+}
+
+/** True when a permissions.network endpoint covers the host (exact host[:port], hostname, or `*.suffix`). */
+function endpointCovers(endpoint: string, url: URL): boolean {
+  if (endpoint === url.host || endpoint === url.hostname) return true;
+  return endpoint.startsWith('*.') && url.hostname.endsWith(endpoint.slice(1));
+}
+
+function mcpPermissionIssues(manifest: Manifest, servers: McpServer[]): Issue[] {
+  const issues: Issue[] = [];
+  for (const s of servers) {
+    if (s.transport === 'stdio' && !manifest.permissions.spawnsProcesses) {
+      issues.push({
+        path: PATHS.manifest,
+        code: 'permission-mismatch',
+        message: `mcp server "${s.id}" uses stdio (runs "${s.command}") but permissions.spawnsProcesses is false`,
+      });
+    }
+    if ((s.transport === 'streamable-http' || s.transport === 'sse') && s.url) {
+      const url = new URL(s.url);
+      const endpoints = manifest.permissions.network.endpoints;
+      if (!endpoints.some((e) => endpointCovers(e, url))) {
+        issues.push({
+          path: PATHS.manifest,
+          code: 'permission-mismatch',
+          message: `mcp server "${s.id}" connects to "${url.host}" but permissions.network.endpoints [${endpoints.join(', ')}] does not include it`,
+        });
+      }
+    }
+  }
+  return issues;
+}
+
+/**
+ * The manifest is what an installer shows the user before consenting, so it must describe the
+ * content truthfully: component ids/counts and the permissions implied by MCP servers.
+ * Throws BundleFormatError if a component file is malformed.
+ */
+function manifestContentIssues(manifest: Manifest, bundle: Bundle): Issue[] {
+  const c = manifest.components;
+  const servers = bundle.mcpServers();
+  const identityIssues: Issue[] =
+    !c.identity && bundle.has(PATHS.persona)
+      ? [
+          {
+            path: PATHS.manifest,
+            code: 'manifest-mismatch',
+            message: 'components.identity is false but identity/persona.md is present',
+          },
+        ]
+      : []; // identity=true without persona.md is a layout error (checked above)
+  return [
+    ...identityIssues,
+    ...countIssue('memory.facts', c.memory.facts, bundle.memoryFacts().length),
+    ...countIssue('memory.episodic', c.memory.episodic, bundle.memoryEpisodic().length),
+    ...countIssue('memory.hasProfile', c.memory.hasProfile, bundle.has(PATHS.profile)),
+    // Declared-but-missing skills are layout errors (checked above).
+    ...undeclaredIssues('skills', new Set(c.skills), bundle.skillNames()),
+    ...idListIssues(
+      'mcp',
+      c.mcp,
+      servers.map((s) => s.id),
+    ),
+    ...idListIssues(
+      'tools',
+      c.tools,
+      bundle.tools().map((t) => t.id),
+    ),
+    ...idListIssues(
+      'tasks',
+      c.tasks,
+      bundle.tasks().map((t) => t.id),
+    ),
+    ...idListIssues(
+      'channels',
+      c.channels,
+      bundle.channels().map((ch) => ch.id),
+    ),
+    ...mcpPermissionIssues(manifest, servers),
+  ];
 }
 
 export function assertValid(bundle: Bundle): void {

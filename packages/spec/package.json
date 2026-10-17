@@ -4,6 +4,9 @@
   "description": "The canonical .uniqent bundle schema (source of truth).",
   "license": "Apache-2.0",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {

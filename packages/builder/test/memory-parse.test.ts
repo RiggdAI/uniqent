@@ -34,17 +34,57 @@ describe('parseMemoryMarkdown', () => {
     expect(items[1]?.text).toBe('the user likes [[TypeScript]]'); // "[!preference]" stripped
     expect(items[0]?.entities).toEqual(['Postgres']);
   });
+
+  it('skips front matter, code blocks, tables and rules; reads callouts', () => {
+    const items = parseMemoryMarkdown(
+      [
+        '---',
+        'title: Project Alpha',
+        'tags: [work, alpha]',
+        '---',
+        '```js',
+        '#include <stdio.h>',
+        'const x = arr[[0]];',
+        '```',
+        '| a | b |',
+        '|---|---|',
+        '***',
+        '- [ ] ',
+        '> [!decision] Use Postgres',
+        'Session timeout is 30m',
+      ].join('\r\n'),
+    );
+    expect(items.map((i) => [i.kind, i.text])).toEqual([
+      ['decision', 'Use Postgres'],
+      ['fact', 'Session timeout is 30m'],
+    ]);
+    expect(items.flatMap((i) => [...i.entities, ...i.tags])).toEqual([]);
+  });
 });
 
 describe('stripMemoryMarkup', () => {
-  it('renders [[entities]]/[[a|alias]] to names and removes #tags, for installed output', () => {
+  it('renders [[entities]]/[[a|alias]] to names, keeps inline #tag words, drops trailing tags', () => {
     expect(stripMemoryMarkup('standardized on [[Postgres]] over [[MongoDB]] #db #infra')).toBe(
       'standardized on Postgres over MongoDB',
     );
-    expect(stripMemoryMarkup('see [[Auth-Service|the auth service]] for #security')).toBe(
-      'see the auth service for',
+    expect(stripMemoryMarkup('Wants a citation, linked inline. #citations')).toBe(
+      'Wants a citation, linked inline.',
+    );
+    expect(stripMemoryMarkup('I love #rust and [[Alice|Al]] works on #uniqent project.')).toBe(
+      'I love rust and Al works on uniqent project.',
     );
     expect(stripMemoryMarkup('no markup here')).toBe('no markup here');
+  });
+
+  it('leaves hex colors and markdown link targets alone; tags are unicode-aware', () => {
+    expect(stripMemoryMarkup('Brand color is #ff0000 and bg #fff')).toBe(
+      'Brand color is #ff0000 and bg #fff',
+    );
+    expect(stripMemoryMarkup('See [docs](#setup) for details')).toBe(
+      'See [docs](#setup) for details',
+    );
+    expect(stripMemoryMarkup('Ünïcödé #café [[Zoë]]')).toBe('Ünïcödé café Zoë');
+    expect(parseMemoryText('bg #fff, #café, [docs](#setup)').tags).toEqual(['café']);
   });
 });
 

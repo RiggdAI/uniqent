@@ -283,7 +283,7 @@ export function Palette({
 
       <div className="mt-auto px-2 text-[11px] text-muted-foreground">
         <Boxes className="mb-1 size-4" />
-        Add components from the palette, then wire credentials on the canvas.
+        Add components from the palette; the credentials they need appear on the canvas.
         <Sparkles className="ml-1 inline size-3" />
       </div>
     </nav>

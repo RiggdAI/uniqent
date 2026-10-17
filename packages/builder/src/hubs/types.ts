@@ -31,12 +31,27 @@ export function installMcpHubResult(
 export interface SkillHubResult {
   /** "github" | "json-index". */
   source: string;
+  /** The skill's name (SKILL.md frontmatter `name`, else its directory) — use it on import. */
   name: string;
   description: string;
-  /** Raw SKILL.md URL to import (may be a best-effort guess for GitHub repos). */
+  /** Raw SKILL.md URL to import (verified to exist for GitHub results). */
   skillUrl?: string;
   repo?: string;
   stars?: number;
+}
+
+/** A hub entry that was found but cannot be represented, with the reason (never dropped silently). */
+export interface SkippedHubEntry {
+  source: string;
+  /** The hub's own name for the entry, e.g. "io.github.acme/server". */
+  name: string;
+  reason: string;
+}
+
+/** One source's search outcome: usable results + entries it had to skip. */
+export interface SourceResults<T> {
+  results: T[];
+  skipped: SkippedHubEntry[];
 }
 
 /**
@@ -46,8 +61,8 @@ export interface SkillHubResult {
 export interface CatalogSource {
   id: string;
   label: string;
-  searchMcp?(query: string, signal?: AbortSignal): Promise<McpHubResult[]>;
-  searchSkills?(query: string, signal?: AbortSignal): Promise<SkillHubResult[]>;
+  searchMcp?(query: string, signal?: AbortSignal): Promise<SourceResults<McpHubResult>>;
+  searchSkills?(query: string, signal?: AbortSignal): Promise<SourceResults<SkillHubResult>>;
 }
 
 /** Slugify a hub-provided server name into a valid, stable node id. */

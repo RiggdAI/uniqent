@@ -5,6 +5,7 @@ import type {
   CatalogView,
   InstallPlan,
   InstallResult,
+  HubSearch,
   McpHubResult,
   McpNormalizePreview,
   SkillHubResult,
@@ -24,6 +25,11 @@ interface InspectorProps {
   catalog: CatalogView;
   apply: (p: Promise<StudioState>) => void;
   onClose: () => void;
+}
+
+/** The message of a failed API call, for showing next to the control that triggered it. */
+function errorText(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
 }
 
 function Field({
@@ -86,6 +92,7 @@ function PersonaEditor({ state, apply }: Omit<InspectorProps, 'selection' | 'onC
 
 function MemoryEditor({ state, apply }: Omit<InspectorProps, 'selection' | 'onClose'>) {
   const [text, setText] = useState('');
+  const [addError, setAddError] = useState('');
   const [importance, setImportance] = useState('0.5');
   const [bulk, setBulk] = useState('');
   const [preview, setPreview] = useState<{
@@ -153,13 +160,23 @@ function MemoryEditor({ state, apply }: Omit<InspectorProps, 'selection' | 'onCl
           data-testid="memory-add"
           disabled={text.length === 0}
           onClick={() => {
-            apply(api.addMemory(text, Number(importance)));
-            setText('');
+            const p = api.addMemory(text, Number(importance));
+            apply(p);
+            setAddError('');
+            p.then(
+              () => setText(''),
+              (e: unknown) => setAddError(errorText(e)),
+            );
           }}
         >
           Add fact
         </Button>
       </div>
+      {addError && (
+        <p data-testid="memory-add-error" className="text-xs text-destructive">
+          {addError}
+        </p>
+      )}
       <p className="text-sm text-muted-foreground">
         facts stored: {state.manifest.components.memory.facts}
       </p>
@@ -406,6 +423,7 @@ function ConfigEditor({ state, apply }: Omit<InspectorProps, 'selection' | 'onCl
   const [description, setDescription] = useState(m.description);
   const [tags, setTags] = useState(m.tags.join(', '));
   const [readme, setReadme] = useState(state.readme ?? '');
+  const [applyError, setApplyError] = useState('');
 
   function onAvatar(e: React.ChangeEvent<HTMLInputElement>): void {
     const file = e.target.files?.[0];
@@ -473,24 +491,30 @@ function ConfigEditor({ state, apply }: Omit<InspectorProps, 'selection' | 'onCl
         <RichEditor testid="readme-input" value={readme} onChange={setReadme} />
       </div>
 
+      {applyError && (
+        <p data-testid="config-error" className="text-xs text-destructive">
+          {applyError}
+        </p>
+      )}
       <Button
         data-testid="config-apply"
-        onClick={() =>
-          apply(
-            api
-              .setMeta({
-                name,
-                displayName,
-                version,
-                description,
-                tags: tags
-                  .split(',')
-                  .map((t) => t.trim())
-                  .filter(Boolean),
-              })
-              .then(() => api.setReadme(readme)),
-          )
-        }
+        onClick={() => {
+          const p = api
+            .setMeta({
+              name,
+              displayName,
+              version,
+              description,
+              tags: tags
+                .split(',')
+                .map((t) => t.trim())
+                .filter(Boolean),
+            })
+            .then(() => api.setReadme(readme));
+          apply(p);
+          setApplyError('');
+          p.catch((e: unknown) => setApplyError(errorText(e)));
+        }}
       >
         Apply config
       </Button>
@@ -656,6 +680,7 @@ function TaskEditor({ apply }: { apply: (p: Promise<StudioState>) => void }) {
   const [cron, setCron] = useState('0 9 * * *');
   const [event, setEvent] = useState('mention');
   const [prompt, setPrompt] = useState('');
+  const [addError, setAddError] = useState('');
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">An automation the agent runs on a trigger.</p>
@@ -684,7 +709,7 @@ function TaskEditor({ apply }: { apply: (p: Promise<StudioState>) => void }) {
       {triggerType === 'schedule' && (
         <div className="space-y-1.5">
           <Label>Cron</Label>
-          <Input value={cron} onChange={(e) => setCron(e.target.value)} />
+          <Input data-testid="task-cron" value={cron} onChange={(e) => setCron(e.target.value)} />
         </div>
       )}
       {triggerType === 'event' && (
@@ -705,13 +730,25 @@ function TaskEditor({ apply }: { apply: (p: Promise<StudioState>) => void }) {
       <Button
         data-testid="task-add"
         onClick={() => {
-          apply(api.addTask({ name, triggerType, cron, event, prompt }));
-          setName('');
-          setPrompt('');
+          const p = api.addTask({ name, triggerType, cron, event, prompt });
+          apply(p);
+          setAddError('');
+          p.then(
+            () => {
+              setName('');
+              setPrompt('');
+            },
+            (e: unknown) => setAddError(errorText(e)),
+          );
         }}
       >
         Add flow
       </Button>
+      {addError && (
+        <p data-testid="task-add-error" className="text-xs text-destructive">
+          {addError}
+        </p>
+      )}
     </div>
   );
 }
@@ -723,6 +760,8 @@ function CustomSkillEditor({ apply }: { apply: (p: Promise<StudioState>) => void
   const [name, setName] = useState('');
   const [md, setMd] = useState('');
   const [url, setUrl] = useState('');
+  const [addError, setAddError] = useState('');
+  const [urlError, setUrlError] = useState('');
   async function onFile(e: React.ChangeEvent<HTMLInputElement>): Promise<void> {
     const f = e.target.files?.[0];
     e.target.value = '';
@@ -762,9 +801,16 @@ function CustomSkillEditor({ apply }: { apply: (p: Promise<StudioState>) => void
           data-testid="custom-skill-add"
           disabled={name.trim().length === 0}
           onClick={() => {
-            apply(api.addCustomSkill(name.trim(), md));
-            setName('');
-            setMd('');
+            const p = api.addCustomSkill(name.trim(), md);
+            apply(p);
+            setAddError('');
+            p.then(
+              () => {
+                setName('');
+                setMd('');
+              },
+              (e: unknown) => setAddError(errorText(e)),
+            );
           }}
         >
           Add skill
@@ -776,6 +822,11 @@ function CustomSkillEditor({ apply }: { apply: (p: Promise<StudioState>) => void
           </label>
         </Button>
       </div>
+      {addError && (
+        <p data-testid="custom-skill-error" className="text-xs text-destructive">
+          {addError}
+        </p>
+      )}
 
       <div className="space-y-2 border-t pt-3">
         <Label>Install from URL</Label>
@@ -792,12 +843,22 @@ function CustomSkillEditor({ apply }: { apply: (p: Promise<StudioState>) => void
           size="sm"
           disabled={url.trim().length === 0}
           onClick={() => {
-            apply(api.importSkillFromUrl(url.trim()));
-            setUrl('');
+            const p = api.importSkillFromUrl(url.trim());
+            apply(p);
+            setUrlError('');
+            p.then(
+              () => setUrl(''),
+              (e: unknown) => setUrlError(errorText(e)),
+            );
           }}
         >
           Import from URL
         </Button>
+        {urlError && (
+          <p data-testid="custom-skill-url-error" className="text-xs text-destructive">
+            {urlError}
+          </p>
+        )}
       </div>
     </div>
   );
@@ -1232,6 +1293,7 @@ function HubMcpPanel({
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<McpHubResult[]>([]);
   const [errors, setErrors] = useState<Array<{ source: string; message: string }>>([]);
+  const [skipped, setSkipped] = useState<HubSearch<unknown>['skipped']>([]);
   const [searched, setSearched] = useState(false);
   const added = new Set(state.manifest.components.mcp);
 
@@ -1241,6 +1303,7 @@ function HubMcpPanel({
       const r = await api.hubMcp(query);
       setResults(r.results);
       setErrors(r.errors);
+      setSkipped(r.skipped);
       setSearched(true);
     } finally {
       setLoading(false);
@@ -1270,6 +1333,20 @@ function HubMcpPanel({
           {e.source} unavailable: {e.message}
         </p>
       ))}
+      {skipped.length > 0 && (
+        <details className="text-xs text-muted-foreground" data-testid="hub-skipped">
+          <summary className="cursor-pointer select-none">
+            {skipped.length} result(s) skipped
+          </summary>
+          <ul className="mt-1 space-y-0.5">
+            {skipped.map((k, i) => (
+              <li key={i}>
+                {k.name} ({k.source}): {k.reason}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
       {searched && results.length === 0 && !loading && (
         <p className="text-sm text-muted-foreground">No servers found.</p>
       )}
@@ -1319,8 +1396,22 @@ function HubSkillPanel({ apply }: { apply: (p: Promise<StudioState>) => void }) 
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<SkillHubResult[]>([]);
   const [errors, setErrors] = useState<Array<{ source: string; message: string }>>([]);
+  const [skipped, setSkipped] = useState<HubSearch<unknown>['skipped']>([]);
   const [searched, setSearched] = useState(false);
   const [added, setAdded] = useState<Set<string>>(new Set());
+  const [pending, setPending] = useState<string | null>(null);
+  const [addErrors, setAddErrors] = useState<Record<string, string>>({});
+
+  function add(key: string, skillUrl: string, name: string): void {
+    const p = api.addHubSkill(skillUrl, name);
+    apply(p);
+    setPending(key);
+    setAddErrors(({ [key]: _dropped, ...rest }) => rest);
+    p.then(
+      () => setAdded((prev) => new Set(prev).add(key)),
+      (e: unknown) => setAddErrors((prev) => ({ ...prev, [key]: errorText(e) })),
+    ).finally(() => setPending(null));
+  }
 
   async function run(): Promise<void> {
     setLoading(true);
@@ -1328,6 +1419,7 @@ function HubSkillPanel({ apply }: { apply: (p: Promise<StudioState>) => void }) 
       const r = await api.hubSkills(query);
       setResults(r.results);
       setErrors(r.errors);
+      setSkipped(r.skipped);
       setSearched(true);
     } finally {
       setLoading(false);
@@ -1337,7 +1429,8 @@ function HubSkillPanel({ apply }: { apply: (p: Promise<StudioState>) => void }) 
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
-        Search GitHub for skill repos (a SKILL.md). Adding imports the SKILL.md from the repo root.
+        Search GitHub for skill repos with a SKILL.md. Adding imports that SKILL.md under the
+        skill&apos;s name.
       </p>
       <HubIndexManager />
       <div className="flex gap-2">
@@ -1357,6 +1450,20 @@ function HubSkillPanel({ apply }: { apply: (p: Promise<StudioState>) => void }) 
           {e.source} unavailable: {e.message}
         </p>
       ))}
+      {skipped.length > 0 && (
+        <details className="text-xs text-muted-foreground" data-testid="hub-skipped">
+          <summary className="cursor-pointer select-none">
+            {skipped.length} result(s) skipped
+          </summary>
+          <ul className="mt-1 space-y-0.5">
+            {skipped.map((k, i) => (
+              <li key={i}>
+                {k.name} ({k.source}): {k.reason}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
       {searched && results.length === 0 && !loading && (
         <p className="text-sm text-muted-foreground">No skills found.</p>
       )}
@@ -1384,16 +1491,13 @@ function HubSkillPanel({ apply }: { apply: (p: Promise<StudioState>) => void }) 
                   data-testid={`hub-skill-add-${r.name}`}
                   size="sm"
                   variant={isAdded ? 'secondary' : 'outline'}
-                  disabled={isAdded || !r.skillUrl}
-                  onClick={() => {
-                    if (!r.skillUrl) return;
-                    apply(api.addHubSkill(r.skillUrl));
-                    setAdded((prev) => new Set(prev).add(key));
-                  }}
+                  disabled={isAdded || !r.skillUrl || pending === key}
+                  onClick={() => r.skillUrl && add(key, r.skillUrl, r.name)}
                 >
-                  {isAdded ? 'Added' : 'Add'}
+                  {isAdded ? 'Added' : pending === key ? 'Adding…' : 'Add'}
                 </Button>
               </div>
+              {addErrors[key] && <p className="mt-1 text-xs text-destructive">{addErrors[key]}</p>}
             </div>
           );
         })}
@@ -1414,6 +1518,7 @@ const PROFILE_SUGGESTIONS = [
 /** Structured "who the user/agent is" editor → memory/profile → USER.md. */
 function ProfilePanel({ apply }: { apply: (p: Promise<StudioState>) => void }) {
   const [rows, setRows] = useState<Array<{ key: string; value: string }>>([]);
+  const [saveError, setSaveError] = useState('');
 
   useEffect(() => {
     api
@@ -1422,7 +1527,7 @@ function ProfilePanel({ apply }: { apply: (p: Promise<StudioState>) => void }) {
         const entries = Object.entries(r.profile ?? {});
         setRows(entries.map(([key, value]) => ({ key, value: String(value) })));
       })
-      .catch(() => {});
+      .catch((e: unknown) => setSaveError(`cannot load the profile: ${errorText(e)}`));
   }, []);
 
   const usedKeys = new Set(rows.map((r) => r.key.trim().toLowerCase()));
@@ -1433,11 +1538,21 @@ function ProfilePanel({ apply }: { apply: (p: Promise<StudioState>) => void }) {
 
   function save(): void {
     const profile: Record<string, string> = {};
+    const seen = new Set<string>();
     for (const { key, value } of rows) {
       const k = key.trim();
-      if (k && value.trim()) profile[k] = value.trim();
+      if (!k) continue;
+      if (seen.has(k.toLowerCase())) {
+        setSaveError(`Two fields are named "${k}" — rename or remove one before saving.`);
+        return;
+      }
+      seen.add(k.toLowerCase());
+      if (value.trim()) profile[k] = value.trim();
     }
-    apply(api.setProfile(profile));
+    const p = api.setProfile(profile);
+    apply(p);
+    setSaveError('');
+    p.catch((e: unknown) => setSaveError(errorText(e)));
   }
 
   return (
@@ -1489,6 +1604,11 @@ function ProfilePanel({ apply }: { apply: (p: Promise<StudioState>) => void }) {
         </Button>
       </div>
 
+      {saveError && (
+        <p data-testid="profile-error" className="text-xs text-destructive">
+          {saveError}
+        </p>
+      )}
       <Button data-testid="profile-save" onClick={save}>
         Save profile
       </Button>
@@ -1505,6 +1625,8 @@ function MemoryHubPanel({ apply }: { apply: (p: Promise<StudioState>) => void })
   const [errors, setErrors] = useState<Array<{ source: string; message: string }>>([]);
   const [searched, setSearched] = useState(false);
   const [added, setAdded] = useState<Set<string>>(new Set());
+  const [pending, setPending] = useState<string | null>(null);
+  const [addErrors, setAddErrors] = useState<Record<string, string>>({});
   const [token, setToken] = useState('');
   const [publishing, setPublishing] = useState(false);
   const [published, setPublished] = useState<{ slug: string; factCount: number } | null>(null);
@@ -1520,6 +1642,17 @@ function MemoryHubPanel({ apply }: { apply: (p: Promise<StudioState>) => void })
     } finally {
       setLoading(false);
     }
+  }
+
+  function add(slug: string): void {
+    const p = api.addMemoryPack(slug, registry);
+    apply(p);
+    setPending(slug);
+    setAddErrors(({ [slug]: _dropped, ...rest }) => rest);
+    p.then(
+      () => setAdded((prev) => new Set(prev).add(slug)),
+      (e: unknown) => setAddErrors((prev) => ({ ...prev, [slug]: errorText(e) })),
+    ).finally(() => setPending(null));
   }
 
   async function publish(): Promise<void> {
@@ -1589,15 +1722,15 @@ function MemoryHubPanel({ apply }: { apply: (p: Promise<StudioState>) => void })
                   data-testid={`memory-hub-add-${r.slug}`}
                   size="sm"
                   variant={isAdded ? 'secondary' : 'outline'}
-                  disabled={isAdded}
-                  onClick={() => {
-                    apply(api.addMemoryPack(r.slug, registry));
-                    setAdded((prev) => new Set(prev).add(r.slug));
-                  }}
+                  disabled={isAdded || pending === r.slug}
+                  onClick={() => add(r.slug)}
                 >
-                  {isAdded ? 'Added' : 'Add'}
+                  {isAdded ? 'Added' : pending === r.slug ? 'Adding…' : 'Add'}
                 </Button>
               </div>
+              {addErrors[r.slug] && (
+                <p className="mt-1 text-xs text-destructive">{addErrors[r.slug]}</p>
+              )}
             </div>
           );
         })}

@@ -9,6 +9,7 @@ import {
   RuntimeConfig,
   CredentialRequirement,
   MemoryProfile,
+  Manifest as ManifestSchema,
 } from '@uniqent/spec';
 import type {
   Manifest,
@@ -38,9 +39,42 @@ export interface BrainMeta {
   tags: string[];
 }
 
+const META_KEYS = [
+  'name',
+  'displayName',
+  'version',
+  'description',
+  'author',
+  'license',
+  'tags',
+] as const satisfies ReadonlyArray<keyof BrainMeta>;
+
+/** A setMeta patch field fails the manifest schema; nothing was changed. */
+export class InvalidBrainMetaError extends Error {
+  readonly field: keyof BrainMeta;
+  constructor(field: keyof BrainMeta, detail: string) {
+    super(`invalid brain meta "${field}": ${detail}`);
+    this.name = 'InvalidBrainMetaError';
+    this.field = field;
+  }
+}
+
+/** A memory item id is already used by another item (ids must be unique across facts+episodic). */
+export class DuplicateMemoryIdError extends Error {
+  readonly id: string;
+  constructor(id: string) {
+    super(`duplicate memory id "${id}": memory item ids must be unique`);
+    this.name = 'DuplicateMemoryIdError';
+    this.id = id;
+  }
+}
+
+/** Skill support files: text, or raw bytes for binary assets (kept byte-exact). */
+export type SkillFiles = Record<string, string | Uint8Array>;
+
 interface SkillEntry {
   skillMd: string;
-  files?: Record<string, string>;
+  files?: SkillFiles;
 }
 
 /** Editable in-memory model of a brain that assembles a validated core Bundle. */
@@ -61,7 +95,10 @@ export class Brain {
   private channelList: TChannel[] = [];
   private runtimeCfg?: TRuntimeConfig;
   private credentialList: TCredentialRequirement[] = [];
-  private permissionsOverride?: Partial<PermissionScope>;
+  private declaredPermissions?: Partial<PermissionScope>;
+  private suggestedPrompts?: string[];
+  /** Bundle files the model has no field for, carried through byte-exact from fromBundle. */
+  private extraFiles = new Map<string, Uint8Array>();
 
   private constructor(meta: BrainMeta) {
     this.meta = meta;
@@ -71,8 +108,29 @@ export class Brain {
     return new Brain(meta);
   }
 
+  /**
+   * Patch the manifest metadata. Every present field is validated against the manifest schema
+   * first; on the first invalid one this throws InvalidBrainMetaError and changes nothing.
+   * Keys that are not BrainMeta fields are ignored.
+   */
   setMeta(meta: Partial<BrainMeta>): void {
-    this.meta = { ...this.meta, ...meta };
+    let next: BrainMeta = { ...this.meta };
+    for (const key of META_KEYS) {
+      if (!(key in meta)) continue;
+      const r = ManifestSchema.shape[key].safeParse(meta[key]);
+      if (!r.success) {
+        throw new InvalidBrainMetaError(key, r.error.issues.map((i) => i.message).join('; '));
+      }
+      next = { ...next, [key]: r.data };
+    }
+    this.meta = next;
+  }
+  /** Demo prompts advertised after install ("now ask it this"); the manifest's suggestedPrompts. */
+  setSuggestedPrompts(prompts: string[]): void {
+    this.suggestedPrompts = ManifestSchema.shape.suggestedPrompts.unwrap().parse(prompts);
+  }
+  getSuggestedPrompts(): string[] | undefined {
+    return this.suggestedPrompts;
   }
   setTargets(targets: string[]): void {
     this.targets = [...targets];
@@ -115,8 +173,12 @@ export class Brain {
     return this.profile;
   }
 
+  /** Add one memory item; throws DuplicateMemoryIdError if its id is already used. */
   addMemory(item: unknown): void {
     const parsed = MemoryItem.parse(item);
+    if (this.listMemory().some((m) => m.id === parsed.id)) {
+      throw new DuplicateMemoryIdError(parsed.id);
+    }
     if (parsed.kind === 'episodic') this.episodic.push(parsed);
     else this.facts.push(parsed);
   }
@@ -129,7 +191,7 @@ export class Brain {
     this.episodic = this.episodic.filter((f) => f.id !== id);
   }
 
-  addSkill(name: string, skillMd: string, files?: Record<string, string>): void {
+  addSkill(name: string, skillMd: string, files?: SkillFiles): void {
     this.skillMap.set(name, files ? { skillMd, files } : { skillMd });
   }
   removeSkill(name: string): void {
@@ -171,8 +233,13 @@ export class Brain {
   setRuntime(cfg: unknown): void {
     this.runtimeCfg = RuntimeConfig.parse(cfg);
   }
+  /**
+   * Declare permissions on top of what is derived from content (see derivePermissions): they can
+   * widen the scope (filesystem, notes, extra endpoints, spawnsProcesses, fallback autonomy) but
+   * never hide what the brain's MCP servers / runtime actually need.
+   */
   setPermissions(p: Partial<PermissionScope>): void {
-    this.permissionsOverride = p;
+    this.declaredPermissions = p;
   }
 
   addCredential(req: unknown): void {
@@ -205,7 +272,11 @@ export class Brain {
   private syncedCredentials(): TCredentialRequirement[] {
     return this.credentialList.map((c) => {
       const consumers = new Set(c.consumedBy);
-      for (const s of this.mcp) if (s.auth.credentialRef === c.ref) consumers.add(`mcp:${s.id}`);
+      // A server consumes a ref via auth or a ${credentialRef:…} placeholder (stdio env, headers, args).
+      const placeholder = `\${credentialRef:${c.ref}}`;
+      for (const s of this.mcp)
+        if (s.auth.credentialRef === c.ref || JSON.stringify(s).includes(placeholder))
+          consumers.add(`mcp:${s.id}`);
       for (const ch of this.channelList)
         if (ch.credentialRef === c.ref) consumers.add(`channel:${ch.id}`);
       return { ...c, consumedBy: [...consumers].sort() };
@@ -228,7 +299,7 @@ export class Brain {
       this.mcp,
       this.channelList,
       this.runtimeCfg,
-      this.permissionsOverride,
+      this.declaredPermissions,
     );
     return {
       specVersion: '0.1',
@@ -243,11 +314,15 @@ export class Brain {
       credentials: this.syncedCredentials(),
       permissions,
       compatibility: { targets: [...this.targets] },
+      ...(this.suggestedPrompts !== undefined
+        ? { suggestedPrompts: [...this.suggestedPrompts] }
+        : {}),
     };
   }
 
   toBundle(): Bundle {
     const b = Bundle.empty();
+    for (const [path, bytes] of this.extraFiles) b.set(path, bytes);
     if (this.readmeMd !== undefined) b.set(PATHS.readme, this.readmeMd);
     if (this.avatarFile) b.set(this.avatarFile.path, this.avatarFile.bytes);
     if (this.personaMd !== undefined) b.set(PATHS.persona, this.personaMd);
@@ -283,6 +358,12 @@ export class Brain {
     return validateBundle(this.toBundle());
   }
 
+  /**
+   * Load an editable Brain from a bundle. Round-trips losslessly: files the model has no field
+   * for are kept byte-exact, skill files keep their raw bytes, and permissions stay derived from
+   * content (only what the manifest declares beyond that is kept). The signature is dropped —
+   * an edited brain must be re-signed. Throws DuplicateMemoryIdError on repeated memory ids.
+   */
   static fromBundle(bundle: Bundle): Brain {
     const m = bundle.manifest();
     const brain = new Brain({
@@ -307,14 +388,20 @@ export class Brain {
     if (profile !== undefined) brain.profile = profile;
     brain.facts = bundle.memoryFacts();
     brain.episodic = bundle.memoryEpisodic();
+    const memoryIds = new Set<string>();
+    for (const item of brain.listMemory()) {
+      if (memoryIds.has(item.id)) throw new DuplicateMemoryIdError(item.id);
+      memoryIds.add(item.id);
+    }
+    const consumed = new Set<string>([...Object.values(PATHS), ...(avatar ? [avatar.path] : [])]);
     for (const name of bundle.skillNames()) {
       const skillMd = bundle.getText(`skills/${name}/SKILL.md`) ?? '';
       const prefix = `skills/${name}/`;
-      const files: Record<string, string> = {};
-      for (const p of bundle.list()) {
-        if (p.startsWith(prefix) && p !== `${prefix}SKILL.md`) {
-          files[p.slice(prefix.length)] = bundle.getText(p) ?? '';
-        }
+      const files: SkillFiles = {};
+      for (const [p, bytes] of bundle.entries()) {
+        if (!p.startsWith(prefix)) continue;
+        consumed.add(p);
+        if (p !== `${prefix}SKILL.md`) files[p.slice(prefix.length)] = bytes;
       }
       brain.skillMap.set(name, Object.keys(files).length ? { skillMd, files } : { skillMd });
     }
@@ -325,7 +412,26 @@ export class Brain {
     const rt = bundle.runtime();
     if (rt !== undefined) brain.runtimeCfg = rt;
     brain.credentialList = [...m.credentials];
-    brain.permissionsOverride = m.permissions;
+    if (m.suggestedPrompts !== undefined) brain.suggestedPrompts = [...m.suggestedPrompts];
+    // Keep only what the manifest declares BEYOND what its content derives, so permissions keep
+    // tracking later edits (a new stdio server, a runtime autonomy change, a removed endpoint).
+    const derived = derivePermissions(brain.mcp, brain.channelList, undefined, undefined);
+    brain.declaredPermissions = {
+      filesystem: m.permissions.filesystem,
+      network: {
+        endpoints: m.permissions.network.endpoints.filter(
+          (e) => !derived.network.endpoints.includes(e),
+        ),
+      },
+      spawnsProcesses: m.permissions.spawnsProcesses && !derived.spawnsProcesses,
+      ...(rt?.autonomy === undefined ? { autonomy: m.permissions.autonomy } : {}),
+      ...(m.permissions.notes !== undefined ? { notes: m.permissions.notes } : {}),
+    };
+    for (const [p, bytes] of bundle.entries()) {
+      // tasks/*.json are all read by bundle.tasks() and re-emitted from the task list.
+      if (consumed.has(p) || (p.startsWith('tasks/') && p.endsWith('.json'))) continue;
+      brain.extraFiles.set(p, bytes);
+    }
     return brain;
   }
 }

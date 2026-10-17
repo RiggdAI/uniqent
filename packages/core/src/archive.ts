@@ -1,8 +1,8 @@
 import { gzipSync, gunzipSync } from 'node:zlib';
-import { mkdir, readFile, readdir, writeFile, stat } from 'node:fs/promises';
+import { mkdir, readFile, readdir, writeFile, lstat } from 'node:fs/promises';
 import { dirname, join, relative, sep } from 'node:path';
-import { pack as tarPack, extract as tarExtract } from 'tar-stream';
-import { Bundle, PATHS } from './bundle.js';
+import { pack as tarPack, extract as tarExtract, type Headers } from 'tar-stream';
+import { Bundle, PATHS, assertBundlePath } from './bundle.js';
 import { assertValid } from './validate.js';
 import { scanForSecrets } from './secret-scan.js';
 import { SecretScanError, BundleFormatError } from './errors.js';
@@ -54,20 +54,82 @@ export async function pack(bundle: Bundle, opts: PackOptions = {}): Promise<Uint
   return new Uint8Array(gzipSync(Buffer.concat(chunks)));
 }
 
+/** Upper bound on the uncompressed tar size accepted by unpack (gzip-bomb guard). */
+export const MAX_UNPACKED_BYTES = 64 * 1024 * 1024;
+/** Upper bound on the number of tar entries accepted by unpack. */
+export const MAX_ARCHIVE_ENTRIES = 10_000;
+
+function gunzipBounded(input: Uint8Array): Buffer {
+  try {
+    return gunzipSync(Buffer.from(input), { maxOutputLength: MAX_UNPACKED_BYTES });
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'ERR_BUFFER_TOO_LARGE') {
+      throw new BundleFormatError(
+        `archive expands beyond ${MAX_UNPACKED_BYTES} bytes uncompressed (MAX_UNPACKED_BYTES); refusing to unpack`,
+      );
+    }
+    throw e;
+  }
+}
+
+/** Throw BundleFormatError unless the entry is a new regular file (or a directory) at a safe path. */
+function assertArchiveEntry(
+  header: Headers,
+  entryNumber: number,
+  seen: ReadonlyMap<string, Uint8Array>,
+): void {
+  if (entryNumber > MAX_ARCHIVE_ENTRIES) {
+    throw new BundleFormatError(
+      `archive has more than ${MAX_ARCHIVE_ENTRIES} entries (MAX_ARCHIVE_ENTRIES)`,
+    );
+  }
+  if (header.type === 'directory') {
+    assertBundlePath(header.name.replace(/\/$/, ''));
+    return;
+  }
+  if (header.type !== 'file') {
+    throw new BundleFormatError(
+      `archive entry ${JSON.stringify(header.name)} has unsupported type "${header.type}" (only regular files and directories are allowed)`,
+    );
+  }
+  assertBundlePath(header.name);
+  if (seen.has(header.name)) {
+    throw new BundleFormatError(`archive has duplicate entry ${JSON.stringify(header.name)}`);
+  }
+}
+
+/**
+ * Read a .uniqent archive. Fails closed on anything that is not a plain, uniquely named file with a
+ * safe relative path (see assertBundlePath): links and special entries, duplicates, oversized or
+ * over-populated archives are all malformed bundles. Directory entries are validated and ignored.
+ */
 export async function unpack(input: Uint8Array): Promise<Bundle> {
-  const tarBytes = gunzipSync(Buffer.from(input));
+  const tarBytes = gunzipBounded(input);
   const files = new Map<string, Uint8Array>();
   const extract = tarExtract();
+  let entryCount = 0;
 
   const done = new Promise<void>((resolve, reject) => {
     extract.on('entry', (header, stream, next) => {
+      stream.on('error', reject);
+      entryCount += 1;
+      try {
+        assertArchiveEntry(header, entryCount, files);
+      } catch (e) {
+        extract.destroy(e as Error);
+        return;
+      }
+      if (header.type === 'directory') {
+        stream.on('end', next);
+        stream.resume();
+        return;
+      }
       const parts: Buffer[] = [];
       stream.on('data', (c: Buffer) => parts.push(c));
       stream.on('end', () => {
-        if (header.type === 'file') files.set(header.name, new Uint8Array(Buffer.concat(parts)));
+        files.set(header.name, new Uint8Array(Buffer.concat(parts)));
         next();
       });
-      stream.on('error', reject);
     });
     extract.on('finish', resolve);
     extract.on('error', reject);
@@ -95,9 +157,13 @@ export async function readDir(dir: string): Promise<Bundle> {
   async function walk(current: string): Promise<void> {
     for (const name of await readdir(current)) {
       const full = join(current, name);
-      const s = await stat(full);
+      const s = await lstat(full);
       if (s.isDirectory()) {
         await walk(full);
+      } else if (!s.isFile()) {
+        throw new BundleFormatError(
+          `${full} is not a regular file or directory (symlinks and special files are not allowed in a bundle)`,
+        );
       } else {
         const rel = relative(dir, full).split(sep).join('/');
         files.set(rel, new Uint8Array(await readFile(full)));

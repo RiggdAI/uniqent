@@ -50,6 +50,16 @@ export function MemoryBrain({ open, onClose }: { open: boolean; onClose: () => v
   const fg3dRef = useRef<ForceGraphMethods3D | undefined>(undefined);
   const tiltedRef = useRef(false); // one-time 3/4 camera tilt per 3D session
 
+  // Escape closes the modal, like the close button.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+
   // Re-arm the 3D tilt whenever the user switches into 3D.
   useEffect(() => {
     if (mode === '3d') tiltedRef.current = false;
@@ -353,6 +363,7 @@ export function MemoryBrain({ open, onClose }: { open: boolean; onClose: () => v
           <Legend color="#f59e0b" label="decision" />
           <Legend color="#34d399" label="preference" />
           <Legend color="#a78bfa" label="milestone" />
+          <Legend color="#94a3b8" label="episodic" />
           <span className="ml-auto">
             {mode === '2d'
               ? 'scroll = zoom · drag = pan · click = focus · 3D to rotate'

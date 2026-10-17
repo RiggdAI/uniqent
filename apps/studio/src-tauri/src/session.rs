@@ -49,6 +49,109 @@ pub fn validate_manifest(name: &str, version: &str) -> Value {
     })
 }
 
+/// The current UTC time as an ISO-8601 timestamp with millisecond precision, the same shape as
+/// JS `new Date().toISOString()` (e.g. `2026-09-27T12:00:00.000Z`).
+fn now_iso() -> String {
+    let t = time::OffsetDateTime::now_utc();
+    format!(
+        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}Z",
+        t.year(),
+        u8::from(t.month()),
+        t.day(),
+        t.hour(),
+        t.minute(),
+        t.second(),
+        t.millisecond()
+    )
+}
+
+/// The five standard cron fields, in order, with their inclusive numeric bounds.
+const CRON_FIELDS: [(&str, u32, u32); 5] = [
+    ("minute", 0, 59),
+    ("hour", 0, 23),
+    ("day-of-month", 1, 31),
+    ("month", 1, 12),
+    ("day-of-week", 0, 7),
+];
+
+/// Explain why `expr` is not a standard 5-field cron expression (numbers, ranges, lists, steps,
+/// `*`), or `None` when it is valid. Mirrors `cronProblem` in apps/studio/src/server/cron.ts.
+pub fn cron_problem(expr: &str) -> Option<String> {
+    let parts: Vec<&str> = expr.split_whitespace().collect();
+    if parts.len() != CRON_FIELDS.len() {
+        return Some(format!(
+            "expected 5 space-separated fields (minute hour day-of-month month day-of-week), got {}",
+            parts.len()
+        ));
+    }
+    let item_re = Regex::new(r"^(?:\*|(\d+)(?:-(\d+))?)(?:/(\d+))?$").expect("cron regex");
+    for (value, (name, min, max)) in parts.iter().zip(CRON_FIELDS) {
+        for item in value.split(',') {
+            let Some(caps) = item_re.captures(item) else {
+                return Some(format!(
+                    "{name} field \"{value}\" must be *, a number, a range, a list or a step"
+                ));
+            };
+            let num = |i: usize| {
+                caps.get(i)
+                    .map(|m| m.as_str().parse::<u64>().unwrap_or(u64::MAX))
+            };
+            let (lo, hi, step) = (num(1), num(2), num(3));
+            for n in [lo, hi].into_iter().flatten() {
+                if n < u64::from(min) || n > u64::from(max) {
+                    let shown = if n == u64::MAX {
+                        "(too large)".to_string()
+                    } else {
+                        n.to_string()
+                    };
+                    return Some(format!("{name} value {shown} is out of range {min}-{max}"));
+                }
+            }
+            if let (Some(lo), Some(hi)) = (lo, hi) {
+                if lo > hi {
+                    return Some(format!("{name} range \"{item}\" runs backwards"));
+                }
+            }
+            if step == Some(0) {
+                return Some(format!("{name} step must be at least 1"));
+            }
+        }
+    }
+    None
+}
+
+/// Validate an optional memory importance (a number in 0..=1); `field` names it in errors.
+fn validate_importance(value: Option<&Value>, field: &str) -> Result<Option<Value>, String> {
+    match value {
+        None | Some(Value::Null) => Ok(None),
+        Some(v) => match v.as_f64() {
+            Some(n) if (0.0..=1.0).contains(&n) => Ok(Some(v.clone())),
+            _ => Err(format!("{field} must be a number between 0 and 1, got {v}")),
+        },
+    }
+}
+
+/// Validate an optional memory visibility ("shareable" | "personal"); `field` names it in errors.
+fn validate_visibility(value: Option<&Value>, field: &str) -> Result<Option<&'static str>, String> {
+    match value {
+        None | Some(Value::Null) => Ok(None),
+        Some(v) => match v.as_str() {
+            Some("shareable") => Ok(Some("shareable")),
+            Some("personal") => Ok(Some("personal")),
+            _ => Err(format!(
+                "{field} must be \"shareable\" or \"personal\", got {v}"
+            )),
+        },
+    }
+}
+
+/// Error for a skill name that is not slug-safe (it becomes a directory name on install).
+fn invalid_skill_name(name: &str) -> String {
+    format!(
+        "invalid skill name \"{name}\": must be slug-safe (lowercase letters, digits, hyphens; start with a letter or digit), e.g. \"release-notes\""
+    )
+}
+
 /// Extract host from a URL string (handles https:// and http://).
 fn extract_host(url: &str) -> Option<String> {
     let without_scheme = url
@@ -229,17 +332,90 @@ impl Session {
         Ok(())
     }
 
-    /// Remove MCP server by id.
-    pub fn remove_mcp(&mut self, id: &str) {
-        self.mcp.retain(|s| s["id"].as_str().unwrap_or("") != id);
-        // Note: credentials are NOT removed when mcp is removed (consumedBy is recomputed dynamically)
+    /// Components currently using credential `cred_ref`: MCP servers whose auth references it
+    /// and channels whose credentialRef names it (e.g. `["channel:slack", "mcp:github"]`).
+    fn live_consumers(&self, cred_ref: &str) -> Vec<String> {
+        let mut consumers: Vec<String> = Vec::new();
+        for server in &self.mcp {
+            if server["auth"]["credentialRef"].as_str() == Some(cred_ref) {
+                if let Some(sid) = server["id"].as_str() {
+                    consumers.push(format!("mcp:{sid}"));
+                }
+            }
+        }
+        for channel in &self.channels {
+            if channel["credentialRef"].as_str() == Some(cred_ref) {
+                if let Some(cid) = channel["id"].as_str() {
+                    consumers.push(format!("channel:{cid}"));
+                }
+            }
+        }
+        consumers
     }
 
-    /// Add custom skill by name + markdown content.
-    pub fn add_custom_skill(&mut self, name: &str, skill_md: &str) {
-        // Dedup by name: remove old, append new
-        self.skills.retain(|(n, _)| n != name);
+    /// Every consumer of a credential: its declared consumedBy plus live references, sorted.
+    fn consumers_of(&self, cred: &Value) -> Vec<String> {
+        let mut all: Vec<String> = cred["consumedBy"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default();
+        all.extend(self.live_consumers(cred["ref"].as_str().unwrap_or("")));
+        all.sort();
+        all.dedup();
+        all
+    }
+
+    /// Remove a component via `remove` and release its credentials: `consumer` is dropped from
+    /// every credential it used, and a credential left with no consumer is removed. Mirrors
+    /// `releaseCredentials` in apps/studio/src/server/session.ts.
+    fn remove_consumer(&mut self, consumer: &str, remove: impl FnOnce(&mut Self)) {
+        let before: Vec<(Value, Vec<String>)> = self
+            .credentials
+            .iter()
+            .map(|c| (c.clone(), self.consumers_of(c)))
+            .collect();
+        remove(self);
+        for (cred, consumers) in before {
+            if !consumers.iter().any(|c| c == consumer) {
+                continue;
+            }
+            let remaining: Vec<String> = consumers.into_iter().filter(|c| c != consumer).collect();
+            let cred_ref = cred["ref"].as_str().unwrap_or("").to_string();
+            if remaining.is_empty() {
+                self.credentials
+                    .retain(|c| c["ref"].as_str().unwrap_or("") != cred_ref);
+            } else {
+                let mut kept = cred;
+                kept["consumedBy"] = json!(remaining);
+                self.add_credential(kept);
+            }
+        }
+    }
+
+    /// Remove MCP server by id, dropping credentials only it used.
+    pub fn remove_mcp(&mut self, id: &str) {
+        self.remove_consumer(&format!("mcp:{id}"), |s| {
+            s.mcp.retain(|srv| srv["id"].as_str().unwrap_or("") != id)
+        });
+    }
+
+    /// Add custom skill by name + markdown content. The name must be slug-safe and unused:
+    /// an existing skill is never overwritten (remove it first to replace it).
+    pub fn add_custom_skill(&mut self, name: &str, skill_md: &str) -> Result<(), String> {
+        if !is_valid_slug(name) {
+            return Err(invalid_skill_name(name));
+        }
+        if self.skills.iter().any(|(n, _)| n == name) {
+            return Err(format!(
+                "a skill named \"{name}\" is already in this brain; remove it first to replace it"
+            ));
+        }
         self.skills.push((name.to_string(), skill_md.to_string()));
+        Ok(())
     }
 
     /// Remove skill by name.
@@ -269,24 +445,56 @@ impl Session {
         Ok(())
     }
 
-    /// Remove channel by id.
+    /// Remove channel by id, dropping credentials only it used.
     pub fn remove_channel(&mut self, id: &str) {
-        self.channels
-            .retain(|c| c["id"].as_str().unwrap_or("") != id);
+        self.remove_consumer(&format!("channel:{id}"), |s| {
+            s.channels.retain(|c| c["id"].as_str().unwrap_or("") != id)
+        });
     }
 
-    /// Add a task. Input may have: name, cron, event, prompt, enabled.
+    /// Add a task. Input may have: name, triggerType (schedule|event|manual, default schedule),
+    /// cron (required + validated for schedule), event (required for event), prompt, enabled.
+    /// Mirrors the TS `/api/task/add` validation; nothing changes on error.
     pub fn add_task(&mut self, input: Value) -> Result<(), String> {
+        let trigger_type = match input.get("triggerType") {
+            None | Some(Value::Null) => "schedule",
+            Some(v) => v.as_str().unwrap_or(""),
+        };
+        let trigger = match trigger_type {
+            "schedule" => {
+                let cron = input["cron"].as_str().unwrap_or("").trim().to_string();
+                let problem = if cron.is_empty() {
+                    Some("a cron expression is required".to_string())
+                } else {
+                    cron_problem(&cron)
+                };
+                if let Some(p) = problem {
+                    return Err(format!(
+                        "invalid cron \"{cron}\": {p} — e.g. \"0 9 * * *\" (daily at 09:00)"
+                    ));
+                }
+                json!({"type": "schedule", "cron": cron})
+            }
+            "event" => {
+                let event = input["event"].as_str().unwrap_or("").trim().to_string();
+                if event.is_empty() {
+                    return Err("an event trigger needs an event name".into());
+                }
+                json!({"type": "event", "event": event})
+            }
+            "manual" => json!({"type": "manual"}),
+            other => {
+                return Err(format!(
+                    "invalid triggerType \"{other}\": expected schedule, event or manual"
+                ))
+            }
+        };
+
         self.task_counter += 1;
         let id = format!("task-{}", self.task_counter);
-        let name = input["name"].as_str().unwrap_or(&id).to_string();
-
-        let trigger = if let Some(cron) = input["cron"].as_str() {
-            json!({"type": "schedule", "cron": cron})
-        } else if let Some(event) = input["event"].as_str() {
-            json!({"type": "event", "event": event})
-        } else {
-            json!({"type": "manual"})
+        let name = match input["name"].as_str().map(str::trim) {
+            Some(n) if !n.is_empty() => n.to_string(),
+            _ => id.clone(),
         };
 
         let enabled = input["enabled"].as_bool().unwrap_or(true);
@@ -314,44 +522,76 @@ impl Session {
         self.tasks.retain(|t| t["id"].as_str().unwrap_or("") != id);
     }
 
-    /// Add a fact.
+    /// The next generated fact id (`fact-N`) that no existing fact uses (e.g. an imported id).
+    fn next_fact_id(&mut self) -> String {
+        loop {
+            self.fact_counter += 1;
+            let id = format!("fact-{}", self.fact_counter);
+            if !self
+                .facts
+                .iter()
+                .any(|f| f["id"].as_str() == Some(id.as_str()))
+            {
+                return id;
+            }
+        }
+    }
+
+    /// Add a fact: non-empty text, optional importance in 0..=1, optional visibility.
     pub fn add_fact(&mut self, input: Value) -> Result<(), String> {
-        self.fact_counter += 1;
-        let id = format!("fact-{}", self.fact_counter);
+        let text = input["text"].as_str().unwrap_or("");
+        if text.is_empty() {
+            return Err("memory text is required".into());
+        }
+        let importance = validate_importance(input.get("importance"), "importance")?;
+        let visibility = validate_visibility(input.get("visibility"), "visibility")?;
 
         let mut fact = json!({
-            "id": id,
+            "id": self.next_fact_id(),
             "kind": "fact",
-            "text": input["text"],
-            "createdAt": "1970-01-01T00:00:00.000Z"
+            "text": text,
+            "createdAt": now_iso()
         });
-
-        if let Some(importance) = input.get("importance") {
-            fact["importance"] = importance.clone();
+        if let Some(i) = importance {
+            fact["importance"] = i;
         }
-        if let Some(visibility) = input.get("visibility") {
-            fact["visibility"] = visibility.clone();
+        if let Some(v) = visibility {
+            fact["visibility"] = json!(v);
         }
 
         self.facts.push(fact);
         Ok(())
     }
 
-    /// Set profile. Cleans empty string values, stores if non-empty.
-    pub fn set_profile(&mut self, profile: Value) {
-        if let Value::Object(map) = profile {
-            let cleaned: Map<String, Value> = map
-                .into_iter()
-                .filter(|(_, v)| v.as_str() != Some(""))
-                .collect();
-            if cleaned.is_empty() {
-                self.profile = None;
-            } else {
-                self.profile = Some(Value::Object(cleaned));
+    /// Set profile: an object of text fields with distinct (trimmed) names. Empty values are
+    /// dropped; an empty profile clears it. Errors (changing nothing) on any other shape.
+    pub fn set_profile(&mut self, profile: Value) -> Result<(), String> {
+        let Value::Object(map) = profile else {
+            return Err(format!(
+                "profile must be an object of text fields, got {profile}"
+            ));
+        };
+        let mut seen: Vec<String> = Vec::new();
+        for (k, v) in &map {
+            if !v.is_string() {
+                return Err(format!("profile field \"{k}\" must be text, got {v}"));
             }
-        } else {
-            self.profile = None;
+            let key = k.trim().to_string();
+            if seen.contains(&key) {
+                return Err(format!("duplicate profile field \"{key}\""));
+            }
+            seen.push(key);
         }
+        let cleaned: Map<String, Value> = map
+            .into_iter()
+            .filter(|(_, v)| v.as_str() != Some(""))
+            .collect();
+        self.profile = if cleaned.is_empty() {
+            None
+        } else {
+            Some(Value::Object(cleaned))
+        };
+        Ok(())
     }
 
     /// Get profile. Returns {} if none set.
@@ -395,27 +635,7 @@ impl Session {
             .credentials
             .iter()
             .map(|cred| {
-                let cred_ref = cred["ref"].as_str().unwrap_or("");
-                let mut consumed_by: Vec<String> = Vec::new();
-
-                // Check mcp servers
-                for server in &self.mcp {
-                    if server["auth"]["credentialRef"].as_str() == Some(cred_ref) {
-                        if let Some(sid) = server["id"].as_str() {
-                            consumed_by.push(format!("mcp:{sid}"));
-                        }
-                    }
-                }
-
-                // Check channels
-                for channel in &self.channels {
-                    if channel["credentialRef"].as_str() == Some(cred_ref) {
-                        if let Some(cid) = channel["id"].as_str() {
-                            consumed_by.push(format!("channel:{cid}"));
-                        }
-                    }
-                }
-
+                let mut consumed_by = self.live_consumers(cred["ref"].as_str().unwrap_or(""));
                 consumed_by.sort();
 
                 json!({
@@ -505,17 +725,52 @@ impl Session {
             .expect("catalog.json valid")
     }
 
-    pub fn set_meta(&mut self, meta: Value) {
-        if let Some(name) = meta.get("name").and_then(|v| v.as_str()) {
-            self.name = name.to_string();
+    /// Update brain metadata. Every present field is validated first (like the TS
+    /// `Brain.setMeta`); on the first invalid one this returns an error and changes nothing.
+    pub fn set_meta(&mut self, meta: Value) -> Result<(), String> {
+        let text = |key: &str| -> Result<Option<String>, String> {
+            match meta.get(key) {
+                None => Ok(None),
+                Some(Value::String(v)) => Ok(Some(v.clone())),
+                Some(other) => Err(format!(
+                    "invalid brain meta \"{key}\": expected a string, got {other}"
+                )),
+            }
+        };
+        let name = text("name")?;
+        let display_name = text("displayName")?;
+        let description = text("description")?;
+        let version = text("version")?;
+        if let Some(n) = &name {
+            if !is_valid_slug(n) {
+                return Err(format!(
+                    "invalid brain meta \"name\": must be slug-safe (lowercase letters, digits, hyphens), got \"{n}\""
+                ));
+            }
         }
-        if let Some(desc) = meta.get("description").and_then(|v| v.as_str()) {
-            self.description = desc.to_string();
+        if display_name.as_deref() == Some("") {
+            return Err("invalid brain meta \"displayName\": must not be empty".into());
         }
-        if let Some(ver) = meta.get("version").and_then(|v| v.as_str()) {
-            self.version = ver.to_string();
+        if let Some(v) = &version {
+            if !is_valid_semver(v) {
+                return Err(format!(
+                    "invalid brain meta \"version\": must be a valid semver (e.g. 1.2.3), got \"{v}\""
+                ));
+            }
         }
-        // Note: displayName is NOT updated by set_meta (matches TS behavior)
+        if let Some(n) = name {
+            self.name = n;
+        }
+        if let Some(d) = display_name {
+            self.display_name = d;
+        }
+        if let Some(d) = description {
+            self.description = d;
+        }
+        if let Some(v) = version {
+            self.version = v;
+        }
+        Ok(())
     }
 
     pub fn set_targets(&mut self, targets: Vec<String>) {
@@ -571,22 +826,22 @@ impl Session {
 
     /// Build a Bundle from the current session state.
     /// manifest JSON = the same manifest value state() emits, plus optional files.
-    fn build_bundle(&self) -> Bundle {
+    fn build_bundle(&self) -> Result<Bundle, String> {
         let state = self.state();
         let manifest_value = &state["manifest"];
         let manifest_json =
             serde_json::to_string_pretty(manifest_value).expect("manifest serialises");
 
         let mut bundle = Bundle::default();
-        bundle.set("uniqent.json", manifest_json.into_bytes());
+        bundle.set("uniqent.json", manifest_json.into_bytes())?;
 
         if let Some(readme) = &self.readme {
             if !readme.trim().is_empty() {
-                bundle.set("README.md", readme.as_bytes().to_vec());
+                bundle.set("README.md", readme.as_bytes().to_vec())?;
             }
         }
         if let Some(persona) = &self.persona {
-            bundle.set("identity/persona.md", persona.as_bytes().to_vec());
+            bundle.set("identity/persona.md", persona.as_bytes().to_vec())?;
         }
         if let Some(data_url) = &self.avatar {
             // Parse data:<mime>;base64,<b64> to extract ext + raw bytes
@@ -602,7 +857,7 @@ impl Session {
                                 base64::engine::general_purpose::STANDARD_NO_PAD.decode(b64)
                             })
                         {
-                            bundle.set(&format!("avatar.{ext}"), bytes);
+                            bundle.set(&format!("avatar.{ext}"), bytes)?;
                         }
                     }
                 }
@@ -613,26 +868,26 @@ impl Session {
         if !self.mcp.is_empty() {
             let servers_json = serde_json::to_string_pretty(&json!({"servers": self.mcp}))
                 .expect("mcp serialises");
-            bundle.set("mcp/servers.json", servers_json.into_bytes());
+            bundle.set("mcp/servers.json", servers_json.into_bytes())?;
         }
 
         // Skills
         for (name, md) in &self.skills {
-            bundle.set(&format!("skills/{name}/SKILL.md"), md.as_bytes().to_vec());
+            bundle.set(&format!("skills/{name}/SKILL.md"), md.as_bytes().to_vec())?;
         }
 
         // Channels
         if !self.channels.is_empty() {
             let channels_json = serde_json::to_string_pretty(&json!({"channels": self.channels}))
                 .expect("channels serialises");
-            bundle.set("channels/channels.json", channels_json.into_bytes());
+            bundle.set("channels/channels.json", channels_json.into_bytes())?;
         }
 
         // Tasks
         for task in &self.tasks {
             let id = task["id"].as_str().unwrap_or("task");
             let task_json = serde_json::to_string_pretty(task).expect("task serialises");
-            bundle.set(&format!("tasks/{id}.json"), task_json.into_bytes());
+            bundle.set(&format!("tasks/{id}.json"), task_json.into_bytes())?;
         }
 
         // Facts (JSONL format — each fact on its own line, trailing newline)
@@ -642,16 +897,16 @@ impl Session {
                 facts_jsonl.push_str(&serde_json::to_string(fact).expect("fact serialises"));
                 facts_jsonl.push('\n');
             }
-            bundle.set("memory/facts.jsonl", facts_jsonl.into_bytes());
+            bundle.set("memory/facts.jsonl", facts_jsonl.into_bytes())?;
         }
 
         // Profile
         if let Some(profile) = &self.profile {
             let profile_json = serde_json::to_string_pretty(profile).expect("profile serialises");
-            bundle.set("memory/profile.json", profile_json.into_bytes());
+            bundle.set("memory/profile.json", profile_json.into_bytes())?;
         }
 
-        bundle
+        Ok(bundle)
     }
 
     /// Export the current brain as a signed or unsigned .uniqent bundle.
@@ -663,7 +918,7 @@ impl Session {
         let validation = state["validation"].clone();
         let name = self.name.clone();
 
-        let bundle = self.build_bundle();
+        let bundle = self.build_bundle()?;
 
         let (final_bundle, signed) = if sign_it {
             if self.keypair.is_none() {
@@ -746,42 +1001,76 @@ impl Session {
         use crate::ports::memory::parse_memory_markdown;
 
         if let Some(items) = payload["items"].as_array() {
-            // importItems semantics: text required, kind validated, id preserved or auto-generated
+            // importItems semantics: every item is validated first (text must be a string, kind
+            // known, importance 0..=1, ids unique); blank text is skipped; nothing changes on error.
             let valid_kinds = ["fact", "decision", "preference", "milestone", "episodic"];
-            let mut added = 0;
-            for raw in items.iter() {
-                let text = match raw["text"].as_str() {
-                    Some(t) => t.trim().to_string(),
-                    None => continue,
+            let mut used: Vec<String> = self
+                .facts
+                .iter()
+                .filter_map(|f| f["id"].as_str().map(String::from))
+                .collect();
+            let mut pending: Vec<(Option<String>, Value)> = Vec::new();
+            for (i, raw) in items.iter().enumerate() {
+                let Some(text) = raw["text"].as_str() else {
+                    return Err(format!(
+                        "items[{i}].text must be a string, got {}",
+                        raw["text"]
+                    ));
                 };
+                let text = text.trim().to_string();
+                let kind = match raw.get("kind") {
+                    None | Some(Value::Null) => "fact",
+                    Some(k) => k.as_str().filter(|k| valid_kinds.contains(k)).ok_or_else(|| {
+                        format!(
+                            "items[{i}].kind must be one of fact, decision, preference, milestone, episodic, got {k}"
+                        )
+                    })?,
+                };
+                let importance =
+                    validate_importance(raw.get("importance"), &format!("items[{i}].importance"))?;
+                let visibility =
+                    validate_visibility(raw.get("visibility"), &format!("items[{i}].visibility"))?;
                 if text.is_empty() {
                     continue;
                 }
-                self.fact_counter += 1;
                 let id = raw["id"]
                     .as_str()
                     .filter(|s| !s.is_empty())
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| format!("fact-{}", self.fact_counter));
-                let kind = raw["kind"]
-                    .as_str()
-                    .filter(|k| valid_kinds.contains(k))
-                    .unwrap_or("fact")
-                    .to_string();
+                    .map(String::from);
+                if let Some(id) = &id {
+                    if used.contains(id) {
+                        return Err(format!(
+                            "duplicate memory id \"{id}\": memory item ids must be unique"
+                        ));
+                    }
+                    used.push(id.clone());
+                }
                 let mut fact = json!({
-                    "id": id,
                     "kind": kind,
                     "text": text,
-                    "createdAt": "1970-01-01T00:00:00.000Z"
+                    "createdAt": raw["createdAt"].as_str().map(String::from).unwrap_or_else(now_iso)
                 });
-                if let Some(imp) = raw.get("importance").filter(|v| v.is_number()) {
-                    fact["importance"] = imp.clone();
+                if let Some(imp) = importance {
+                    fact["importance"] = imp;
                 }
-                if raw["visibility"].as_str() == Some("personal") {
+                if visibility == Some("personal") {
                     fact["visibility"] = json!("personal");
                 }
+                pending.push((id, fact));
+            }
+            let added = pending.len();
+            for (id, mut fact) in pending {
+                let id = match id {
+                    Some(id) => id,
+                    None => loop {
+                        let candidate = self.next_fact_id();
+                        if !used.contains(&candidate) {
+                            break candidate;
+                        }
+                    },
+                };
+                fact["id"] = json!(id);
                 self.facts.push(fact);
-                added += 1;
             }
             return Ok(added);
         }
@@ -792,12 +1081,11 @@ impl Session {
             let items = parsed.as_array().cloned().unwrap_or_default();
             let n = items.len();
             for it in items {
-                self.fact_counter += 1;
                 let fact = json!({
-                    "id": format!("fact-{}", self.fact_counter),
+                    "id": self.next_fact_id(),
                     "kind": it["kind"],
                     "text": it["text"],
-                    "createdAt": "1970-01-01T00:00:00.000Z"
+                    "createdAt": now_iso()
                 });
                 self.facts.push(fact);
             }
@@ -813,12 +1101,11 @@ impl Session {
                 .collect();
             let n = lines.len();
             for line in lines {
-                self.fact_counter += 1;
                 let fact = json!({
-                    "id": format!("fact-{}", self.fact_counter),
+                    "id": self.next_fact_id(),
                     "kind": "fact",
                     "text": line,
-                    "createdAt": "1970-01-01T00:00:00.000Z"
+                    "createdAt": now_iso()
                 });
                 self.facts.push(fact);
             }
@@ -871,32 +1158,51 @@ impl Session {
         memory_graph(&Value::Array(input))
     }
 
-    /// Import MCP servers from a JSON array. Each element is normalized individually.
-    /// Returns total server count added.
+    /// Import MCP servers from a JSON array of any shape. Raw server objects are normalized as ONE
+    /// batch so unnamed or alike-named ones get distinct ids (`-2`, `-3`); canonical servers and
+    /// whole config blobs are normalized on their own. Errors, adding nothing, when two imported
+    /// servers still share an id. Mirrors TS `importMcpServers`. Returns the server count.
     pub fn import_mcp_servers(&mut self, servers: Value) -> Result<usize, String> {
         use crate::ports::mcp_normalize::normalize_mcp_config;
         let arr = servers
             .as_array()
             .ok_or_else(|| "servers must be an array".to_string())?;
-        let arr = arr.to_vec();
-        let mut n = 0;
-        for raw in arr {
-            let result = normalize_mcp_config(&raw);
-            let svrs = result["servers"].as_array().cloned().unwrap_or_default();
-            let creds = result["credentials"]
-                .as_array()
-                .cloned()
-                .unwrap_or_default();
-            for s in svrs {
+        let is_raw_server = |s: &Value| {
+            !(s["id"].is_string() && s["transport"].is_string())
+                && s.get("mcpServers").is_none()
+                && s.get("servers").is_none()
+        };
+        let mut results: Vec<Value> = arr
+            .iter()
+            .filter(|s| !is_raw_server(s))
+            .map(normalize_mcp_config)
+            .collect();
+        let raw: Vec<Value> = arr.iter().filter(|s| is_raw_server(s)).cloned().collect();
+        results.push(normalize_mcp_config(&json!({ "servers": raw })));
+
+        let mut ids: Vec<String> = Vec::new();
+        for server in results
+            .iter()
+            .flat_map(|r| r["servers"].as_array().cloned().unwrap_or_default())
+        {
+            let id = server["id"].as_str().unwrap_or("").to_string();
+            if ids.contains(&id) {
+                return Err(format!(
+                    "two imported MCP servers share the id \"{id}\"; give each server a distinct id and import again"
+                ));
+            }
+            ids.push(id);
+        }
+        for r in results {
+            for s in r["servers"].as_array().cloned().unwrap_or_default() {
                 self.mcp
                     .retain(|existing| existing["id"].as_str() != s["id"].as_str());
                 self.mcp.push(s);
-                n += 1;
             }
-            for c in creds {
+            for c in r["credentials"].as_array().cloned().unwrap_or_default() {
                 self.add_credential(c);
             }
         }
-        Ok(n)
+        Ok(ids.len())
     }
 }

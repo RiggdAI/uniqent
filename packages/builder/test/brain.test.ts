@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Brain } from '../src/brain';
+import { Brain, DuplicateMemoryIdError, InvalidBrainMetaError } from '../src/brain';
 import { validateBundle, canonicalDigest, scanForSecrets } from '@uniqent/core';
 
 function baseMeta() {
@@ -107,5 +107,63 @@ describe('Brain', () => {
     b.setAvatar('jpeg', bytes);
     expect(b.toBundle().avatar()?.path).toBe('avatar.jpg');
     expect(() => b.setAvatar('exe', bytes)).toThrow(/unsupported avatar/);
+  });
+
+  it('rejects an invalid setMeta patch before mutating, so the brain stays buildable', () => {
+    const b = Brain.create(baseMeta());
+    expect(() => b.setMeta({ name: 'My Brain' })).toThrow(InvalidBrainMetaError);
+    expect(() => b.setMeta({ version: 'v1' })).toThrow(/"version"/);
+    expect(() => b.setMeta({ displayName: 'Ok', author: { name: '' } })).toThrow(/"author"/);
+    expect(b.toBundle().manifest().displayName).toBe('Demo');
+    b.setMeta({ name: 'renamed', version: '1.2.3' });
+    expect(validateBundle(b.toBundle()).ok).toBe(true);
+  });
+
+  it('round-trips suggestedPrompts, binary skill files and unknown files byte-exact', () => {
+    const b = Brain.create(baseMeta());
+    b.setSuggestedPrompts(['ask me X']);
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0xff, 0xfe, 0x00]);
+    b.addSkill('s', '---\nname: s\ndescription: s\n---\n', { 'icon.png': png });
+    const bundle = b.toBundle();
+    bundle.set('identity/extra.md', 'hi');
+    const round = Brain.fromBundle(bundle).toBundle();
+    expect(round.manifest().suggestedPrompts).toEqual(['ask me X']);
+    expect(round.get('skills/s/icon.png')).toEqual(png);
+    expect(round.getText('identity/extra.md')).toBe('hi');
+    expect(canonicalDigest(round)).toBe(canonicalDigest(bundle));
+  });
+
+  it('re-derives permissions from content after fromBundle', () => {
+    const loaded = Brain.fromBundle(Brain.create(baseMeta()).toBundle());
+    loaded.addMcpServer({
+      id: 'fs',
+      transport: 'stdio',
+      command: 'npx',
+      auth: { type: 'none' },
+      tools: { include: 'all' },
+    });
+    loaded.setRuntime({ autonomy: 'manual' });
+    const perms = loaded.toBundle().manifest().permissions;
+    expect(perms.spawnsProcesses).toBe(true);
+    expect(perms.autonomy).toBe('manual');
+    // Removing the server drops the derived flag again (not frozen from the loaded manifest).
+    const again = Brain.fromBundle(loaded.toBundle());
+    again.removeMcpServer('fs');
+    expect(again.toBundle().manifest().permissions.spawnsProcesses).toBe(false);
+  });
+
+  it('rejects duplicate memory ids on add and on load', () => {
+    const item = { id: 'fact-1', kind: 'fact', text: 'A', createdAt: '2024-01-01T00:00:00Z' };
+    const b = Brain.create(baseMeta());
+    b.addMemory(item);
+    expect(() => b.addMemory({ ...item, kind: 'episodic', text: 'B' })).toThrow(
+      DuplicateMemoryIdError,
+    );
+    const bundle = b.toBundle();
+    bundle.set(
+      'memory/episodic.jsonl',
+      JSON.stringify({ ...item, kind: 'episodic', visibility: 'shareable' }) + '\n',
+    );
+    expect(() => Brain.fromBundle(bundle)).toThrow(DuplicateMemoryIdError);
   });
 });

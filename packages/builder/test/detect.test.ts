@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { detectTarget } from '../src/detect.js';
+import { AmbiguousTargetError, detectTarget } from '../src/detect.js';
 
 let cwd: string;
 let home: string;
@@ -40,8 +40,9 @@ describe('detectTarget', () => {
     });
   });
 
-  it('detects hermes from a hermes.json', async () => {
-    await writeFile(join(cwd, 'hermes.json'), '{}');
+  it('detects hermes from a native HERMES_HOME layout in cwd', async () => {
+    await writeFile(join(cwd, 'config.yaml'), 'model: x\n');
+    await writeFile(join(cwd, 'SOUL.md'), 'soul');
     expect(await detectTarget({ cwd, home, env: {} })).toEqual({ id: 'hermes', configRoot: cwd });
   });
 
@@ -49,9 +50,61 @@ describe('detectTarget', () => {
     expect(await detectTarget({ cwd, home, env: {} })).toBeNull();
   });
 
-  it('prefers claude-code over hermes when both markers exist', async () => {
+  it('throws AmbiguousTargetError when several project markers exist', async () => {
     await mkdir(join(cwd, '.claude'));
-    await writeFile(join(cwd, 'hermes.json'), '{}');
-    expect((await detectTarget({ cwd, home, env: {} }))!.id).toBe('claude-code');
+    await writeFile(join(cwd, 'openclaw.json'), '{}');
+    await expect(detectTarget({ cwd, home, env: {} })).rejects.toThrow(AmbiguousTargetError);
+  });
+
+  it('project markers beat a user-level ~/.claude', async () => {
+    await mkdir(join(home, '.claude'));
+    await writeFile(join(cwd, 'config.yaml'), 'model: x\n');
+    await writeFile(join(cwd, 'SOUL.md'), 'soul');
+    expect(await detectTarget({ cwd, home, env: {} })).toEqual({ id: 'hermes', configRoot: cwd });
+  });
+
+  it('detects claude-code from a project .mcp.json', async () => {
+    await writeFile(join(cwd, '.mcp.json'), '{}');
+    expect(await detectTarget({ cwd, home, env: {} })).toEqual({
+      id: 'claude-code',
+      configRoot: cwd,
+    });
+  });
+
+  it('installs hermes into ~/.hermes, never $HOME itself', async () => {
+    await mkdir(join(home, '.hermes'));
+    expect(await detectTarget({ cwd, home, env: {} })).toEqual({
+      id: 'hermes',
+      configRoot: join(home, '.hermes'),
+    });
+  });
+
+  it('prefers HERMES_HOME over ~/.hermes', async () => {
+    await mkdir(join(home, '.hermes'));
+    expect(await detectTarget({ cwd, home, env: { HERMES_HOME: '/tmp/hh' } })).toEqual({
+      id: 'hermes',
+      configRoot: '/tmp/hh',
+    });
+  });
+
+  it('detects openclaw from the default ~/.openclaw/openclaw.json', async () => {
+    await mkdir(join(home, '.openclaw'));
+    await writeFile(join(home, '.openclaw', 'openclaw.json'), '{}');
+    expect(await detectTarget({ cwd, home, env: {} })).toEqual({
+      id: 'openclaw',
+      configRoot: join(home, '.openclaw'),
+    });
+  });
+
+  it('throws AmbiguousTargetError listing candidates when several user-level installs exist', async () => {
+    await mkdir(join(home, '.claude'));
+    await mkdir(join(home, '.hermes'));
+    const err = await detectTarget({ cwd, home, env: {} }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(AmbiguousTargetError);
+    expect((err as AmbiguousTargetError).candidates.map((c) => c.id)).toEqual([
+      'claude-code',
+      'hermes',
+    ]);
+    expect((err as Error).message).toMatch(/--target/);
   });
 });

@@ -4,7 +4,7 @@ use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 
-use super::bundle::Bundle;
+use super::bundle::{assert_bundle_path, Bundle};
 use super::secret_scan::{format_scan_error, scan_for_secrets};
 
 /// tar+gzip, mirroring packages/core/src/archive.ts (sorted entries, mtime 0, mode 0644).
@@ -38,24 +38,55 @@ pub fn pack(bundle: &Bundle) -> Result<Vec<u8>, String> {
     gz.finish().map_err(|e| e.to_string())
 }
 
+/// Upper bound on the uncompressed tar size accepted by unpack (gzip-bomb guard).
+pub const MAX_UNPACKED_BYTES: u64 = 64 * 1024 * 1024;
+/// Upper bound on the number of tar entries accepted by unpack.
+pub const MAX_ARCHIVE_ENTRIES: usize = 10_000;
+
+/// Read a .uniqent archive. Fails closed, like the TS core `unpack`: only regular files and
+/// directories are allowed (no links or special entries), every path must pass
+/// `assert_bundle_path`, names must be unique, and the archive must stay within
+/// MAX_UNPACKED_BYTES uncompressed and MAX_ARCHIVE_ENTRIES entries. Directories are ignored.
 pub fn unpack(input: &[u8]) -> Result<Bundle, String> {
-    let mut archive = tar::Archive::new(GzDecoder::new(input));
+    let mut tar_bytes = Vec::new();
+    GzDecoder::new(input)
+        .take(MAX_UNPACKED_BYTES + 1)
+        .read_to_end(&mut tar_bytes)
+        .map_err(|e| format!("archive is not valid gzip: {e}"))?;
+    if tar_bytes.len() as u64 > MAX_UNPACKED_BYTES {
+        return Err(format!(
+            "archive expands beyond {MAX_UNPACKED_BYTES} bytes uncompressed (MAX_UNPACKED_BYTES); refusing to unpack"
+        ));
+    }
+    let mut archive = tar::Archive::new(tar_bytes.as_slice());
     let mut files = std::collections::BTreeMap::new();
-    for entry in archive.entries().map_err(|e| e.to_string())? {
+    for (i, entry) in archive.entries().map_err(|e| e.to_string())?.enumerate() {
+        if i >= MAX_ARCHIVE_ENTRIES {
+            return Err(format!(
+                "archive has more than {MAX_ARCHIVE_ENTRIES} entries (MAX_ARCHIVE_ENTRIES)"
+            ));
+        }
         let mut entry = entry.map_err(|e| e.to_string())?;
-        if !entry.header().entry_type().is_file() {
+        let raw = entry.path_bytes().into_owned();
+        let path = String::from_utf8(raw)
+            .map_err(|e| format!("archive entry name is not UTF-8: {:?}", e.as_bytes()))?;
+        let kind = entry.header().entry_type();
+        if kind.is_dir() {
+            assert_bundle_path(path.strip_suffix('/').unwrap_or(&path))?;
             continue;
         }
-        let path = entry
-            .path()
-            .map_err(|e| e.to_string())?
-            .to_string_lossy()
-            .replace('\\', "/");
-        // Normalize any ./-prefixed paths produced by some tar writers
-        let path = path.strip_prefix("./").unwrap_or(&path).to_string();
+        if !kind.is_file() {
+            return Err(format!(
+                "archive entry {path:?} has unsupported type {kind:?} (only regular files and directories are allowed)"
+            ));
+        }
+        assert_bundle_path(&path)?;
+        if files.contains_key(&path) {
+            return Err(format!("archive has duplicate entry {path:?}"));
+        }
         let mut bytes = Vec::new();
         entry.read_to_end(&mut bytes).map_err(|e| e.to_string())?;
         files.insert(path, bytes);
     }
-    Ok(Bundle::from_files(files))
+    Bundle::from_files(files)
 }

@@ -6,18 +6,22 @@ Part of **[Uniqent](https://github.com/RiggdAI/uniqent)** — _any brain, any ag
 
 ## What it does
 
-Translates a canonical `.uniqent` bundle into Hermes's native layout:
+Translates a canonical `.uniqent` bundle into a Hermes Agent home. `root` is **`$HERMES_HOME`**
+(normally `~/.hermes`); existing files are merged, never wiped.
 
-| Bundle component               | Hermes output            | Notes                                                                            |
-| ------------------------------ | ------------------------ | -------------------------------------------------------------------------------- |
-| persona                        | `SOUL.md`                | Policies appended under `## Policies`                                            |
-| memory facts                   | `MEMORY.md`              | Bounded to ~2200 chars; sorted by `importance` (desc), surplus facts **dropped** |
-| user profile                   | `USER.md`                | Bounded to ~1375 chars; truncated at the field boundary                          |
-| skills                         | `skills/<name>/SKILL.md` | Copied verbatim                                                                  |
-| MCP servers + channels + tasks | `hermes.json`            | Credential values stored only in `.env`; config holds `${ENV_VAR}` refs          |
-| resolved credentials           | `.env`                   | Written at apply time; never travels in the bundle                               |
+| Bundle component                | Hermes output                                 | Notes                                                                                                 |
+| ------------------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| persona (+ policies)            | `SOUL.md`                                     | Policies appended under `## Policies`                                                                 |
+| memory facts                    | `memories/MEMORY.md`                          | `§`-delimited entries, prioritized by `importance`, bounded; existing entries kept and deduped        |
+| user profile                    | `memories/USER.md`                            | One `key: value` entry per field, bounded; existing entries kept and deduped                          |
+| skills                          | `skills/<name>/…`                             | Copied verbatim; paths are confined to `skills/`                                                      |
+| MCP servers                     | `config.yaml` → `mcp_servers.<id>`            | Merged with the `yaml` Document API (other keys + comments survive); secrets only as `${ENV}` refs    |
+| channels                        | `.env` → `TELEGRAM_/DISCORD_/SLACK_BOT_TOKEN` | The vars Hermes' gateway reads; other kinds (WhatsApp, SMS, email, webhook) are reported as lossiness |
+| resolved credentials            | `.env`                                        | Merged (existing lines kept, only our keys set), mode `0600`; never travels in the bundle             |
+| tasks                           | —                                             | Reported as lossiness: Hermes' `cron/jobs.json` is live scheduler state; use `hermes cron create`     |
+| episodic memory, tools, runtime | —                                             | Reported as lossiness                                                                                 |
 
-**Lossy is acceptable — silent loss is not.** Any facts or profile fields that do not fit are reported as `lossiness` entries in the `InstallPlan` so you can see exactly what was trimmed before committing the install.
+**Lossy is acceptable — silent loss is not.** Anything that does not fit or has no Hermes equivalent is reported in the `InstallPlan`'s `lossiness` (naming each skipped memory entry) before anything is written.
 
 Implements the [`@uniqent/adapter-sdk`](https://www.npmjs.com/package/@uniqent/adapter-sdk) `Adapter` interface.
 
@@ -30,7 +34,7 @@ npm install @uniqent/adapter-hermes
 Or install a brain directly via the CLI:
 
 ```bash
-npx @uniqent/cli install my-brain.uniqent --target hermes --root .
+npx @uniqent/cli install my-brain.uniqent --target hermes --root ~/.hermes
 ```
 
 ## Usage (programmatic)
@@ -43,13 +47,12 @@ import { hermesAdapter } from '@uniqent/adapter-hermes';
 const bundle = await readBundle('./my-brain.uniqent');
 
 // 2. Plan the install — inspect lossiness before writing anything
-const plan = await hermesAdapter.plan(bundle, { root: '/path/to/hermes-project' });
+const plan = await hermesAdapter.plan(bundle, { root: `${process.env.HOME}/.hermes` });
 
 if (plan.lossiness.length > 0) {
   for (const loss of plan.lossiness) {
     console.warn(`[${loss.action}] ${loss.component}: ${loss.issue}`);
-    // e.g. [truncated] memory: 12 of 30 facts dropped to fit MEMORY.md (~2200 chars);
-    //      consider an external memory provider.
+    // e.g. [truncated] memory: 12 of 30 not written to memories/MEMORY.md (2200-char budget …): d3 (…); …
   }
 }
 
@@ -58,32 +61,35 @@ const resolved: Record<string, string> = {
   github_pat: process.env.GITHUB_PAT ?? '',
 };
 
-// 4. Apply — writes SOUL.md, MEMORY.md, USER.md, skills/, hermes.json, .env
+// 4. Apply — writes SOUL.md, memories/, skills/, and merges config.yaml + .env
 const result = await hermesAdapter.apply(bundle, plan, resolved, {
-  root: '/path/to/hermes-project',
+  root: `${process.env.HOME}/.hermes`,
 });
 
 console.log('Written:', result.written);
-// e.g. ['SOUL.md', 'MEMORY.md', 'USER.md', 'skills/code-review/SKILL.md', 'hermes.json', '.env']
+// e.g. ['SOUL.md', 'memories/MEMORY.md', 'memories/USER.md', 'skills/code-review/SKILL.md', 'config.yaml', '.env']
 ```
 
-`apply()` is idempotent — running it twice produces the same output.
+`apply()` is idempotent — running it twice produces byte-identical files.
 
 ## Memory bounds
 
-Hermes enforces hard file-size limits on its context files. This adapter respects them:
+Hermes stores memory as entries joined by `\n§\n` and budgets the whole joined file
+(`memory.memory_char_limit` / `memory.user_char_limit` in `config.yaml`, default **2200** / **1375** chars):
 
-- **`MEMORY.md`** — capped at **2200 characters**. Facts are sorted by their `importance` field (highest first); lower-importance facts are dropped if they would exceed the cap. The count of dropped facts appears in `plan.lossiness`.
-- **`USER.md`** — capped at **1375 characters**. Profile fields are written in declaration order; any fields that would push the file over the cap are omitted and reported as lossiness.
+- **`memories/MEMORY.md`** — facts sorted by `importance` (highest first). A fact that would exceed the budget is skipped and the next one is still tried.
+- **`memories/USER.md`** — profile fields in declaration order, same rule.
+- Entries already in either file are kept and count against the budget; entries equal to ours are not duplicated.
 
-If your brain carries more memory than Hermes can hold, consider splitting it into topic-scoped bundles or pointing Hermes at an external memory provider.
+Every skipped entry is named in `plan.lossiness`. If your brain carries more memory than Hermes can hold, consider an external memory provider.
 
 ## Exporting an existing Hermes setup
 
 ```ts
-const bundle = await hermesAdapter.export({ root: '/path/to/hermes-project' });
-// Returns a canonical Bundle: persona from SOUL.md, facts from MEMORY.md bullet lines,
-// skills from skills/<name>/SKILL.md. Pack and sign with @uniqent/core.
+const bundle = await hermesAdapter.export({ root: `${process.env.HOME}/.hermes` });
+// Returns a canonical Bundle: persona from SOUL.md, facts/profile from memories/ (split on §),
+// skills from skills/**/SKILL.md, and MCP servers from config.yaml mcp_servers — with credential
+// REQUIREMENTS recovered from ${VAR} refs, never their values. Pack and sign with @uniqent/core.
 ```
 
 ## License

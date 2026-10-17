@@ -689,5 +689,254 @@
       ],
       "edges": []
     }
+  },
+  {
+    "name": "structure-skipped",
+    "markdown": "---\r\ntitle: Notes\r\n---\r\nkept before the fence\r\n```ts\r\nconst secret = \"#notatag\";\r\n```\r\n| a | b |\r\n|---|---|\r\n- - -\r\n***\r\n~~~\r\nunclosed fence swallows the rest",
+    "parsed": [
+      {
+        "text": "kept before the fence",
+        "kind": "fact",
+        "entities": [],
+        "tags": []
+      }
+    ],
+    "graph": {
+      "nodes": [
+        {
+          "id": "mem:m0",
+          "label": "kept before the fence",
+          "type": "memory",
+          "degree": 0,
+          "kind": "fact"
+        }
+      ],
+      "edges": []
+    }
+  },
+  {
+    "name": "quotes-checkboxes-tags",
+    "markdown": "> Decision: adopt [[Rust]] #perf\n> > nested quote #über-tag\n- [x] shipped the #日本語 docs\n- [ ] color #fff stays, see [docs](#setup) and (#paren-tag)\nx#notatag but #real_tag/sub",
+    "parsed": [
+      {
+        "text": "adopt [[Rust]] #perf",
+        "kind": "decision",
+        "entities": ["Rust"],
+        "tags": ["perf"]
+      },
+      {
+        "text": "nested quote #über-tag",
+        "kind": "fact",
+        "entities": [],
+        "tags": ["über-tag"]
+      },
+      {
+        "text": "shipped the #日本語 docs",
+        "kind": "fact",
+        "entities": [],
+        "tags": ["日本語"]
+      },
+      {
+        "text": "color #fff stays, see [docs](#setup) and (#paren-tag)",
+        "kind": "fact",
+        "entities": [],
+        "tags": ["paren-tag"]
+      },
+      {
+        "text": "x#notatag but #real_tag/sub",
+        "kind": "fact",
+        "entities": [],
+        "tags": ["real_tag/sub"]
+      }
+    ],
+    "graph": {
+      "nodes": [
+        {
+          "id": "mem:m0",
+          "label": "adopt Rust",
+          "type": "memory",
+          "degree": 2,
+          "kind": "decision"
+        },
+        {
+          "id": "ent:rust",
+          "label": "Rust",
+          "type": "entity",
+          "degree": 1
+        },
+        {
+          "id": "tag:perf",
+          "label": "#perf",
+          "type": "tag",
+          "degree": 1
+        },
+        {
+          "id": "mem:m1",
+          "label": "nested quote",
+          "type": "memory",
+          "degree": 1,
+          "kind": "fact"
+        },
+        {
+          "id": "tag:über-tag",
+          "label": "#über-tag",
+          "type": "tag",
+          "degree": 1
+        },
+        {
+          "id": "mem:m2",
+          "label": "shipped the 日本語 docs",
+          "type": "memory",
+          "degree": 1,
+          "kind": "fact"
+        },
+        {
+          "id": "tag:日本語",
+          "label": "#日本語",
+          "type": "tag",
+          "degree": 1
+        },
+        {
+          "id": "mem:m3",
+          "label": "color #fff stays, see [docs](#setup) and (paren…",
+          "type": "memory",
+          "degree": 1,
+          "kind": "fact"
+        },
+        {
+          "id": "tag:paren-tag",
+          "label": "#paren-tag",
+          "type": "tag",
+          "degree": 1
+        },
+        {
+          "id": "mem:m4",
+          "label": "x#notatag but",
+          "type": "memory",
+          "degree": 1,
+          "kind": "fact"
+        },
+        {
+          "id": "tag:real_tag/sub",
+          "label": "#real_tag/sub",
+          "type": "tag",
+          "degree": 1
+        }
+      ],
+      "edges": [
+        {
+          "source": "mem:m0",
+          "target": "ent:rust"
+        },
+        {
+          "source": "mem:m0",
+          "target": "tag:perf"
+        },
+        {
+          "source": "mem:m1",
+          "target": "tag:über-tag"
+        },
+        {
+          "source": "mem:m2",
+          "target": "tag:日本語"
+        },
+        {
+          "source": "mem:m3",
+          "target": "tag:paren-tag"
+        },
+        {
+          "source": "mem:m4",
+          "target": "tag:real_tag/sub"
+        }
+      ]
+    }
+  },
+  {
+    "name": "trailing-tags",
+    "markdown": "Cite sources inline #research. #citations #fff #format\nonly tags #a #b",
+    "parsed": [
+      {
+        "text": "Cite sources inline #research. #citations #fff #format",
+        "kind": "fact",
+        "entities": [],
+        "tags": ["research", "citations", "format"]
+      },
+      {
+        "text": "only tags #a #b",
+        "kind": "fact",
+        "entities": [],
+        "tags": ["a", "b"]
+      }
+    ],
+    "graph": {
+      "nodes": [
+        {
+          "id": "mem:m0",
+          "label": "Cite sources inline research. #fff",
+          "type": "memory",
+          "degree": 3,
+          "kind": "fact"
+        },
+        {
+          "id": "tag:research",
+          "label": "#research",
+          "type": "tag",
+          "degree": 1
+        },
+        {
+          "id": "tag:citations",
+          "label": "#citations",
+          "type": "tag",
+          "degree": 1
+        },
+        {
+          "id": "tag:format",
+          "label": "#format",
+          "type": "tag",
+          "degree": 1
+        },
+        {
+          "id": "mem:m1",
+          "label": "only tags",
+          "type": "memory",
+          "degree": 2,
+          "kind": "fact"
+        },
+        {
+          "id": "tag:a",
+          "label": "#a",
+          "type": "tag",
+          "degree": 1
+        },
+        {
+          "id": "tag:b",
+          "label": "#b",
+          "type": "tag",
+          "degree": 1
+        }
+      ],
+      "edges": [
+        {
+          "source": "mem:m0",
+          "target": "tag:research"
+        },
+        {
+          "source": "mem:m0",
+          "target": "tag:citations"
+        },
+        {
+          "source": "mem:m0",
+          "target": "tag:format"
+        },
+        {
+          "source": "mem:m1",
+          "target": "tag:a"
+        },
+        {
+          "source": "mem:m1",
+          "target": "tag:b"
+        }
+      ]
+    }
   }
 ]

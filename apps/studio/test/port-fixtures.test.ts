@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { normalizeMcpConfig, parseMemoryMarkdown, memoryGraph } from '@uniqent/builder';
+import { buildSecretCases } from '../scripts/emit-port-fixtures.js';
 
 const FIXTURES_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'fixtures', 'ports');
 
@@ -45,5 +46,12 @@ describe('memory-cases fixture drift guard', () => {
       const graphActual = memoryGraph(graphInput);
       expect(graphActual, `case: ${c.name} (graph)`).toEqual(c.graph);
     }
+  });
+});
+
+describe('secret-cases fixture drift guard', () => {
+  it('re-derives the secret-scan cases from the live TS core and matches the committed fixture', async () => {
+    const raw = await readFile(join(FIXTURES_DIR, 'secret-cases.json'), 'utf8');
+    expect(buildSecretCases()).toEqual(JSON.parse(raw));
   });
 });

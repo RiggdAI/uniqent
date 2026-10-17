@@ -4,56 +4,617 @@
       "server": {
         "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
         "name": "ac.inference.sh/mcp",
-        "description": "Run 150+ AI apps — image, video, audio, LLMs, 3D and more.",
-        "title": "inference.sh",
-        "version": "1.0.0",
-        "remotes": [{ "type": "streamable-http", "url": "https://api.inference.sh/mcp" }]
-      },
-      "_meta": {
-        "io.modelcontextprotocol.registry/official": { "status": "active", "isLatest": false }
-      }
-    },
-    {
-      "server": {
-        "name": "ac.inference.sh/mcp",
-        "description": "Run 150+ AI apps — image, video, audio, LLMs, 3D and more.",
+        "description": "Run 150+ AI apps — image, video, audio, LLMs, 3D and more. Browse, execute, stream results.",
         "title": "inference.sh",
         "version": "1.0.1",
-        "remotes": [{ "type": "streamable-http", "url": "https://api.inference.sh/mcp" }]
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://sh.inference.ac"
+          },
+          {
+            "type": "streamable-http",
+            "url": "https://api.inference.sh/mcp"
+          }
+        ]
       },
       "_meta": {
-        "io.modelcontextprotocol.registry/official": { "status": "active", "isLatest": true }
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-04-13T17:33:26.613537Z",
+          "publishedAt": "2026-04-13T17:33:26.613537Z",
+          "updatedAt": "2026-04-13T17:33:26.613537Z",
+          "isLatest": false
+        }
       }
     },
     {
       "server": {
-        "name": "com.pulsemcp/remote-filesystem",
-        "description": "MCP server for remote filesystem operations on cloud storage (GCS).",
-        "version": "0.1.2",
-        "packages": [
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+        "name": "ac.inference.sh/mcp",
+        "description": "run any ai model. compose agents, stack knowledge, connect tools. one api, pay per run.",
+        "title": "inference.sh",
+        "version": "2.0.1",
+        "remotes": [
           {
-            "registryType": "npm",
-            "identifier": "remote-filesystem-mcp-server",
-            "version": "0.1.2",
-            "runtimeHint": "npx",
-            "transport": { "type": "stdio" },
-            "runtimeArguments": [{ "value": "-y", "type": "positional" }],
-            "environmentVariables": [
-              { "name": "GCS_BUCKET", "description": "Bucket name.", "isRequired": true },
+            "type": "streamable-http",
+            "url": "https://api.inference.sh/mcp"
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-07-27T10:44:51.359634Z",
+          "publishedAt": "2026-07-27T10:44:51.359634Z",
+          "updatedAt": "2026-07-27T10:44:51.359634Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+        "name": "ae.propick/propick",
+        "description": "Manage your real-estate stock on Propick (Dubai): bulk listing sync, lookups and run reports.",
+        "title": "Propick Integration MCP",
+        "version": "1.0.0",
+        "websiteUrl": "https://propick.ae",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://propick.ae/mcp",
+            "headers": [
               {
-                "name": "GCS_PRIVATE_KEY",
-                "description": "Service account key.",
-                "isSecret": true
-              },
-              { "name": "GCS_MAKE_PUBLIC", "description": "Public uploads.", "default": "false" }
+                "description": "Bearer <integration key> (ppk_live_...) issued in the Propick cabinet when creating an import channel",
+                "isRequired": true,
+                "isSecret": true,
+                "name": "Authorization"
+              }
             ]
           }
         ]
       },
       "_meta": {
-        "io.modelcontextprotocol.registry/official": { "status": "active", "isLatest": true }
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-08-25T11:16:56.879334Z",
+          "publishedAt": "2026-08-25T11:16:56.879334Z",
+          "updatedAt": "2026-08-25T11:16:56.879334Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+        "name": "ai.bamf/bamf",
+        "description": "LinkedIn/X content, scheduling, analytics and outreach agent for founders — over MCP, one key.",
+        "title": "BAMF.ai",
+        "repository": {
+          "url": "https://github.com/houstongolden/bamfaiapp",
+          "source": "github"
+        },
+        "version": "1.0.0",
+        "websiteUrl": "https://bamf.ai",
+        "icons": [
+          {
+            "src": "https://bamf.ai/icons/icon-128.png",
+            "mimeType": "image/png",
+            "sizes": ["128x128"]
+          },
+          {
+            "src": "https://bamf.ai/bamf-ai-icon-darkmode.png",
+            "mimeType": "image/png",
+            "sizes": ["500x500"]
+          }
+        ],
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://mcp.bamf.ai",
+            "headers": [
+              {
+                "description": "A BAMF workspace API key from Settings → Developer, or the team key shown on your BAMF home page.",
+                "isRequired": true,
+                "value": "Bearer {bamf_api_key}",
+                "isSecret": true,
+                "variables": {
+                  "bamf_api_key": {
+                    "description": "BAMF workspace API key",
+                    "isRequired": true,
+                    "isSecret": true
+                  }
+                },
+                "name": "Authorization"
+              }
+            ]
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-09-26T03:11:37.281755Z",
+          "publishedAt": "2026-09-26T03:11:37.281755Z",
+          "updatedAt": "2026-09-26T03:11:37.281755Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+        "name": "ai.audiopod/audiopod",
+        "description": "Audio AI tools: text-to-speech, voice cloning, music generation, stem separation, transcription.",
+        "title": "AudioPod AI",
+        "repository": {
+          "url": "https://github.com/AudiopodAI/audiopod-mcp",
+          "source": "github"
+        },
+        "version": "2026.9.19",
+        "websiteUrl": "https://docs.audiopod.ai/sdks/mcp",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://mcp.audiopod.ai",
+            "headers": [
+              {
+                "description": "AudioPod API key (ap_...) from https://www.audiopod.ai/dashboard/account/api-keys",
+                "isRequired": true,
+                "isSecret": true,
+                "name": "X-API-Key"
+              }
+            ]
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-09-19T03:27:45.61674Z",
+          "publishedAt": "2026-09-19T03:27:45.61674Z",
+          "updatedAt": "2026-09-19T03:27:45.61674Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+        "name": "ai.autorfp/mcp",
+        "description": "Search AutoRFP.ai projects, requirements, content library, and tags for Q&A and analytics.",
+        "title": "AutoRFP.ai",
+        "repository": {
+          "url": "https://github.com/AutoRFP/mcp",
+          "source": "github"
+        },
+        "version": "1.0.0",
+        "websiteUrl": "https://autorfp.ai",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{api_host}/mcp",
+            "variables": {
+              "api_host": {
+                "description": "AutoRFP.ai API host for your data-residency region.",
+                "isRequired": true,
+                "choices": ["api.autorfp.ai", "api.eu.autorfp.ai", "api.us.autorfp.ai"]
+              }
+            }
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-05-18T01:09:10.259215Z",
+          "publishedAt": "2026-05-18T01:09:10.259215Z",
+          "updatedAt": "2026-05-18T01:09:10.259215Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+        "name": "ai.dinglebear/arcane-rmcp",
+        "description": "Rust MCP server and CLI for Arcane Docker and container management.",
+        "title": "Arcane RMCP",
+        "repository": {
+          "url": "https://github.com/jmagar/arcane-rmcp",
+          "source": "github",
+          "id": "1247261735"
+        },
+        "version": "0.4.2",
+        "websiteUrl": "https://github.com/jmagar/arcane-rmcp",
+        "icons": [
+          {
+            "src": "https://avatars.githubusercontent.com/u/38927646?v=4",
+            "mimeType": "image/png",
+            "sizes": ["460x460"],
+            "theme": "dark"
+          }
+        ],
+        "packages": [
+          {
+            "registryType": "npm",
+            "registryBaseUrl": "https://registry.npmjs.org",
+            "identifier": "arcane-rmcp",
+            "version": "0.4.2",
+            "runtimeHint": "npx",
+            "transport": {
+              "type": "stdio"
+            },
+            "packageArguments": [
+              {
+                "description": "Run Arcane RMCP over stdio.",
+                "isRequired": true,
+                "format": "string",
+                "value": "mcp",
+                "type": "positional"
+              }
+            ],
+            "environmentVariables": [
+              {
+                "description": "Arcane API base URL.",
+                "isRequired": true,
+                "format": "string",
+                "placeholder": "https://arcane.example.com",
+                "name": "RARCANE_API_URL"
+              },
+              {
+                "description": "Arcane API key or bearer token.",
+                "isRequired": true,
+                "format": "string",
+                "isSecret": true,
+                "name": "RARCANE_API_KEY"
+              },
+              {
+                "description": "Optional GitHub release tag override for the downloaded Arcane RMCP binary.",
+                "format": "string",
+                "placeholder": "v0.4.1",
+                "name": "ARCANE_RMCP_VERSION"
+              },
+              {
+                "description": "Optional GitHub owner/repo override for release asset downloads.",
+                "format": "string",
+                "default": "jmagar/arcane-rmcp",
+                "placeholder": "jmagar/arcane-rmcp",
+                "name": "ARCANE_RMCP_REPO"
+              },
+              {
+                "description": "Optional release download base URL override.",
+                "format": "string",
+                "name": "ARCANE_RMCP_RELEASE_BASE_URL"
+              },
+              {
+                "description": "Tracing filter for Arcane RMCP logs.",
+                "format": "string",
+                "default": "info",
+                "placeholder": "info",
+                "name": "RUST_LOG"
+              }
+            ]
+          }
+        ],
+        "_meta": {
+          "io.modelcontextprotocol.registry/publisher-provided": {
+            "buildInfo": {
+              "repository": "https://github.com/jmagar/arcane-rmcp",
+              "version": "0.4.2"
+            },
+            "distribution": {
+              "nodePackage": "arcane-rmcp",
+              "npm": "arcane-rmcp@0.4.2"
+            },
+            "dnsDomain": "dinglebear.ai",
+            "namespace": "ai.dinglebear"
+          }
+        }
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-07-12T11:58:28.276344Z",
+          "publishedAt": "2026-07-12T11:58:28.276344Z",
+          "updatedAt": "2026-07-12T11:58:28.276344Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+        "name": "io.github.06ketan/medium-ops",
+        "description": "Medium CLI + 23-tool MCP server. Your IDE drafts replies. No API keys.",
+        "title": "medium-ops",
+        "repository": {
+          "url": "https://github.com/06ketan/medium-ops",
+          "source": "github"
+        },
+        "version": "0.1.2",
+        "websiteUrl": "https://medium-ops.chavan.in",
+        "packages": [
+          {
+            "registryType": "pypi",
+            "registryBaseUrl": "https://pypi.org",
+            "identifier": "medium-ops",
+            "version": "0.1.2",
+            "runtimeHint": "uvx",
+            "transport": {
+              "type": "stdio"
+            },
+            "packageArguments": [
+              {
+                "value": "mcp",
+                "type": "positional"
+              },
+              {
+                "value": "serve",
+                "type": "positional"
+              }
+            ],
+            "environmentVariables": [
+              {
+                "description": "Legacy Medium Integration Token (api.medium.com/v1/*). Optional. Generate at medium.com/me/settings → 'Integration tokens' (note: Medium stopped issuing new tokens in 2023).",
+                "isSecret": true,
+                "name": "MEDIUM_INTEGRATION_TOKEN"
+              },
+              {
+                "description": "Medium 'sid' cookie value from medium.com (Application → Cookies). Used for authenticated reads + dashboard GraphQL.",
+                "isSecret": true,
+                "name": "MEDIUM_SID"
+              },
+              {
+                "description": "Medium 'uid' cookie value. Required alongside sid for some authenticated endpoints.",
+                "name": "MEDIUM_UID"
+              },
+              {
+                "description": "Medium 'xsrf' cookie value. Required for any dashboard write (post_response, publish_post, delete_post, draft updates).",
+                "isSecret": true,
+                "name": "MEDIUM_XSRF"
+              },
+              {
+                "description": "Cloudflare 'cf_clearance' cookie. Only required when Cloudflare challenges your IP for dashboard write calls.",
+                "isSecret": true,
+                "name": "MEDIUM_CF_CLEARANCE"
+              },
+              {
+                "description": "Your Medium handle (without the @). Required for the public RSS read path so the client knows whose feed to fetch.",
+                "name": "MEDIUM_USERNAME"
+              },
+              {
+                "description": "Override path to the mcp.json file the auth layer reads. Defaults to ~/.cursor/mcp.json.",
+                "name": "MEDIUM_OPS_MCP_PATH"
+              },
+              {
+                "description": "Optional: override the host CLI used by the unattended daemon path (default: auto-detect claude / cursor-agent / codex on PATH). Use {prompt} placeholder if your CLI takes the prompt as an arg.",
+                "name": "MEDIUM_OPS_LLM_CMD"
+              }
+            ]
+          }
+        ],
+        "_meta": {
+          "io.modelcontextprotocol.registry/publisher-provided": {
+            "tool": "manual",
+            "version": "0.1.2"
+          }
+        }
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-05-03T06:02:58.252062Z",
+          "publishedAt": "2026-05-03T06:02:58.252062Z",
+          "updatedAt": "2026-05-03T06:02:58.252062Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+        "name": "ai.midplane/midplane",
+        "description": "Safe-by-default SQL guardrails for AI agents: AST-checked queries, per-table policy, audit log.",
+        "title": "Midplane",
+        "repository": {
+          "url": "https://github.com/midplaneai/midplane",
+          "source": "github",
+          "subfolder": "engine/packages/mcp-server"
+        },
+        "version": "0.20.0",
+        "websiteUrl": "https://midplane.ai/docs",
+        "packages": [
+          {
+            "registryType": "npm",
+            "registryBaseUrl": "https://registry.npmjs.org",
+            "identifier": "midplane",
+            "version": "0.20.0",
+            "runtimeHint": "npx",
+            "transport": {
+              "type": "stdio"
+            },
+            "packageArguments": [
+              {
+                "value": "server",
+                "type": "positional",
+                "valueHint": "subcommand"
+              },
+              {
+                "type": "named",
+                "name": "--stdio"
+              }
+            ],
+            "environmentVariables": [
+              {
+                "description": "Postgres connection string the agent's queries run against. Give it a least-privilege role: Midplane constrains what SQL is allowed, it does not widen or narrow what the role itself can reach.",
+                "isRequired": true,
+                "format": "string",
+                "isSecret": true,
+                "name": "DATABASE_URL"
+              },
+              {
+                "description": "Path to a policy YAML granting per-table read/read_write access, tenant scoping, and column masking. Omit for the safe default: reads allowed, writes and DDL denied. Generate one with `npx midplane init`.",
+                "format": "filepath",
+                "name": "MIDPLANE_POLICY_FILE"
+              },
+              {
+                "description": "Where the local SQLite audit log is written. Defaults to ~/.midplane/audit.db; read it back with `midplane audit denies`.",
+                "format": "filepath",
+                "name": "DB_PATH"
+              },
+              {
+                "description": "Set to 0 to disable anonymous usage telemetry (DO_NOT_TRACK=1 also works). Never includes SQL, table or column names, or identifiers.",
+                "default": "1",
+                "choices": ["1", "0", "debug"],
+                "name": "MIDPLANE_TELEMETRY"
+              }
+            ]
+          },
+          {
+            "registryType": "oci",
+            "identifier": "docker.io/midplane/midplane:0.20.0",
+            "runtimeHint": "docker",
+            "transport": {
+              "type": "streamable-http",
+              "url": "http://localhost:8080/mcp"
+            },
+            "environmentVariables": [
+              {
+                "description": "Postgres connection string the agent's queries run against. Pass it with --env-file, never with an inline -e: a DSN on the docker command line leaks the password to `ps aux` and your shell history.",
+                "isRequired": true,
+                "format": "string",
+                "isSecret": true,
+                "name": "DATABASE_URL"
+              },
+              {
+                "description": "Path (inside the container) to a policy YAML granting per-table read/read_write access, tenant scoping, and column masking. Omit for the safe default: reads allowed, writes and DDL denied.",
+                "format": "filepath",
+                "name": "MIDPLANE_POLICY_FILE"
+              },
+              {
+                "description": "Port the Streamable HTTP transport binds. Must match the url above if changed.",
+                "default": "8080",
+                "name": "PORT"
+              }
+            ]
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-08-25T13:07:26.745026Z",
+          "publishedAt": "2026-08-25T13:07:26.745026Z",
+          "updatedAt": "2026-08-25T13:07:26.745026Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+        "name": "ai.apithreshold/apithreshold",
+        "description": "Quality scoring and progressive gates for AI-generated API tests. Stripe/Twilio profiles. Free tier.",
+        "title": "APIThreshold",
+        "version": "0.1.0",
+        "websiteUrl": "https://apithreshold.ai",
+        "packages": [
+          {
+            "registryType": "oci",
+            "identifier": "ghcr.io/apithreshold/apithreshold:0.1.0",
+            "transport": {
+              "type": "stdio"
+            },
+            "packageArguments": [
+              {
+                "value": "serve",
+                "type": "positional"
+              },
+              {
+                "value": "--transport",
+                "type": "positional"
+              },
+              {
+                "value": "stdio",
+                "type": "positional"
+              }
+            ],
+            "environmentVariables": [
+              {
+                "description": "LLM provider to use: openai or anthropic.",
+                "isRequired": true,
+                "format": "string",
+                "name": "APITHRESHOLD_LLM_PROVIDER"
+              },
+              {
+                "description": "Required when APITHRESHOLD_LLM_PROVIDER=openai.",
+                "format": "string",
+                "isSecret": true,
+                "name": "OPENAI_API_KEY"
+              },
+              {
+                "description": "Required when APITHRESHOLD_LLM_PROVIDER=anthropic.",
+                "format": "string",
+                "isSecret": true,
+                "name": "ANTHROPIC_API_KEY"
+              },
+              {
+                "description": "Optional license JWT. Omit for Free tier.",
+                "format": "string",
+                "isSecret": true,
+                "name": "APITHRESHOLD_LICENSE"
+              }
+            ]
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-07-02T22:06:43.451983Z",
+          "publishedAt": "2026-07-02T22:06:43.451983Z",
+          "updatedAt": "2026-07-02T22:06:43.451983Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+        "name": "cloud.anythink/anythink",
+        "description": "Sick of stitched-together services? Anythink is the all-in-one backend, configured with AI.",
+        "title": "Anythink all-in-one backend: data, auth, files, workflows, payments, APIs",
+        "repository": {
+          "url": "https://github.com/anythink-cloud/anythink-cli",
+          "source": "github"
+        },
+        "version": "0.2.21",
+        "websiteUrl": "https://anythink.cloud",
+        "packages": [
+          {
+            "registryType": "nuget",
+            "identifier": "anythink-mcp",
+            "version": "0.2.21",
+            "transport": {
+              "type": "stdio"
+            }
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-06-28T11:52:04.917791Z",
+          "publishedAt": "2026-06-28T11:52:04.917791Z",
+          "updatedAt": "2026-06-28T11:52:04.917791Z",
+          "isLatest": true
+        }
       }
     }
   ],
-  "metadata": { "nextCursor": "x", "count": 3 }
+  "metadata": {
+    "count": 11
+  }
 }

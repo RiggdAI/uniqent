@@ -72,6 +72,75 @@ describe('normalizeMcpConfig', () => {
     expect(r.lossiness).toEqual([]);
   });
 
+  it('lifts secrets from canonical-shaped input too, keeping existing refs', () => {
+    const r = normalizeMcpConfig({
+      id: 'svc',
+      transport: 'stdio',
+      command: 'svc-mcp',
+      auth: { type: 'none' },
+      env: {
+        SVC_API_KEY: '3f9a8c2e7b1d4f6a9c0e2b4d6f8a1c3e5b7d9f0a',
+        SVC_REGION: 'eu',
+        GITHUB_TOKEN: '${credentialRef:github_pat}',
+      },
+    });
+    const env = r.servers[0]!.env!;
+    expect(env.SVC_API_KEY).toBe('${credentialRef:svc_svc_api_key}'); // literal hex key lifted
+    expect(env.SVC_REGION).toBe('eu');
+    expect(env.GITHUB_TOKEN).toBe('${credentialRef:github_pat}'); // existing ref untouched
+    expect(r.credentials.map((c) => c.ref)).toEqual(['svc_svc_api_key']);
+  });
+
+  it('does not treat PATH-like or author names as secrets', () => {
+    const r = normalizeMcpConfig({
+      mcpServers: {
+        mem: {
+          command: 'npx',
+          env: {
+            PATH: '/usr/bin',
+            AUTHOR_NAME: 'Ada',
+            MEMORY_FILE_PATH: '/tmp/m.json',
+            DB_PASSWORD: 'x',
+          },
+        },
+      },
+    });
+    const env = r.servers[0]!.env!;
+    expect([env.PATH, env.AUTHOR_NAME, env.MEMORY_FILE_PATH]).toEqual([
+      '/usr/bin',
+      'Ada',
+      '/tmp/m.json',
+    ]);
+    expect(env.DB_PASSWORD).toBe('${credentialRef:mem_db_password}');
+    expect(r.credentials.map((c) => c.ref)).toEqual(['mem_db_password']);
+  });
+
+  it('normalizes a VS Code mcp.json { servers: { name: {...} } } map', () => {
+    const r = normalizeMcpConfig({
+      servers: {
+        fetch: { type: 'stdio', command: 'uvx', args: ['mcp-server-fetch'] },
+        docs: { type: 'sse', url: 'https://docs.example.com/events' },
+      },
+    });
+    expect(r.servers.map((s) => [s.id, s.transport])).toEqual([
+      ['fetch', 'stdio'],
+      ['docs', 'sse'],
+    ]);
+  });
+
+  it('gives unnamed servers in a list unique ids instead of overwriting', () => {
+    const r = normalizeMcpConfig({
+      servers: [{ command: 'a-mcp' }, { command: 'b-mcp' }, { url: 'https://c.example.com/mcp' }],
+    });
+    expect(r.servers.map((s) => s.id)).toEqual(['mcp-server', 'mcp-server-2', 'mcp-server-3']);
+  });
+
+  it('skips a server with neither command nor url instead of inventing npx', () => {
+    const r = normalizeMcpConfig({ mcpServers: { broken: { args: ['x'] } } });
+    expect(r.servers).toEqual([]);
+    expect(r.lossiness[0]).toMatch(/broken.*neither a command nor a url/);
+  });
+
   it('returns a lossiness note for an unrecognized shape, never throws', () => {
     const r = normalizeMcpConfig({ totally: 'unrelated' });
     expect(r.servers).toEqual([]);
