@@ -361,3 +361,48 @@ fn a_dangling_symlink_ancestor_is_refused() {
     let err = allowed_root(root.to_str().unwrap(), &granted, &env).unwrap_err();
     assert!(err.contains("dangling"), "{err}");
 }
+
+/// Granting `/`, $HOME or an ancestor of it must not make ~/.ssh or ~/.zshrc writable.
+#[test]
+fn a_granted_folder_containing_the_user_home_does_not_authorise_a_root() {
+    let base = tempfile::tempdir().unwrap();
+    let home = base.path().join("home");
+    fs::create_dir(&home).unwrap();
+    let env = env_with(&home, None, None);
+    let ssh = home.join(".ssh");
+    let canonical_home = home.canonicalize().unwrap();
+    for grant in [
+        std::path::PathBuf::from("/"),
+        canonical_home.clone(),
+        base.path().canonicalize().unwrap(),
+    ] {
+        let granted = vec![grant.clone()];
+        let err = allowed_root(ssh.to_str().unwrap(), &granted, &env).unwrap_err();
+        assert!(
+            err.contains("pick a project folder inside your home") && err.contains("Choose folder"),
+            "{}: {err}",
+            grant.display()
+        );
+        // A framework home under $HOME stays allowed on its own merits.
+        assert!(allowed_root(home.join(".hermes").to_str().unwrap(), &granted, &env).is_ok());
+    }
+    let proj = home.join("proj");
+    fs::create_dir(&proj).unwrap();
+    let granted = vec![proj.canonicalize().unwrap()];
+    assert!(allowed_root(proj.join("sub").to_str().unwrap(), &granted, &env).is_ok());
+}
+
+#[test]
+fn a_save_file_name_with_a_colon_is_refused_by_name() {
+    let d = tempfile::tempdir().unwrap();
+    let err = save_target(&d.path().join("a:b.uniqent")).unwrap_err();
+    assert!(
+        err.contains("a:b.uniqent") && err.contains("file names cannot contain ':'"),
+        "{err}"
+    );
+    let (dir, name) = save_target(&d.path().join("brain.uniqent")).unwrap();
+    assert_eq!(
+        (dir, name.as_str()),
+        (d.path().canonicalize().unwrap(), "brain.uniqent")
+    );
+}

@@ -143,6 +143,121 @@ fn reports_blank_readme_empty_profile_values_and_repeated_credential_refs() {
     }
 }
 
+/// A spec-valid profile (record<string, unknown>) opens; its non-text fields are reported by
+/// name and JSON type, never by value.
+#[test]
+fn a_profile_with_non_text_values_opens_and_reports_them() {
+    let (s, dropped) = Session::load_bundle(&bundle_from(&[
+        ("uniqent.json", MANIFEST),
+        (
+            "memory/profile.json",
+            r#"{"name":"Ada","age":42,"keys":{"token":"SECRET_VAL"}}"#,
+        ),
+    ]))
+    .unwrap();
+    assert_eq!(s.get_profile(), serde_json::json!({"name": "Ada"}));
+    let report = dropped
+        .iter()
+        .find(|d| d.contains("memory/profile.json"))
+        .expect("profile drop reported");
+    for needle in ["\"age\" (a number)", "\"keys\" (an object)"] {
+        assert!(report.contains(needle), "{needle} not in {report}");
+    }
+    assert!(
+        !report.contains("SECRET_VAL") && !report.contains("42"),
+        "{report}"
+    );
+}
+
+/// Errors from load name the field and its JSON type, never the value (it may be a secret).
+#[test]
+fn load_errors_never_echo_a_field_value() {
+    let with_credential = |cred: Value| {
+        let mut manifest: Value = serde_json::from_str(MANIFEST).unwrap();
+        manifest["credentials"] = serde_json::json!([cred]);
+        serde_json::to_string(&manifest).unwrap()
+    };
+    let base = serde_json::json!({
+        "ref": "api_key", "label": "API key", "type": "apiKey", "consumedBy": [], "required": true
+    });
+    let mut bad_type = base.clone();
+    bad_type["type"] = serde_json::json!("SECRET_VAL");
+    let mut bad_help = base.clone();
+    bad_help["help"] = serde_json::json!({ "x": "SECRET_VAL" });
+    let mut bad_oauth = base.clone();
+    bad_oauth["oauth"] = serde_json::json!(["SECRET_VAL"]);
+    let fact = |field: &str| {
+        format!(
+            "{{\"id\":\"fact-1\",\"kind\":\"fact\",\"text\":\"t\",\"createdAt\":\"2026-01-01T00:00:00.000Z\",\"{field}\":\"SECRET_VAL\"}}\n"
+        )
+    };
+    // (field named in the error, JSON type it reports, bundle files)
+    type Case<'a> = (&'a str, &'a str, Vec<(String, String)>);
+    let cases: Vec<Case> = vec![
+        (
+            "credentials[0]",
+            "a string",
+            vec![(
+                "uniqent.json".into(),
+                with_credential(serde_json::json!("SECRET_VAL")),
+            )],
+        ),
+        (
+            "type",
+            "a string",
+            vec![("uniqent.json".into(), with_credential(bad_type))],
+        ),
+        (
+            "help",
+            "an object",
+            vec![("uniqent.json".into(), with_credential(bad_help))],
+        ),
+        (
+            "oauth",
+            "an array",
+            vec![("uniqent.json".into(), with_credential(bad_oauth))],
+        ),
+        (
+            "importance",
+            "a string",
+            vec![
+                ("uniqent.json".into(), MANIFEST.into()),
+                ("memory/facts.jsonl".into(), fact("importance")),
+            ],
+        ),
+        (
+            "visibility",
+            "a string",
+            vec![
+                ("uniqent.json".into(), MANIFEST.into()),
+                ("memory/facts.jsonl".into(), fact("visibility")),
+            ],
+        ),
+        (
+            "profile",
+            "a string",
+            vec![
+                ("uniqent.json".into(), MANIFEST.into()),
+                ("memory/profile.json".into(), "\"SECRET_VAL\"".into()),
+            ],
+        ),
+    ];
+    for (field, json_type, files) in cases {
+        let files: Vec<(&str, &str)> = files
+            .iter()
+            .map(|(p, t)| (p.as_str(), t.as_str()))
+            .collect();
+        let err = Session::load_bundle(&bundle_from(&files))
+            .err()
+            .unwrap_or_else(|| panic!("{field}: expected a load error"));
+        assert!(
+            err.contains(field) && err.contains(json_type),
+            "{field}: {err}"
+        );
+        assert!(!err.contains("SECRET_VAL"), "{field}: {err}");
+    }
+}
+
 #[test]
 fn opens_only_a_dropped_file() {
     use uniqent_studio::vault::granted_file;

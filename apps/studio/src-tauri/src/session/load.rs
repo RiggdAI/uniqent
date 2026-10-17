@@ -4,8 +4,8 @@ use base64::Engine;
 use serde_json::{json, Map, Value};
 
 use super::{
-    cron_problem, is_valid_slug, profile_field_kept, validate_credential, validate_importance,
-    validate_visibility, Session, MEMORY_KINDS, POLICIES,
+    cron_problem, is_valid_slug, json_type, profile_field_kept, validate_credential,
+    validate_importance, validate_visibility, Session, MEMORY_KINDS, POLICIES,
 };
 use crate::core::bundle::{paths, Bundle};
 
@@ -49,18 +49,6 @@ fn is_string_array(v: &Value) -> bool {
 
 fn is_non_empty_string(v: &Value) -> bool {
     v.as_str().is_some_and(|s| !s.is_empty())
-}
-
-/// A value's JSON type, for errors about fields that may hold secrets (never the value itself).
-fn json_type(v: &Value) -> &'static str {
-    match v {
-        Value::Null => "null",
-        Value::Bool(_) => "a boolean",
-        Value::Number(_) => "a number",
-        Value::String(_) => "a string",
-        Value::Array(_) => "an array",
-        Value::Object(_) => "an object",
-    }
 }
 
 /// An id or enum value for an error: the string itself, else only its JSON type.
@@ -390,6 +378,22 @@ fn duplicate_refs(credentials: &[Value]) -> Vec<String> {
     repeated
 }
 
+/// `profile` without its non-text fields, plus their quoted names and JSON types (a spec profile
+/// may hold any JSON value; Studio keeps text only). A non-object stays as is: `set_profile`
+/// refuses it.
+fn text_profile(profile: &Value) -> (Value, Vec<String>) {
+    let Value::Object(map) = profile else {
+        return (profile.clone(), vec![]);
+    };
+    let (text, other): (Map<String, Value>, Map<String, Value>) =
+        map.clone().into_iter().partition(|(_, v)| v.is_string());
+    let named = other
+        .iter()
+        .map(|(k, v)| format!("\"{k}\" ({})", json_type(v)))
+        .collect();
+    (Value::Object(text), named)
+}
+
 /// The quoted names of a profile's blank fields (`set_profile` drops them).
 fn empty_fields(profile: &Value) -> Vec<String> {
     profile
@@ -555,7 +559,9 @@ impl Session {
         unique_ids(&facts, FACTS)?;
         s.fact_counter = highest_suffix(&facts, "fact-");
         s.facts = facts;
-        let profile = bundle_json(bundle, PROFILE)?;
+        let (profile, non_text) = bundle_json(bundle, PROFILE)?
+            .map(|p| text_profile(&p))
+            .map_or((None, vec![]), |(text, other)| (Some(text), other));
         if let Some(p) = &profile {
             s.set_profile(p.clone())
                 .map_err(|e| format!("{PROFILE}: {e}"))?;
@@ -575,6 +581,12 @@ impl Session {
             dropped.push(format!(
                 "{PROFILE}: blank field(s) {} left out — Studio keeps no blank profile names or values",
                 empty.join(", ")
+            ));
+        }
+        if !non_text.is_empty() {
+            dropped.push(format!(
+                "{PROFILE}: non-text field(s) {} left out — Studio keeps only text profile fields",
+                non_text.join(", ")
             ));
         }
         if !episodic.is_empty() {

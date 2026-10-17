@@ -74,11 +74,6 @@ pub fn reset(s: State<AppState>) -> Value {
     g.state()
 }
 
-#[tauri::command]
-pub fn export(s: State<AppState>, sign: bool) -> Result<Value, String> {
-    s.session.lock().unwrap().export(sign)
-}
-
 // ── MCP commands ─────────────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -466,9 +461,9 @@ pub async fn open_dropped_bundle(s: State<'_, AppState>, path: String) -> Result
     open_bundle_at(&s, &canonical)
 }
 
-/// Save the brain, always signed with the session keypair (like `export(true)`), to a file the
-/// user chooses in the native save dialog; written atomically. Returns the path (None when
-/// cancelled). Signing runs first, so a secret-scan refusal shows before the dialog.
+/// Save the brain, always signed with the session keypair (like `Session::export(true)`), to a
+/// file the user chooses in the native save dialog; written atomically. Returns the path (None
+/// when cancelled). Signing runs first, so a secret-scan refusal shows before the dialog.
 #[tauri::command]
 pub async fn save_bundle(
     app: tauri::AppHandle,
@@ -491,23 +486,14 @@ pub async fn save_bundle(
     let path = picked
         .into_path()
         .map_err(|e| format!("chosen file is not a local path: {e}"))?;
-    let (Some(parent), Some(name)) = (path.parent(), path.file_name().and_then(|n| n.to_str()))
-    else {
-        return Err(format!(
-            "cannot save to {}: not a file path",
-            path.display()
-        ));
-    };
-    let dir = parent
-        .canonicalize()
-        .map_err(|e| format!("cannot save to {}: {e}", parent.display()))?;
+    let (dir, name) = crate::fs_io::save_target(&path)?;
     let write = crate::fs_io::OutputWrite {
-        path: name.to_string(),
+        path: name.clone(),
         bytes_base64: base64::engine::general_purpose::STANDARD.encode(bytes),
         mode: None,
     };
     crate::fs_io::write_outputs(&dir, &[write])?;
-    Ok(Some(dir.join(name).to_string_lossy().into_owned()))
+    Ok(Some(dir.join(&name).to_string_lossy().into_owned()))
 }
 
 // ── Drag and drop ───────────────────────────────────────────────────────────

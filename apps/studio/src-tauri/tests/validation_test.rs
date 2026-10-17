@@ -244,7 +244,20 @@ fn cron_problem_matches_the_ts_rules() {
 fn profile_must_be_an_object_of_text() {
     let mut s = Session::new();
     assert!(s.set_profile(serde_json::json!("abc")).is_err());
-    assert!(s.set_profile(serde_json::json!({"age": 3})).is_err());
+    let err = s
+        .set_profile(serde_json::json!({"keys": {"token": "SECRET_VAL"}}))
+        .unwrap_err();
+    assert!(
+        err.contains("\"keys\"") && err.contains("an object") && !err.contains("SECRET_VAL"),
+        "{err}"
+    );
+    let err = s
+        .set_profile(serde_json::json!(["SECRET_VAL"]))
+        .unwrap_err();
+    assert!(
+        err.contains("an array") && !err.contains("SECRET_VAL"),
+        "{err}"
+    );
     assert!(s
         .set_profile(serde_json::json!({"Role": "a", " Role ": "b"}))
         .is_err());

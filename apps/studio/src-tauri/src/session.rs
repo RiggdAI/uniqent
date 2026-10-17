@@ -129,13 +129,28 @@ pub fn cron_problem(expr: &str) -> Option<String> {
     None
 }
 
+/// A value's JSON type, for errors about fields that may hold secrets (never the value itself).
+fn json_type(v: &Value) -> &'static str {
+    match v {
+        Value::Null => "null",
+        Value::Bool(_) => "a boolean",
+        Value::Number(_) => "a number",
+        Value::String(_) => "a string",
+        Value::Array(_) => "an array",
+        Value::Object(_) => "an object",
+    }
+}
+
 /// Validate an optional memory importance (a number in 0..=1); `field` names it in errors.
 fn validate_importance(value: Option<&Value>, field: &str) -> Result<Option<Value>, String> {
     match value {
         None | Some(Value::Null) => Ok(None),
         Some(v) => match v.as_f64() {
             Some(n) if (0.0..=1.0).contains(&n) => Ok(Some(v.clone())),
-            _ => Err(format!("{field} must be a number between 0 and 1, got {v}")),
+            _ => Err(format!(
+                "{field} must be a number between 0 and 1, got {}",
+                json_type(v)
+            )),
         },
     }
 }
@@ -148,7 +163,8 @@ fn validate_visibility(value: Option<&Value>, field: &str) -> Result<Option<&'st
             Some("shareable") => Ok(Some("shareable")),
             Some("personal") => Ok(Some("personal")),
             _ => Err(format!(
-                "{field} must be \"shareable\" or \"personal\", got {v}"
+                "{field} must be \"shareable\" or \"personal\", got {}",
+                json_type(v)
             )),
         },
     }
@@ -159,7 +175,7 @@ fn validate_credential(c: &Value) -> Result<(), String> {
     const TYPES: [&str; 5] = ["apiKey", "bearer", "header", "oauth2", "envVar"];
     let non_empty = |k: &str| c[k].as_str().is_some_and(|v| !v.is_empty());
     if !c.is_object() {
-        return Err(format!("must be an object, got {c}"));
+        return Err(format!("must be an object, got {}", json_type(c)));
     }
     if !non_empty("ref") {
         return Err("ref must be a non-empty string".into());
@@ -172,7 +188,7 @@ fn validate_credential(c: &Value) -> Result<(), String> {
         return Err(format!(
             "type must be one of {}, got {}",
             TYPES.join("|"),
-            c["type"]
+            json_type(&c["type"])
         ));
     }
     let consumers_ok = c["consumedBy"]
@@ -186,10 +202,16 @@ fn validate_credential(c: &Value) -> Result<(), String> {
     }
     // Optional fields must be absent or well-typed: an explicit null fails zod, so reject it here.
     if c.get("help").is_some_and(|h| !h.is_string()) {
-        return Err(format!("help must be a string when present, got {}", c["help"]));
+        return Err(format!(
+            "help must be a string when present, got {}",
+            json_type(&c["help"])
+        ));
     }
     if c.get("oauth").is_some_and(|o| !o.is_object()) {
-        return Err(format!("oauth must be an object when present, got {}", c["oauth"]));
+        return Err(format!(
+            "oauth must be an object when present, got {}",
+            json_type(&c["oauth"])
+        ));
     }
     if c.get("oauth").is_some() && ty != "oauth2" {
         return Err("oauth details are only allowed when type is \"oauth2\"".into());
@@ -737,13 +759,17 @@ impl Session {
     pub fn set_profile(&mut self, profile: Value) -> Result<(), String> {
         let Value::Object(map) = profile else {
             return Err(format!(
-                "profile must be an object of text fields, got {profile}"
+                "profile must be an object of text fields, got {}",
+                json_type(&profile)
             ));
         };
         let mut seen: Vec<String> = Vec::new();
         for (k, v) in &map {
             if !v.is_string() {
-                return Err(format!("profile field \"{k}\" must be text, got {v}"));
+                return Err(format!(
+                    "profile field \"{k}\" must be text, got {}",
+                    json_type(v)
+                ));
             }
             let key = k.trim().to_string();
             if seen.contains(&key) {

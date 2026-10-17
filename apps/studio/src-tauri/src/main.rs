@@ -39,7 +39,6 @@ fn main() {
             commands::set_avatar,
             commands::remove_avatar,
             commands::reset,
-            commands::export,
             // MCP
             commands::add_mcp_catalog,
             commands::add_custom_mcp,

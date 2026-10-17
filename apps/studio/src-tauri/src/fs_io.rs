@@ -66,6 +66,27 @@ pub fn relative_components(path: &str) -> Result<Vec<String>, String> {
     Ok(segments.into_iter().map(String::from).collect())
 }
 
+/// A chosen save path as (its canonical folder, its file name). A file name holding `:` or `\`
+/// is refused by name, before `write_outputs` would refuse it as an unsafe path segment.
+pub fn save_target(path: &Path) -> Result<(PathBuf, String), String> {
+    let (Some(parent), Some(name)) = (path.parent(), path.file_name().and_then(|n| n.to_str()))
+    else {
+        return Err(format!(
+            "cannot save to {}: not a file path",
+            path.display()
+        ));
+    };
+    if let Some(c) = name.chars().find(|c| matches!(c, ':' | '\\')) {
+        return Err(format!(
+            "cannot save as \"{name}\": file names cannot contain '{c}'; choose another name"
+        ));
+    }
+    let dir = parent
+        .canonicalize()
+        .map_err(|e| format!("cannot save to {}: {e}", parent.display()))?;
+    Ok((dir, name.to_string()))
+}
+
 /// The path to `root/components…` after checking no existing component is a symlink.
 fn checked(root: &Path, components: &[String]) -> Result<PathBuf, String> {
     let mut p = root.to_path_buf();
@@ -215,7 +236,9 @@ fn plan_write(root: &Path, write: &OutputWrite) -> Result<Planned, String> {
 /// write each atomically: a 0600 temp file in the same dir → final mode → fsync → rename. The
 /// final mode is 0600 for `Some(0o600)`; for `None` an existing target's permissions, else
 /// 0666 & ~umask (what the CLI's `writeFile` creates).
-/// Returns the written paths. Never follows or replaces through a symlinked parent.
+/// Returns the written paths. Never follows or replaces through a symlinked parent. Unlike the
+/// CLI's in-place `writeFile`, the rename replaces the file: hardlinks to it are broken and its
+/// extended attributes and ACLs are dropped.
 pub fn write_outputs(root: &Path, writes: &[OutputWrite]) -> Result<Vec<String>, String> {
     let planned = writes
         .iter()
@@ -429,12 +452,17 @@ fn canonical_through_ancestor(path: &Path) -> Result<PathBuf, String> {
     }
 }
 
-/// A framework home's canonical form. Refused when it is not absolute or contains the user's
-/// home folder (`/`, `$HOME` or an ancestor): allowing it would allow every folder.
+/// Whether the canonical folder `dir` is `/`, the user's home folder or an ancestor of it:
+/// allowing it would allow every folder (~/.ssh, ~/.zshrc, ~/Library/LaunchAgents).
+fn contains_home(dir: &Path, home: &Path) -> Result<bool, String> {
+    Ok(canonical_through_ancestor(home)?.starts_with(dir))
+}
+
+/// A framework home's canonical form. Refused when it is not absolute or `contains_home`.
 pub fn safe_home(id: &str, path: &Path, home: &Path) -> Result<PathBuf, String> {
     let canonical = canonical_through_ancestor(path)
         .map_err(|e| format!("the {id} folder is unusable: {e}"))?;
-    if canonical_through_ancestor(home)?.starts_with(&canonical) {
+    if contains_home(&canonical, home)? {
         return Err(format!(
             "the {id} folder {} contains your home folder, so Studio will not use it; point \
              HERMES_HOME / OPENCLAW_STATE_DIR (or the symlink) at a folder of its own",
@@ -446,12 +474,17 @@ pub fn safe_home(id: &str, path: &Path, home: &Path) -> Result<PathBuf, String> 
 
 /// `root` must be absolute; canonicalized through its nearest existing ancestor (the rest must be
 /// normal components). Allowed when it equals or lies under a granted folder (already canonical:
-/// stored by `pick_folder`, never re-resolved) or a `safe_home` framework home. An unusable home
-/// does not block other roots; it is named in the refusal.
+/// stored by `pick_folder`, never re-resolved) or a `safe_home` framework home. A granted folder
+/// that `contains_home` authorises nothing (it is named in the refusal); an unusable home does not
+/// block other roots and is named in the refusal too.
 pub fn allowed_root(root: &str, granted: &[PathBuf], env: &HomeEnv) -> Result<PathBuf, String> {
     let candidate = canonical_through_ancestor(Path::new(root))?;
-    if granted.iter().any(|g| candidate.starts_with(g)) {
-        return Ok(candidate);
+    let mut home_grant = None;
+    for g in granted.iter().filter(|g| candidate.starts_with(g)) {
+        if !contains_home(g, &env.home)? {
+            return Ok(candidate);
+        }
+        home_grant = Some(g);
     }
     let mut unusable = Vec::new();
     for (id, path) in framework_homes(env) {
@@ -461,9 +494,17 @@ pub fn allowed_root(root: &str, granted: &[PathBuf], env: &HomeEnv) -> Result<Pa
             Err(e) => unusable.push(e),
         }
     }
-    let refusal = format!(
-        "{root} is outside the folders Studio may use; pick it with \"Choose folder…\" first"
-    );
+    let refusal = match home_grant {
+        Some(g) => format!(
+            "{root} is outside the folders Studio may use: the granted folder {} contains your \
+             home folder; pick a project folder inside your home, not your home folder itself, \
+             with \"Choose folder…\"",
+            g.display()
+        ),
+        None => format!(
+            "{root} is outside the folders Studio may use; pick it with \"Choose folder…\" first"
+        ),
+    };
     if unusable.is_empty() {
         Err(refusal)
     } else {
