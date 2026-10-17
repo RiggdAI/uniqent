@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { derivePermissions, deriveComponents } from '../src/derive';
+import { derivePermissions, deriveComponents, hasNoComponents } from '../src/derive';
 import type { McpServer } from '@uniqent/spec';
 
 const httpServer = {
@@ -66,5 +66,27 @@ describe('deriveComponents', () => {
     expect(c.memory).toEqual({ facts: 2, episodic: 1, hasProfile: false });
     expect(c.skills).toEqual(['a', 'b']);
     expect(c.mcp).toEqual(['github']);
+  });
+});
+
+describe('hasNoComponents', () => {
+  const none = deriveComponents({
+    hasPersona: false,
+    facts: 0,
+    episodic: 0,
+    hasProfile: false,
+    skills: [],
+    mcp: [],
+    tools: [],
+    tasks: [],
+    channels: [],
+  });
+
+  it('is true only when every component is absent', () => {
+    expect(hasNoComponents(none)).toBe(true);
+    expect(hasNoComponents({ ...none, identity: true })).toBe(false);
+    expect(hasNoComponents({ ...none, memory: { ...none.memory, episodic: 1 } })).toBe(false);
+    expect(hasNoComponents({ ...none, memory: { ...none.memory, hasProfile: true } })).toBe(false);
+    expect(hasNoComponents({ ...none, tasks: ['daily'] })).toBe(false);
   });
 });

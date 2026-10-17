@@ -1,5 +1,5 @@
 import type { MemoryItem, MemoryProfile } from '@uniqent/spec';
-import { stripMemoryMarkup } from '@uniqent/builder';
+import { stripMemoryMarkup } from '@uniqent/builder/memory';
 
 /** Hermes joins memory entries with this delimiter (hermes-agent tools/memory_tool.py ENTRY_DELIMITER). */
 export const ENTRY_DELIMITER = '\n§\n';

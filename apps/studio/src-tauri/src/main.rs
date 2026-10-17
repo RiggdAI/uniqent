@@ -1,16 +1,36 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::sync::Mutex;
+use tauri::{Emitter, Manager};
 use uniqent_studio::commands::{self, AppState};
 use uniqent_studio::session::Session;
 
 fn main() {
+    // Read the umask while the process is still single-threaded (reading it briefly changes it).
+    #[cfg(unix)]
+    uniqent_studio::fs_io::process_umask();
     tauri::Builder::default()
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState {
             session: Mutex::new(Session::new()),
             granted_dirs: Mutex::new(vec![]),
+            granted_files: Mutex::new(vec![]),
+        })
+        // Drops are granted here, from the OS event: the webview never names a path to allow.
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event {
+                let (granted, refused) =
+                    commands::grant_dropped(&window.state::<AppState>(), paths);
+                if let Err(e) = window.emit("studio://dropped", granted) {
+                    eprintln!("studio: cannot emit studio://dropped: {e}");
+                }
+                if !refused.is_empty() {
+                    if let Err(e) = window.emit("studio://drop-refused", refused) {
+                        eprintln!("studio: cannot emit studio://drop-refused: {e}");
+                    }
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![
             commands::state,
@@ -22,7 +42,6 @@ fn main() {
             commands::set_avatar,
             commands::remove_avatar,
             commands::reset,
-            commands::export,
             // MCP
             commands::add_mcp_catalog,
             commands::add_custom_mcp,
@@ -57,6 +76,17 @@ fn main() {
             // Folders
             commands::pick_folder,
             commands::read_vault,
+            commands::folder_markers,
+            // Install / capture I/O
+            commands::read_inputs,
+            commands::write_outputs,
+            commands::framework_homes,
+            // Bundles
+            commands::bundle_files,
+            commands::load_bundle_files,
+            commands::open_bundle,
+            commands::open_dropped_bundle,
+            commands::save_bundle,
         ])
         .run(tauri::generate_context!())
         .expect("error while running uniqent studio");

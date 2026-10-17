@@ -10,3 +10,6 @@ export * from './memory/parse.js';
 export * from './memory/vault.js';
 export * from './featured.js';
 export * from './detect.js';
+export * from './scrub.js';
+export * from './detect-markers.js';
+export * from './describe-mcp.js';

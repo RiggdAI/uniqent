@@ -244,13 +244,84 @@ fn cron_problem_matches_the_ts_rules() {
 fn profile_must_be_an_object_of_text() {
     let mut s = Session::new();
     assert!(s.set_profile(serde_json::json!("abc")).is_err());
-    assert!(s.set_profile(serde_json::json!({"age": 3})).is_err());
+    let err = s
+        .set_profile(serde_json::json!({"keys": {"token": "SECRET_VAL"}}))
+        .unwrap_err();
+    assert!(
+        err.contains("\"keys\"") && err.contains("an object") && !err.contains("SECRET_VAL"),
+        "{err}"
+    );
+    let err = s
+        .set_profile(serde_json::json!(["SECRET_VAL"]))
+        .unwrap_err();
+    assert!(
+        err.contains("an array") && !err.contains("SECRET_VAL"),
+        "{err}"
+    );
     assert!(s
         .set_profile(serde_json::json!({"Role": "a", " Role ": "b"}))
         .is_err());
     s.set_profile(serde_json::json!({"Role": "Engineer"}))
         .unwrap();
     assert_eq!(s.get_profile(), serde_json::json!({"Role": "Engineer"}));
+}
+
+#[test]
+fn profile_trims_names_and_values_and_drops_blank_ones() {
+    let mut s = Session::new();
+    s.set_profile(serde_json::json!({" Name ": " Ada ", "nick": "   ", "  ": "x"}))
+        .unwrap();
+    assert_eq!(s.get_profile(), serde_json::json!({"Name": "Ada"}));
+    s.set_profile(serde_json::json!({"nick": " \t "})).unwrap();
+    assert_eq!(s.get_profile(), serde_json::json!({}));
+}
+
+#[test]
+fn custom_mcp_must_be_a_spec_server() {
+    let mut s = Session::new();
+    let cases = [
+        (
+            serde_json::json!({"id": "bad", "transport": "streamable-http", "auth": {"type": "none"}}),
+            "url",
+        ),
+        (
+            serde_json::json!({"id": "bad", "transport": "sse", "url": "", "auth": {"type": "none"}}),
+            "url",
+        ),
+        (
+            serde_json::json!({"id": "bad", "transport": "stdio", "command": "", "auth": {"type": "none"}}),
+            "command",
+        ),
+        (
+            serde_json::json!({"id": "bad", "transport": "ws", "url": "https://x.example/mcp", "auth": {"type": "none"}}),
+            "transport",
+        ),
+        (
+            serde_json::json!({"id": "bad", "transport": "streamable-http", "url": "https://x.example/mcp",
+                "auth": {"type": "header", "credentialRef": "k"}}),
+            "headerName",
+        ),
+    ];
+    for (server, field) in cases {
+        let err = s.add_custom_mcp(server).unwrap_err();
+        assert!(err.contains(field), "{err}");
+    }
+    let m = &s.state()["manifest"];
+    assert!(
+        m["components"]["mcp"].as_array().is_none_or(Vec::is_empty),
+        "{m}"
+    );
+    assert!(m["credentials"].as_array().is_none_or(Vec::is_empty), "{m}");
+
+    s.add_custom_mcp(
+        serde_json::json!({"id": "ok", "transport": "stdio", "command": "npx",
+        "auth": {"type": "none"}}),
+    )
+    .unwrap();
+    assert_eq!(
+        s.state()["manifest"]["components"]["mcp"],
+        serde_json::json!(["ok"])
+    );
 }
 
 #[test]

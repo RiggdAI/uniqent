@@ -21,6 +21,7 @@ import {
   type MemoryPackUpload,
 } from '@uniqent/builder/hubs';
 import { importVault, memoryGraph, type VaultFile } from '@uniqent/builder/memory';
+import { PROJECT_MARKERS } from '@uniqent/builder/brain';
 import type {
   StudioState,
   HubSearch,
@@ -29,6 +30,7 @@ import type {
   MemoryHubSearch,
   MemoryGraph,
   VaultImport,
+  FrameworkHomes,
 } from './types';
 
 const fetchFn: FetchFn = (input, init) => tauriFetch(input, init);
@@ -37,7 +39,7 @@ const fetchFn: FetchFn = (input, init) => tauriFetch(input, init);
  * invoke() rejects with the Rust command's plain error string; rethrow it as an Error (same
  * message) so every panel's `(e as Error).message` shows it.
  */
-async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+export async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   try {
     return await invoke<T>(cmd, args);
   } catch (e) {
@@ -131,7 +133,8 @@ export async function publishMemory(
   registry: string,
 ): Promise<{ result: { slug: string; factCount: number; url?: string; persisted?: boolean } }> {
   const reg = registry || DEFAULT_MEMORY_REGISTRY;
-  const token = typedToken || (await call<string | null>('registry_token', { registry: reg }));
+  const token =
+    typedToken.trim() || (await call<string | null>('registry_token', { registry: reg }));
   if (!token) {
     throw new Error(`not signed in to ${reg}: run \`uniqent login\` or paste a publish token`);
   }
@@ -141,4 +144,13 @@ export async function publishMemory(
 
 export function chooseFolder(): Promise<string | null> {
   return call<string | null>('pick_folder');
+}
+
+export function frameworkHomes(): Promise<FrameworkHomes> {
+  return call<FrameworkHomes>('framework_homes');
+}
+
+/** Which project markers (PROJECT_MARKERS) a picked folder holds. */
+export function folderMarkers(dir: string): Promise<string[]> {
+  return call<string[]>('folder_markers', { dir, names: [...PROJECT_MARKERS] });
 }

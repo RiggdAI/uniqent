@@ -3,8 +3,6 @@ import { X, Trash2, KeyRound, ImagePlus } from 'lucide-react';
 import type {
   StudioState,
   CatalogView,
-  InstallPlan,
-  InstallResult,
   HubSearch,
   McpHubResult,
   McpNormalizePreview,
@@ -12,8 +10,10 @@ import type {
   MemoryPackResult,
   VaultImport,
 } from './types';
-import { api, isNative } from './api';
-import { canPublish } from './publish';
+import { api } from './api';
+import { InstallPanel } from './InstallPanel';
+import { CapturePanel } from './CapturePanel';
+import { errorText } from './lib/utils';
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
 import { Textarea } from './components/ui/textarea';
@@ -26,11 +26,10 @@ interface InspectorProps {
   catalog: CatalogView;
   apply: (p: Promise<StudioState>) => void;
   onClose: () => void;
-}
-
-/** The message of a failed API call, for showing next to the control that triggered it. */
-function errorText(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
+  /** A folder dropped on the window, for the 'vault' and 'capture' panels (else null). */
+  droppedDir: string | null;
+  /** A capture replaced the brain: App drops what described the old one (the Open report). */
+  onReplaced: () => void;
 }
 
 function Field({
@@ -68,7 +67,10 @@ function RichEditor(props: { value: string; onChange: (md: string) => void; test
   );
 }
 
-function PersonaEditor({ state, apply }: Omit<InspectorProps, 'selection' | 'onClose'>) {
+function PersonaEditor({
+  state,
+  apply,
+}: Omit<InspectorProps, 'selection' | 'onClose' | 'droppedDir' | 'onReplaced'>) {
   const [persona, setPersona] = useState(state.persona ?? '');
   const dirty = persona !== (state.persona ?? '');
   return (
@@ -91,7 +93,10 @@ function PersonaEditor({ state, apply }: Omit<InspectorProps, 'selection' | 'onC
   );
 }
 
-function MemoryEditor({ state, apply }: Omit<InspectorProps, 'selection' | 'onClose'>) {
+function MemoryEditor({
+  state,
+  apply,
+}: Omit<InspectorProps, 'selection' | 'onClose' | 'droppedDir' | 'onReplaced'>) {
   const [text, setText] = useState('');
   const [addError, setAddError] = useState('');
   const [importance, setImportance] = useState('0.5');
@@ -272,7 +277,7 @@ function MemoryEditor({ state, apply }: Omit<InspectorProps, 'selection' | 'onCl
         </div>
       </div>
 
-      <VaultImportPanel apply={apply} />
+      <VaultImportPanel apply={apply} initialDir={null} />
     </div>
   );
 }
@@ -283,8 +288,15 @@ function MemoryEditor({ state, apply }: Omit<InspectorProps, 'selection' | 'onCl
  * notes become episodic). Preview first; the apply overwrites persona/profile only if you keep
  * the toggles on.
  */
-function VaultImportPanel({ apply }: { apply: (p: Promise<StudioState>) => void }) {
-  const [dir, setDir] = useState('');
+function VaultImportPanel({
+  apply,
+  initialDir,
+}: {
+  apply: (p: Promise<StudioState>) => void;
+  /** A folder dropped on the window (already granted by Rust), else null. */
+  initialDir: string | null;
+}) {
+  const [dir, setDir] = useState(initialDir ?? '');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [preview, setPreview] = useState<VaultImport | null>(null);
@@ -347,29 +359,18 @@ function VaultImportPanel({ apply }: { apply: (p: Promise<StudioState>) => void 
         notes become episodic).
       </p>
       <div className="flex items-center gap-2">
-        {isNative ? (
-          <>
-            <Button
-              data-testid="vault-choose"
-              variant="outline"
-              size="sm"
-              disabled={busy}
-              onClick={chooseFolder}
-            >
-              Choose folder…
-            </Button>
-            <span data-testid="vault-dir" className="truncate text-xs text-muted-foreground">
-              {dir || 'No folder chosen'}
-            </span>
-          </>
-        ) : (
-          <Input
-            data-testid="vault-dir"
-            placeholder="/Users/you/Documents/MyVault"
-            value={dir}
-            onChange={(e) => setDir(e.target.value)}
-          />
-        )}
+        <Button
+          data-testid="vault-choose"
+          variant="outline"
+          size="sm"
+          disabled={busy}
+          onClick={chooseFolder}
+        >
+          Choose folder…
+        </Button>
+        <span data-testid="vault-dir" className="truncate text-xs text-muted-foreground">
+          {dir || 'No folder chosen'}
+        </span>
         <Button
           data-testid="vault-preview"
           variant="outline"
@@ -443,7 +444,10 @@ function VaultImportPanel({ apply }: { apply: (p: Promise<StudioState>) => void 
   );
 }
 
-function ConfigEditor({ state, apply }: Omit<InspectorProps, 'selection' | 'onClose'>) {
+function ConfigEditor({
+  state,
+  apply,
+}: Omit<InspectorProps, 'selection' | 'onClose' | 'droppedDir' | 'onReplaced'>) {
   const m = state.manifest;
   const [name, setName] = useState(m.name);
   const [displayName, setDisplayName] = useState(m.displayName);
@@ -1100,142 +1104,6 @@ function CustomMcpEditor({ apply }: { apply: (p: Promise<StudioState>) => void }
   );
 }
 
-function InstallPanel({ catalog }: { catalog: CatalogView }) {
-  const [target, setTarget] = useState(catalog.targets[0] ?? 'claude-code');
-  const [root, setRoot] = useState('');
-  const [plan, setPlan] = useState<InstallPlan | null>(null);
-  const [creds, setCreds] = useState<Record<string, string>>({});
-  const [result, setResult] = useState<InstallResult | null>(null);
-  const [err, setErr] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  async function preview(): Promise<void> {
-    setBusy(true);
-    setErr('');
-    setResult(null);
-    try {
-      setPlan(await api.installPlan(target, root.trim()));
-    } catch (e) {
-      setErr(String(e));
-      setPlan(null);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function doInstall(): Promise<void> {
-    setBusy(true);
-    setErr('');
-    try {
-      setResult(await api.install(target, root.trim(), creds));
-    } catch (e) {
-      setErr(String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const missing = plan ? plan.requiresCredentials.filter((r) => !creds[r]?.trim()) : [];
-
-  // A plan is for a specific target+root; changing either invalidates it so the
-  // credential gate can't pass against a stale plan.
-  function changeTarget(v: string): void {
-    setTarget(v);
-    setPlan(null);
-    setResult(null);
-  }
-  function changeRoot(v: string): void {
-    setRoot(v);
-    setPlan(null);
-    setResult(null);
-  }
-
-  return (
-    <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">Install this brain into a local framework.</p>
-      <div className="space-y-1.5">
-        <Label>Target</Label>
-        <select
-          className={selectClass}
-          value={target}
-          onChange={(e) => changeTarget(e.target.value)}
-        >
-          {catalog.targets.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="space-y-1.5">
-        <Label>Project root (absolute path)</Label>
-        <Input
-          data-testid="install-root"
-          placeholder="/Users/you/my-project"
-          value={root}
-          onChange={(e) => changeRoot(e.target.value)}
-        />
-      </div>
-      <Button
-        data-testid="install-preview"
-        variant="outline"
-        disabled={busy || !root.trim()}
-        onClick={preview}
-      >
-        Preview plan
-      </Button>
-
-      {plan && (
-        <div className="space-y-3 border-t pt-3">
-          <div className="text-xs text-muted-foreground">
-            {plan.writes.length} file(s) will be written.
-          </div>
-          {plan.lossiness.length > 0 && (
-            <ul className="space-y-1 text-xs text-muted-foreground">
-              {plan.lossiness.map((l, i) => (
-                <li key={i}>
-                  <span className="text-amber-400">{l.action}</span>: {l.component}
-                </li>
-              ))}
-            </ul>
-          )}
-          {plan.requiresCredentials.map((ref) => (
-            <div className="space-y-1.5" key={ref}>
-              <Label>credential: {ref}</Label>
-              <Input
-                data-testid={`install-cred-${ref}`}
-                type="password"
-                placeholder="resolved locally, never stored in the bundle"
-                value={creds[ref] ?? ''}
-                onChange={(e) => setCreds((c) => ({ ...c, [ref]: e.target.value }))}
-              />
-            </div>
-          ))}
-          <Button
-            data-testid="install-apply"
-            disabled={busy || missing.length > 0}
-            onClick={doInstall}
-          >
-            Install into {target}
-          </Button>
-        </div>
-      )}
-
-      {result && (
-        <div className="space-y-1 rounded-md border border-success/30 bg-success/10 p-3 text-sm text-success">
-          <div className="font-medium">Installed {result.written.length} file(s).</div>
-          {result.notes.map((n, i) => (
-            <div key={i} className="text-xs text-muted-foreground">
-              {n}
-            </div>
-          ))}
-        </div>
-      )}
-      {err && <p className="text-sm text-destructive">{err}</p>}
-    </div>
-  );
-}
-
 /** Manage "a hub is just a hosted index.json" URLs; shared by both hub panels (session state). */
 function HubIndexManager() {
   const [indexes, setIndexes] = useState<string[]>([]);
@@ -1775,26 +1643,17 @@ function MemoryHubPanel({ apply }: { apply: (p: Promise<StudioState>) => void })
         <Label>Publish this brain's memory</Label>
         <p className="text-xs text-muted-foreground">
           Share this brain's <b>shareable</b> facts as a pack on the hub (personal memory never
-          leaves).{' '}
-          {isNative
-            ? 'Uses your `uniqent login` token unless you paste one.'
-            : 'Needs a publish token.'}
+          leaves). Uses your `uniqent login` token unless you paste one.
         </p>
         <div className="flex gap-2">
           <Input
             data-testid="memory-hub-token"
             type="password"
-            placeholder={
-              isNative ? 'publish token (optional — uses uniqent login)' : 'publish token'
-            }
+            placeholder="publish token (optional — uses uniqent login)"
             value={token}
             onChange={(e) => setToken(e.target.value)}
           />
-          <Button
-            data-testid="memory-hub-publish"
-            onClick={() => publish()}
-            disabled={publishing || !canPublish(token, isNative)}
-          >
+          <Button data-testid="memory-hub-publish" onClick={() => publish()} disabled={publishing}>
             {publishing ? 'Publishing…' : 'Publish'}
           </Button>
         </div>
@@ -1815,6 +1674,8 @@ function titleFor(selection: string): string {
   if (selection === 'hub-mcp') return 'Browse MCP hubs';
   if (selection === 'hub-skills') return 'Browse skill hubs';
   if (selection === 'install') return 'Install';
+  if (selection === 'capture') return 'Capture an agent';
+  if (selection === 'vault') return 'Import a vault';
   if (selection === 'agent') return 'Config';
   if (selection === 'persona') return 'Persona';
   if (selection === 'memory') return 'Memory';
@@ -1830,7 +1691,7 @@ function titleFor(selection: string): string {
 }
 
 export function Inspector(props: InspectorProps) {
-  const { selection, state, catalog, apply, onClose } = props;
+  const { selection, state, catalog, apply, onClose, droppedDir, onReplaced } = props;
   return (
     <aside className="flex h-full flex-col">
       <div className="flex h-12 shrink-0 items-center justify-between border-b px-4">
@@ -1872,7 +1733,18 @@ export function Inspector(props: InspectorProps) {
         {selection === 'new-mcp' && <CustomMcpEditor apply={apply} />}
         {selection === 'hub-mcp' && <HubMcpPanel state={state} apply={apply} />}
         {selection === 'hub-skills' && <HubSkillPanel apply={apply} />}
-        {selection === 'install' && <InstallPanel catalog={catalog} />}
+        {selection === 'install' && <InstallPanel />}
+        {selection === 'capture' && (
+          <CapturePanel
+            key={droppedDir ?? ''}
+            dir={droppedDir}
+            apply={apply}
+            onReplaced={onReplaced}
+          />
+        )}
+        {selection === 'vault' && (
+          <VaultImportPanel key={droppedDir ?? ''} apply={apply} initialDir={droppedDir} />
+        )}
         {selection.startsWith('cred:') && (
           <CredentialDetails refId={selection.slice(5)} state={state} />
         )}

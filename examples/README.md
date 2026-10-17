@@ -38,7 +38,7 @@ node packages/cli/dist/bin.js install https://example.com/dev-powerpack.uniqent 
 
 These are generated from `@uniqent/builder`, so they always validate; regenerate by editing the
 builder and re-authoring. Or build your own in **Uniqent Studio**
-(`pnpm --filter @uniqent/studio build && pnpm --filter @uniqent/studio start`).
+(`pnpm --filter @uniqent/studio native:dev`).
 
 ## Memory sample
 

@@ -4,3 +4,8 @@ import { twMerge } from 'tailwind-merge';
 export function cn(...inputs: ClassValue[]): string {
   return twMerge(clsx(inputs));
 }
+
+/** The message of a failed API call, for showing next to the control that triggered it. */
+export function errorText(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}

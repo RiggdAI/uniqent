@@ -5,7 +5,7 @@ import { parseMemoryMarkdown, stripMemoryMarkup, type ImportedMemoryItem } from 
  * Import a "second-brain" Obsidian-style vault (a folder of markdown) into the parts of a Brain.
  * This is the framework-agnostic, PURE logic: it operates on already-read files (`{ path, content }`)
  * so it stays testable and free of any filesystem dependency — the I/O (walking the directory) lives
- * in the Studio server / CLI. The dominant pattern in the ecosystem (SOUL.md / USER.md / MEMORY.md +
+ * in Studio's Rust backend / the CLI. The dominant pattern in the ecosystem (SOUL.md / USER.md / MEMORY.md +
  * `[[wikilinks]]` and `#tags`) maps cleanly onto our persona / profile / memory model.
  */
 export interface VaultFile {

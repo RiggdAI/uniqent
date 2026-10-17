@@ -1,16 +1,27 @@
-import type { Bundle } from '@uniqent/core';
+import type { Bundle } from '@uniqent/core/pure';
 import {
   assertMcpCredentialScope,
   assertNoEnvReferences,
+  confineRelative,
+  joinPath,
+  OWNER_ONLY,
+  readText,
   requiredCredentialRefs,
-  resolveInside,
+  sameBytes,
+  type FileRef,
+  type InputRequest,
   type InstallPlan,
   type Lossiness,
+  type OutputWrite,
   type PlanWrite,
-} from '@uniqent/adapter-sdk';
+  type ReadFiles,
+  type ResolvedCredentials,
+  type TargetContext,
+  type Translation,
+} from '@uniqent/adapter-sdk/pure';
 import { CHANNEL_TOKEN_ENV } from './channels.js';
 import { memoryLimits, mergeMcpServers, readMcpServers } from './config.js';
-import { envName } from './env.js';
+import { envName, mergeEnv } from './env.js';
 import { mcpCredentialRefs, toHermesMcp, unmappedAuth } from './mcp.js';
 import {
   factCandidates,
@@ -26,7 +37,7 @@ export const MEMORY_FILE = 'memories/MEMORY.md';
 export const USER_FILE = 'memories/USER.md';
 export const CONFIG_FILE = 'config.yaml';
 export const ENV_FILE = '.env';
-const SKILLS_DIR = 'skills';
+export const SKILLS_DIR = 'skills';
 
 /** Existing $HERMES_HOME files the install merges into (undefined = file absent). */
 export interface HermesHome {
@@ -50,7 +61,8 @@ export interface EnvBinding {
   ref: string;
 }
 
-export interface Translation {
+/** The install against the current home, before credentials are resolved. */
+export interface Draft {
   plan: InstallPlan;
   /** Every file except .env, whose content needs the resolved credentials. */
   files: FileWrite[];
@@ -81,9 +93,56 @@ export class EnvKeyConflictError extends Error {
   }
 }
 
+/** translate() was called without a value for a credential the plan requires. */
+export class MissingCredentialError extends Error {
+  constructor(readonly refs: string[]) {
+    super(`missing resolved credential(s) for Hermes install: ${refs.join(', ')}`);
+    this.name = 'MissingCredentialError';
+  }
+}
+
+/** Root-relative target of a bundle `skills/...` path; throws PathEscapeError if it leaves skills/. */
+function skillPath(root: string, path: string): string {
+  const rel = path.slice(`${SKILLS_DIR}/`.length);
+  return `${SKILLS_DIR}/${confineRelative(joinPath(root, SKILLS_DIR), rel)}`;
+}
+
 /** Absolute target of a bundle `skills/...` path; throws PathEscapeError if it leaves skills/. */
 export function skillTarget(root: string, path: string): string {
-  return resolveInside(resolveInside(root, SKILLS_DIR), path.slice(`${SKILLS_DIR}/`.length));
+  return joinPath(root, skillPath(root, path));
+}
+
+const HOME_FILES = [SOUL_FILE, MEMORY_FILE, USER_FILE, CONFIG_FILE, ENV_FILE];
+const bundleSkills = (bundle: Bundle): string[] =>
+  bundle.list().filter((p) => p.startsWith(`${SKILLS_DIR}/`));
+
+/**
+ * Files the install reads: the five $HERMES_HOME files it merges into, then the target of every
+ * bundle skill file (a hostile skill path throws PathEscapeError here, before anything is read).
+ */
+export function inputs(bundle: Bundle, _read: ReadFiles, ctx: TargetContext): InputRequest {
+  const files: FileRef[] = [
+    ...HOME_FILES.map((path) => ({ root: ctx.root, path })),
+    ...bundleSkills(bundle).map((path) => ({ root: ctx.root, path: skillPath(ctx.root, path) })),
+  ];
+  return { files, finds: [] };
+}
+
+/** The current $HERMES_HOME state from the files `inputs()` asked for. */
+function homeFrom(bundle: Bundle, read: ReadFiles, ctx: TargetContext): HermesHome {
+  const skills = new Map<string, Uint8Array>();
+  for (const path of bundleSkills(bundle)) {
+    const prior = read.get(skillTarget(ctx.root, path));
+    if (prior !== undefined) skills.set(path, prior);
+  }
+  return {
+    soul: readText(read, ctx.root, SOUL_FILE),
+    memory: readText(read, ctx.root, MEMORY_FILE),
+    user: readText(read, ctx.root, USER_FILE),
+    config: readText(read, ctx.root, CONFIG_FILE),
+    env: readText(read, ctx.root, ENV_FILE),
+    skills,
+  };
 }
 
 const plural = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
@@ -107,10 +166,10 @@ function memoryLoss(
 }
 
 /**
- * Translate a bundle against the current $HERMES_HOME state. Pure: the same bundle + state always
- * yields the same plan and file contents, which is what makes apply() idempotent.
+ * Draft the install of a bundle against the current $HERMES_HOME state. Pure: the same bundle +
+ * state always yields the same plan and file contents, which is what makes apply() idempotent.
  */
-export function translate(bundle: Bundle, home: HermesHome, root: string): Translation {
+function draft(bundle: Bundle, home: HermesHome, root: string): Draft {
   assertNoEnvReferences(bundle);
   const writes: PlanWrite[] = [];
   const files: FileWrite[] = [];
@@ -181,7 +240,7 @@ export function translate(bundle: Bundle, home: HermesHome, root: string): Trans
     if (!path.startsWith(`${SKILLS_DIR}/`)) continue;
     skillTarget(root, path);
     const prior = home.skills.get(path);
-    if (prior !== undefined && !Buffer.from(prior).equals(Buffer.from(bytes)))
+    if (prior !== undefined && !sameBytes(prior, bytes))
       lossiness.push({
         component: `skill ${path}`,
         action: 'transformed',
@@ -313,5 +372,68 @@ export function translate(bundle: Bundle, home: HermesHome, root: string): Trans
     },
     files,
     env,
+  };
+}
+
+/** The install plan for `bundle` against the files `inputs()` read. */
+export function planInstall(bundle: Bundle, read: ReadFiles, ctx: TargetContext): InstallPlan {
+  return draft(bundle, homeFrom(bundle, read, ctx), ctx.root).plan;
+}
+
+const ENCODER = new TextEncoder();
+
+/**
+ * Every file the install writes, in order, with the resolved credentials merged into an
+ * owner-only .env; throws MissingCredentialError unless every required credential has a value.
+ */
+export function translate(
+  bundle: Bundle,
+  read: ReadFiles,
+  resolved: ResolvedCredentials,
+  ctx: TargetContext,
+): Translation {
+  const home = homeFrom(bundle, read, ctx);
+  const { plan, files, env } = draft(bundle, home, ctx.root);
+  const missing = plan.requiresCredentials.filter((ref) => !resolved[ref]);
+  if (missing.length > 0) throw new MissingCredentialError(missing);
+
+  const writes: OutputWrite[] = files.map((f) => ({
+    root: ctx.root,
+    path: f.path,
+    bytes: typeof f.content === 'string' ? ENCODER.encode(f.content) : f.content,
+    mode: null,
+  }));
+  const envMerge =
+    env.length === 0
+      ? undefined
+      : mergeEnv(home.env, new Map(env.map((b) => [b.key, resolved[b.ref] ?? ''])));
+  // .env holds real secrets: owner-only, which also tightens a pre-existing file.
+  const all: OutputWrite[] =
+    envMerge === undefined
+      ? writes
+      : [
+          ...writes,
+          {
+            root: ctx.root,
+            path: ENV_FILE,
+            bytes: ENCODER.encode(envMerge.content),
+            mode: OWNER_ONLY,
+          },
+        ];
+  const lossiness: Lossiness[] =
+    envMerge === undefined || envMerge.replaced.length === 0
+      ? plan.lossiness
+      : [
+          ...plan.lossiness,
+          {
+            component: ENV_FILE,
+            action: 'transformed',
+            issue: `replaces your existing, different value of ${envMerge.replaced.join(', ')}.`,
+          },
+        ];
+  return {
+    plan,
+    writes: all,
+    notes: lossiness.map((l) => `${l.action}: ${l.component} — ${l.issue}`),
   };
 }

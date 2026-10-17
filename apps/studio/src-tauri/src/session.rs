@@ -1,12 +1,16 @@
 use base64::Engine;
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use std::sync::OnceLock;
 
-use crate::core::archive::pack_checked;
+use crate::core::archive::{pack_checked, unpack};
 use crate::core::bundle::Bundle;
 use crate::core::secret_scan::is_likely_secret_value;
 use crate::core::signing::{generate_keypair, sign, verify, Keypair};
+
+mod load;
+pub(crate) use load::mcp_server_problem;
 
 /// Validate `name` against the Slug pattern: `^[a-z0-9][a-z0-9-]*$`
 fn is_valid_slug(s: &str) -> bool {
@@ -75,8 +79,13 @@ const CRON_FIELDS: [(&str, u32, u32); 5] = [
     ("day-of-week", 0, 7),
 ];
 
+/// Whether a profile field survives `set_profile`: its trimmed name and trimmed value are non-empty.
+fn profile_field_kept(name: &str, value: &str) -> bool {
+    !name.trim().is_empty() && !value.trim().is_empty()
+}
+
 /// Explain why `expr` is not a standard 5-field cron expression (numbers, ranges, lists, steps,
-/// `*`), or `None` when it is valid. Mirrors `cronProblem` in apps/studio/src/server/cron.ts.
+/// `*`), each value within its field's range in `CRON_FIELDS`, or `None` when it is valid.
 pub fn cron_problem(expr: &str) -> Option<String> {
     let parts: Vec<&str> = expr.split_whitespace().collect();
     if parts.len() != CRON_FIELDS.len() {
@@ -121,13 +130,28 @@ pub fn cron_problem(expr: &str) -> Option<String> {
     None
 }
 
+/// A value's JSON type, for errors about fields that may hold secrets (never the value itself).
+fn json_type(v: &Value) -> &'static str {
+    match v {
+        Value::Null => "null",
+        Value::Bool(_) => "a boolean",
+        Value::Number(_) => "a number",
+        Value::String(_) => "a string",
+        Value::Array(_) => "an array",
+        Value::Object(_) => "an object",
+    }
+}
+
 /// Validate an optional memory importance (a number in 0..=1); `field` names it in errors.
 fn validate_importance(value: Option<&Value>, field: &str) -> Result<Option<Value>, String> {
     match value {
         None | Some(Value::Null) => Ok(None),
         Some(v) => match v.as_f64() {
             Some(n) if (0.0..=1.0).contains(&n) => Ok(Some(v.clone())),
-            _ => Err(format!("{field} must be a number between 0 and 1, got {v}")),
+            _ => Err(format!(
+                "{field} must be a number between 0 and 1, got {}",
+                json_type(v)
+            )),
         },
     }
 }
@@ -140,7 +164,8 @@ fn validate_visibility(value: Option<&Value>, field: &str) -> Result<Option<&'st
             Some("shareable") => Ok(Some("shareable")),
             Some("personal") => Ok(Some("personal")),
             _ => Err(format!(
-                "{field} must be \"shareable\" or \"personal\", got {v}"
+                "{field} must be \"shareable\" or \"personal\", got {}",
+                json_type(v)
             )),
         },
     }
@@ -151,7 +176,7 @@ fn validate_credential(c: &Value) -> Result<(), String> {
     const TYPES: [&str; 5] = ["apiKey", "bearer", "header", "oauth2", "envVar"];
     let non_empty = |k: &str| c[k].as_str().is_some_and(|v| !v.is_empty());
     if !c.is_object() {
-        return Err(format!("must be an object, got {c}"));
+        return Err(format!("must be an object, got {}", json_type(c)));
     }
     if !non_empty("ref") {
         return Err("ref must be a non-empty string".into());
@@ -164,7 +189,7 @@ fn validate_credential(c: &Value) -> Result<(), String> {
         return Err(format!(
             "type must be one of {}, got {}",
             TYPES.join("|"),
-            c["type"]
+            json_type(&c["type"])
         ));
     }
     let consumers_ok = c["consumedBy"]
@@ -178,10 +203,16 @@ fn validate_credential(c: &Value) -> Result<(), String> {
     }
     // Optional fields must be absent or well-typed: an explicit null fails zod, so reject it here.
     if c.get("help").is_some_and(|h| !h.is_string()) {
-        return Err(format!("help must be a string when present, got {}", c["help"]));
+        return Err(format!(
+            "help must be a string when present, got {}",
+            json_type(&c["help"])
+        ));
     }
     if c.get("oauth").is_some_and(|o| !o.is_object()) {
-        return Err(format!("oauth must be an object when present, got {}", c["oauth"]));
+        return Err(format!(
+            "oauth must be an object when present, got {}",
+            json_type(&c["oauth"])
+        ));
     }
     if c.get("oauth").is_some() && ty != "oauth2" {
         return Err("oauth details are only allowed when type is \"oauth2\"".into());
@@ -266,6 +297,35 @@ pub fn skill_from_catalog(catalog: &Value, name: &str) -> Option<(String, String
     Some((name.to_string(), skill_md.to_string()))
 }
 
+// Shared with `load` (which holds the other bundle paths).
+const POLICIES: &str = "identity/policies.md";
+const MEMORY_KINDS: [&str; 5] = ["fact", "decision", "preference", "milestone", "episodic"];
+
+/// One bundle file across the IPC boundary: its bundle path and base64 bytes.
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct BundleFile {
+    pub path: String,
+    pub bytes_base64: String,
+}
+
+/// Unpack a `.uniqent` and check its signature: `"valid"` or `"unsigned"`. A signed bundle whose
+/// signature no longer matches is refused, never opened.
+pub fn open_bundle_bytes(bytes: &[u8]) -> Result<(Bundle, &'static str), String> {
+    let bundle = unpack(bytes)?;
+    let v = verify(&bundle);
+    if !v.signed {
+        return Ok((bundle, "unsigned"));
+    }
+    if v.valid {
+        return Ok((bundle, "valid"));
+    }
+    Err(format!(
+        "signature is INVALID ({}): the bundle changed after signing; refusing to open",
+        v.reason.as_deref().unwrap_or("invalid signature")
+    ))
+}
+
 pub struct Session {
     name: String,
     display_name: String,
@@ -273,6 +333,7 @@ pub struct Session {
     version: String,
     targets: Vec<String>,
     persona: Option<String>,
+    policies: Option<String>, // identity/policies.md, passed through (no editor yet)
     readme: Option<String>,
     avatar: Option<String>, // data: URL, validated on set
     keypair: Option<Keypair>,
@@ -304,6 +365,7 @@ impl Session {
             version: "0.1.0".into(),
             targets: vec![],
             persona: None,
+            policies: None,
             readme: None,
             avatar: None,
             keypair: None,
@@ -421,19 +483,19 @@ impl Session {
     }
 
     /// Add custom MCP server. Merges tools:{include:'all'} as default.
+    /// Errors (adding nothing) when the result is not a spec McpServer, naming the field.
     pub fn add_custom_mcp(&mut self, input: Value) -> Result<(), String> {
-        let id = input["id"]
-            .as_str()
-            .ok_or("custom MCP must have an id")?
-            .to_string();
-
         // Build server: start with tools default, then overlay input fields
         let mut server = json!({"tools": {"include": "all"}});
-        if let (Value::Object(base), Value::Object(extra)) = (&mut server, input.clone()) {
+        if let (Value::Object(base), Value::Object(extra)) = (&mut server, input) {
             for (k, v) in extra {
                 base.insert(k, v);
             }
         }
+        if let Some(problem) = load::mcp_server_problem(&server) {
+            return Err(format!("custom MCP server: {problem}"));
+        }
+        let id = server["id"].as_str().unwrap_or_default().to_string();
 
         // Dedup by id: remove old, append new
         self.mcp.retain(|s| s["id"].as_str().unwrap_or("") != id);
@@ -500,8 +562,7 @@ impl Session {
     }
 
     /// Remove a component via `remove` and release its credentials: `consumer` is dropped from
-    /// every credential it used, and a credential left with no consumer is removed. Mirrors
-    /// `releaseCredentials` in apps/studio/src/server/session.ts.
+    /// every credential it used, and a credential left with no consumer is removed.
     fn remove_consumer(&mut self, consumer: &str, remove: impl FnOnce(&mut Self)) {
         let before: Vec<(Value, Vec<String>)> = self
             .credentials
@@ -584,7 +645,7 @@ impl Session {
 
     /// Add a task. Input may have: name, triggerType (schedule|event|manual, default schedule),
     /// cron (required + validated for schedule), event (required for event), prompt, enabled.
-    /// Mirrors the TS `/api/task/add` validation; nothing changes on error.
+    /// Nothing changes on error.
     pub fn add_task(&mut self, input: Value) -> Result<(), String> {
         let trigger_type = match input.get("triggerType") {
             None | Some(Value::Null) => "schedule",
@@ -693,18 +754,23 @@ impl Session {
         Ok(())
     }
 
-    /// Set profile: an object of text fields with distinct (trimmed) names. Empty values are
-    /// dropped; an empty profile clears it. Errors (changing nothing) on any other shape.
+    /// Set profile: an object of text fields with distinct (trimmed) names. Names and values are
+    /// trimmed; fields `profile_field_kept` rejects are dropped; an empty profile clears it.
+    /// Errors (changing nothing) on any other shape.
     pub fn set_profile(&mut self, profile: Value) -> Result<(), String> {
         let Value::Object(map) = profile else {
             return Err(format!(
-                "profile must be an object of text fields, got {profile}"
+                "profile must be an object of text fields, got {}",
+                json_type(&profile)
             ));
         };
         let mut seen: Vec<String> = Vec::new();
         for (k, v) in &map {
             if !v.is_string() {
-                return Err(format!("profile field \"{k}\" must be text, got {v}"));
+                return Err(format!(
+                    "profile field \"{k}\" must be text, got {}",
+                    json_type(v)
+                ));
             }
             let key = k.trim().to_string();
             if seen.contains(&key) {
@@ -713,8 +779,11 @@ impl Session {
             seen.push(key);
         }
         let cleaned: Map<String, Value> = map
-            .into_iter()
-            .filter(|(_, v)| v.as_str() != Some(""))
+            .iter()
+            .filter_map(|(k, v)| {
+                let value = v.as_str().unwrap_or("");
+                profile_field_kept(k, value).then(|| (k.trim().to_string(), json!(value.trim())))
+            })
             .collect();
         self.profile = if cleaned.is_empty() {
             None
@@ -977,6 +1046,9 @@ impl Session {
         if let Some(persona) = &self.persona {
             bundle.set("identity/persona.md", persona.as_bytes().to_vec())?;
         }
+        if let Some(policies) = &self.policies {
+            bundle.set(POLICIES, policies.as_bytes().to_vec())?;
+        }
         if let Some(data_url) = &self.avatar {
             // Parse data:<mime>;base64,<b64> to extract ext + raw bytes
             if let Some(rest) = data_url.strip_prefix("data:image/") {
@@ -1050,19 +1122,11 @@ impl Session {
     pub fn export(&mut self, sign_it: bool) -> Result<Value, String> {
         let state = self.state();
         let validation = state["validation"].clone();
-        let name = self.name.clone();
-
-        let bundle = self.build_bundle()?;
 
         let (final_bundle, signed) = if sign_it {
-            if self.keypair.is_none() {
-                self.keypair = Some(generate_keypair()?);
-            }
-            let kp = self.keypair.as_ref().unwrap();
-            let signed_bundle = sign(&bundle, &kp.private_key)?;
-            (signed_bundle, true)
+            (self.signed_bundle()?, true)
         } else {
-            (bundle, false)
+            (self.build_bundle()?, false)
         };
 
         let bytes = pack_checked(&final_bundle)?;
@@ -1074,7 +1138,7 @@ impl Session {
         let bytes_b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
 
         Ok(json!({
-            "filename": format!("{name}.uniqent"),
+            "filename": self.file_name(),
             "bytesBase64": bytes_b64,
             "signed": signed,
             "verified": verified,
@@ -1082,11 +1146,42 @@ impl Session {
         }))
     }
 
+    /// The bundle's file name: `<name>.uniqent`.
+    pub fn file_name(&self) -> String {
+        format!("{}.uniqent", self.name)
+    }
+
+    /// The current brain signed with the session keypair (created on first use).
+    fn signed_bundle(&mut self) -> Result<Bundle, String> {
+        if self.keypair.is_none() {
+            self.keypair = Some(generate_keypair()?);
+        }
+        let kp = self.keypair.as_ref().unwrap();
+        sign(&self.build_bundle()?, &kp.private_key)
+    }
+
+    /// The signed, packed `.uniqent` bytes (what `export(true)` returns as base64).
+    pub fn signed_bytes(&mut self) -> Result<Vec<u8>, String> {
+        pack_checked(&self.signed_bundle()?)
+    }
+
+    /// The current draft as an unsigned bundle, one entry per file.
+    pub fn bundle_files(&self) -> Result<Vec<BundleFile>, String> {
+        Ok(self
+            .build_bundle()?
+            .entries()
+            .map(|(path, bytes)| BundleFile {
+                path: path.clone(),
+                bytes_base64: base64::engine::general_purpose::STANDARD.encode(bytes),
+            })
+            .collect())
+    }
+
     pub fn reset(&mut self) {
         *self = Session::new();
     }
 
-    /// Preview a pasted MCP config without mutating state. Mirrors TS previewPastedMcp.
+    /// Preview a pasted MCP config without mutating state.
     pub fn paste_mcp_preview(&self, text: &str) -> Value {
         use crate::ports::mcp_normalize::normalize_mcp_config;
         let parsed: Value = match serde_json::from_str(text) {
@@ -1123,9 +1218,9 @@ impl Session {
         Ok(servers.len())
     }
 
-    /// Import memory from `{markdown?, text?, items?}` payload — mirrors TS `/api/memory/import`.
+    /// Import memory from `{markdown?, text?, items?}` payload.
     ///
-    /// Priority (mirrors TS api.ts):
+    /// Priority:
     ///   1. `items` array  → importItems semantics (kind/text/id preserved; blanks skipped)
     ///   2. `markdown` string → parseMemoryMarkdown (kind inferred from prefix; links/tags kept)
     ///   3. `text` string → importLines (plain newline-split, each non-empty line = one fact)
@@ -1137,7 +1232,6 @@ impl Session {
         if let Some(items) = payload["items"].as_array() {
             // importItems semantics: every item is validated first (text must be a string, kind
             // known, importance 0..=1, ids unique); blank text is skipped; nothing changes on error.
-            let valid_kinds = ["fact", "decision", "preference", "milestone", "episodic"];
             let mut used: Vec<String> = self
                 .facts
                 .iter()
@@ -1154,7 +1248,7 @@ impl Session {
                 let text = text.trim().to_string();
                 let kind = match raw.get("kind") {
                     None | Some(Value::Null) => "fact",
-                    Some(k) => k.as_str().filter(|k| valid_kinds.contains(k)).ok_or_else(|| {
+                    Some(k) => k.as_str().filter(|k| MEMORY_KINDS.contains(k)).ok_or_else(|| {
                         format!(
                             "items[{i}].kind must be one of fact, decision, preference, milestone, episodic, got {k}"
                         )
@@ -1258,13 +1352,12 @@ impl Session {
 
     /// Preview a memory import: parse markdown into items + build graph, WITHOUT mutating state.
     /// Returns `{ items: ImportedMemoryItem[], graph: MemoryGraph }`.
-    /// Mirrors TS `previewMemoryImport(text)`.
     pub fn preview_memory(&self, text: &str) -> Value {
         use crate::ports::memory::{memory_graph, parse_memory_markdown};
 
         let parsed = parse_memory_markdown(text);
         let items = parsed.as_array().cloned().unwrap_or_default();
-        // Build graph input: id = p{i}, text, kind (same as TS previewMemoryImport)
+        // Build graph input: id = p{i}, text, kind
         let graph_input: Vec<Value> = items
             .iter()
             .enumerate()
@@ -1281,7 +1374,7 @@ impl Session {
     }
 
     /// Return the memory knowledge graph from current session facts.
-    /// Each fact contributes its id, text, and kind. Mirrors TS `session.memoryGraph()`.
+    /// Each fact contributes its id, text, and kind.
     pub fn memory_graph(&self) -> Value {
         use crate::ports::memory::memory_graph;
 
@@ -1302,7 +1395,7 @@ impl Session {
     /// Import MCP servers from a JSON array of any shape. Raw server objects are normalized as ONE
     /// batch so unnamed or alike-named ones get distinct ids (`-2`, `-3`); canonical servers and
     /// whole config blobs are normalized on their own. Errors, adding nothing, when two imported
-    /// servers still share an id. Mirrors TS `importMcpServers`. Returns the server count.
+    /// servers still share an id. Returns the server count.
     pub fn import_mcp_servers(&mut self, servers: Value) -> Result<usize, String> {
         use crate::ports::mcp_normalize::normalize_mcp_config;
         let arr = servers

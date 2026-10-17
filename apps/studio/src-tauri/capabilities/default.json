@@ -1,10 +1,11 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Studio's main window. Network only over https (hub, registry, skill and index URLs the user supplies); files are read by Rust commands from folders the user picked, never by the webview.",
+  "description": "Studio's main window. Event listen/unlisten only to receive the drag-and-drop events Rust emits (studio://dropped, studio://drop-refused); network only over https (hub, registry, skill and index URLs the user supplies); files are read by Rust commands from folders the user picked, never by the webview.",
   "windows": ["main"],
   "permissions": [
-    "core:default",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
     {
       "identifier": "http:default",
       "allow": [{ "url": "https://*" }, { "url": "https://*/*" }]

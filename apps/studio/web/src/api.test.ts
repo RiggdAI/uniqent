@@ -9,7 +9,6 @@ describe('api shim (native)', () => {
   beforeEach(() => {
     invokeMock.mockReset();
     httpFetchMock.mockReset();
-    (globalThis as Record<string, unknown>).__TAURI_INTERNALS__ = {}; // native detection
     vi.resetModules();
   });
 
@@ -21,7 +20,7 @@ describe('api shim (native)', () => {
     await api.setMeta({ name: 'x' });
     expect(invokeMock).toHaveBeenCalledWith('set_meta', { meta: { name: 'x' } });
     await api.removeAvatar();
-    expect(invokeMock).toHaveBeenCalledWith('remove_avatar');
+    expect(invokeMock).toHaveBeenCalledWith('remove_avatar', undefined);
   });
 
   it('routes MCP mutators through invoke', async () => {
@@ -113,7 +112,7 @@ describe('api shim (native)', () => {
     invokeMock.mockResolvedValue({ nodes: [], edges: [] });
     const { api } = await import('./api');
     await api.memoryGraph();
-    expect(invokeMock).toHaveBeenCalledWith('memory_graph');
+    expect(invokeMock).toHaveBeenCalledWith('memory_graph', undefined);
   });
 
   it('routes profile commands through invoke', async () => {
@@ -125,15 +124,34 @@ describe('api shim (native)', () => {
     });
     invokeMock.mockResolvedValue({ profile: { name: 'Alice' } });
     await api.getProfile();
-    expect(invokeMock).toHaveBeenCalledWith('get_profile');
+    expect(invokeMock).toHaveBeenCalledWith('get_profile', undefined);
   });
 
-  it('keeps install stubbed until Phase 4, with a pointer to the CLI', async () => {
+  it('installs natively: the session draft is validated before anything is read', async () => {
+    invokeMock.mockResolvedValue([]); // bundle_files: an empty draft has no manifest
     const { api } = await import('./api');
-    const PHASE4 = /Phase 4.*uniqent install/;
-    await expect(api.installPlan('target', '/root')).rejects.toThrow(PHASE4);
-    await expect(api.install('target', '/root', {})).rejects.toThrow(PHASE4);
-    expect(invokeMock).not.toHaveBeenCalled();
+    await expect(api.install('hermes', '/root', {}, { writes: [], notes: [] })).rejects.toThrow(
+      /brain is invalid/,
+    );
+    expect(invokeMock.mock.calls).toEqual([['bundle_files', undefined]]);
+  });
+
+  it('opens and saves .uniqent bundles through the native dialogs (no args; save always signs)', async () => {
+    invokeMock.mockResolvedValue(null); // both dialogs cancelled
+    const { api } = await import('./api');
+    expect(await api.openBundle()).toBeNull();
+    expect(await api.saveBundle()).toBeNull();
+    expect(invokeMock.mock.calls).toEqual([
+      ['open_bundle', undefined],
+      ['save_bundle', undefined],
+    ]);
+  });
+
+  it('opens a dropped .uniqent by its granted path', async () => {
+    invokeMock.mockResolvedValue({ state: {}, dropped: [], signature: 'valid' });
+    const { api } = await import('./api');
+    await api.openDroppedBundle('/x/a.uniqent');
+    expect(invokeMock).toHaveBeenCalledWith('open_dropped_bundle', { path: '/x/a.uniqent' });
   });
 
   it('has no Phase 3b "not yet available" stubs left', async () => {
@@ -255,6 +273,39 @@ describe('api shim (native)', () => {
     expect((err as Error).message).toMatch(/not chosen in this session/);
   });
 
+  it('pulls a memory pack into the session with its kinds preserved', async () => {
+    httpFetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          facts: [
+            { kind: 'decision', text: 'use [[Postgres]] #db' },
+            { kind: 'fact', text: 'tune it for OLTP' },
+          ],
+        }),
+      ),
+    );
+    invokeMock.mockResolvedValue({ manifest: {}, validation: { ok: true } });
+    const { api } = await import('./api');
+    await api.addMemoryPack('platform', 'https://reg');
+    expect(String(httpFetchMock.mock.calls[0]?.[0])).toBe('https://reg/api/v1/memory/platform');
+    expect(invokeMock).toHaveBeenCalledWith('import_memory', {
+      payload: {
+        items: [
+          { kind: 'decision', text: 'use [[Postgres]] #db' },
+          { kind: 'fact', text: 'tune it for OLTP' },
+        ],
+      },
+    });
+  });
+
+  it('treats a whitespace-only typed token as none and uses the stored login', async () => {
+    invokeMock.mockImplementation(async (cmd: string) => (cmd === 'registry_token' ? null : null));
+    const { api } = await import('./api');
+    await expect(api.publishMemory('   ', 'https://uniqent.ai')).rejects.toThrow(/uniqent login/);
+    expect(invokeMock).toHaveBeenCalledWith('registry_token', { registry: 'https://uniqent.ai' });
+    expect(httpFetchMock).not.toHaveBeenCalled();
+  });
+
   it('says to log in when publishing without any token', async () => {
     invokeMock.mockImplementation(async (cmd: string) => (cmd === 'registry_token' ? null : null));
     const { api } = await import('./api');
@@ -262,29 +313,12 @@ describe('api shim (native)', () => {
     expect(httpFetchMock).not.toHaveBeenCalled();
   });
 
-  it('routes export through invoke with sign arg', async () => {
-    invokeMock.mockResolvedValue({
-      filename: 'my-brain.uniqent',
-      bytesBase64: 'abc=',
-      signed: true,
-      verified: true,
-      validation: { ok: true, errors: [], warnings: [] },
-    });
-    const { api } = await import('./api');
-    await api.export(true);
-    expect(invokeMock).toHaveBeenCalledWith('export', { sign: true });
-  });
-
-  it('falls back to fetch when not running under Tauri', async () => {
-    delete (globalThis as Record<string, unknown>).__TAURI_INTERNALS__;
-    vi.resetModules();
-    const fetchMock = vi.fn(
-      async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
+  it('has no HTTP fallback left', async () => {
+    const src = (await import('node:fs')).readFileSync(
+      new URL('./api.ts', import.meta.url),
+      'utf8',
     );
-    vi.stubGlobal('fetch', fetchMock);
-    const { api } = await import('./api');
-    await api.state();
-    expect(fetchMock).toHaveBeenCalled();
-    vi.unstubAllGlobals();
+    // `/api/` only as the start of a string literal: the `@tauri-apps/api/core` import must not match.
+    expect(src).not.toMatch(/\bfetch\(|['"`]\/api\/|isNative/);
   });
 });

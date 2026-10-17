@@ -145,12 +145,11 @@ uniqent search coding && uniqent install dev-powerpack --target hermes --root ~/
 
 ## Studio (visual builder)
 
-Studio runs as a native desktop app (Tauri) or in your browser from a local server. Both need a
-clone — see [Build from source](#build-from-source) below.
+Studio runs as a native desktop app (Tauri). It needs a clone — see
+[Build from source](#build-from-source) below.
 
 ```bash
 pnpm --filter @uniqent/studio native:dev   # native app with hot reload
-pnpm --filter @uniqent/studio start        # browser version on http://localhost:4173
 ```
 
 ## Build from source
@@ -169,7 +168,7 @@ pnpm --filter @uniqent/studio start        # browser version on http://localhost
 git clone https://github.com/RiggdAI/uniqent.git && cd uniqent
 corepack enable
 pnpm install
-pnpm build                       # all packages + Studio (web UI and local server)
+pnpm build                       # all packages + Studio
 
 pnpm test                        # every package's tests
 pnpm typecheck && pnpm lint && pnpm format:check
@@ -186,7 +185,6 @@ node packages/cli/dist/bin.js try research-analyst --target claude-code --root /
 **Run Studio**
 
 ```bash
-pnpm --filter @uniqent/studio start        # browser: http://localhost:4173 (UNIQENT_STUDIO_PORT to change)
 pnpm --filter @uniqent/studio native:dev   # native app, dev mode (Vite hot reload + Rust backend)
 pnpm --filter @uniqent/studio native:build # release build → Studio.app + .dmg
 ```

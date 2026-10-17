@@ -7,6 +7,7 @@ import {
   writeFileSync,
   mkdirSync,
   statSync,
+  symlinkSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -441,6 +442,32 @@ describe('openClawAdapter', () => {
       expect(validateBundle(captured).ok).toBe(true);
     } finally {
       rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('openClawAdapter: configured workspace', () => {
+  it('captures only the configured workspace, never touching the unused default one', async () => {
+    const root = tmp();
+    const ws = tmp();
+    try {
+      writeFileSync(
+        join(root, 'openclaw.json'),
+        JSON.stringify({ agents: { defaults: { workspace: ws } } }),
+      );
+      writeFileSync(join(ws, 'SOUL.md'), 'Configured soul.\n');
+      mkdirSync(join(ws, 'skills', 'real'), { recursive: true });
+      writeFileSync(join(ws, 'skills', 'real', 'SKILL.md'), '---\nname: real\n---\nReal.\n');
+      // A stale symlink under the default workspace the config no longer points at.
+      mkdirSync(join(root, 'workspace', 'skills'), { recursive: true });
+      symlinkSync(tmpdir(), join(root, 'workspace', 'skills', 'linked'));
+
+      const captured = await openClawAdapter.export({ root });
+      expect(captured.persona()).toBe('Configured soul.');
+      expect(captured.skillNames()).toEqual(['real']);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+      rmSync(ws, { recursive: true, force: true });
     }
   });
 });

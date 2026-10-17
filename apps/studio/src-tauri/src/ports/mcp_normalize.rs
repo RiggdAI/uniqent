@@ -7,6 +7,7 @@ use serde_json::{json, Value};
 // ─── Secret detection helpers ─────────────────────────────────────────────────
 
 use crate::core::secret_scan::is_likely_secret_value;
+use crate::session::mcp_server_problem;
 
 /// Final name words that mark a credential (TS SECRET_NAME_WORDS). Env/header names put the noun
 /// last (GITHUB_TOKEN, X-API-Key, DB_PASSWORD), so PATH, AUTHOR_NAME or TOKEN_URL are not secrets.
@@ -103,61 +104,9 @@ fn cred_for(r: &str, label: &str, id: &str) -> Value {
 // ─── McpServer validation (mirrors Zod McpServerSchema) ──────────────────────
 
 fn validate_mcp_server(server: &Value) -> Result<Value, String> {
-    // id: string, min 1
-    let id = server["id"]
-        .as_str()
-        .filter(|s| !s.is_empty())
-        .ok_or("id required")?;
-
-    // transport: enum
-    let transport = server["transport"].as_str().ok_or("transport required")?;
-    match transport {
-        "stdio" | "sse" | "streamable-http" => {}
-        _ => return Err(format!("invalid transport: {transport}")),
+    if let Some(problem) = mcp_server_problem(server) {
+        return Err(problem);
     }
-
-    // HTTP transports require url
-    if (transport == "sse" || transport == "streamable-http") && server["url"].as_str().is_none() {
-        return Err(format!("transport \"{transport}\" requires a url"));
-    }
-
-    // stdio requires command
-    if transport == "stdio" && server["command"].as_str().is_none() {
-        return Err("transport \"stdio\" requires a command".to_string());
-    }
-
-    // auth: { type: none|bearer|header|oauth2, … }
-    match server["auth"]["type"].as_str() {
-        Some("none" | "bearer" | "header" | "oauth2") => {}
-        _ => return Err("auth.type must be none, bearer, header or oauth2".to_string()),
-    }
-
-    // auth.type=header requires headerName
-    if server["auth"]["type"].as_str() == Some("header")
-        && server["auth"]["headerName"].as_str().is_none()
-    {
-        return Err("auth type \"header\" requires headerName".to_string());
-    }
-
-    // args: string[]; env: Record<string, string>
-    if let Some(args) = server.get("args") {
-        if !args
-            .as_array()
-            .is_some_and(|a| a.iter().all(Value::is_string))
-        {
-            return Err("args must be an array of strings".to_string());
-        }
-    }
-    if let Some(env) = server.get("env") {
-        if !env
-            .as_object()
-            .is_some_and(|m| m.values().all(Value::is_string))
-        {
-            return Err("env values must be strings".to_string());
-        }
-    }
-
-    let _ = id;
     // Like zod, keep only the schema's keys.
     let mut out = serde_json::Map::new();
     for key in [

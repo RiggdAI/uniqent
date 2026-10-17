@@ -1,13 +1,10 @@
 import { stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
-export type TargetId = 'claude-code' | 'openclaw' | 'hermes';
+import { PROJECT_MARKERS, projectTargets } from './detect-markers.js';
+import type { ProjectMarker, TargetGuess } from './detect-markers.js';
 
-export interface TargetGuess {
-  id: TargetId;
-  /** The framework project root to install into. */
-  configRoot: string;
-}
+export type { TargetId, TargetGuess } from './detect-markers.js';
 
 export interface DetectInput {
   cwd: string;
@@ -40,14 +37,9 @@ async function exists(p: string): Promise<boolean> {
 
 /** Frameworks whose project-level markers sit in `cwd`; each installs into `cwd`. */
 async function detectProject(cwd: string): Promise<TargetGuess[]> {
-  const found: TargetGuess[] = [];
-  if ((await exists(join(cwd, '.claude'))) || (await exists(join(cwd, '.mcp.json'))))
-    found.push({ id: 'claude-code', configRoot: cwd });
-  if (await exists(join(cwd, 'openclaw.json'))) found.push({ id: 'openclaw', configRoot: cwd });
-  // Hermes: a native HERMES_HOME layout (config.yaml + SOUL.md).
-  if ((await exists(join(cwd, 'config.yaml'))) && (await exists(join(cwd, 'SOUL.md'))))
-    found.push({ id: 'hermes', configRoot: cwd });
-  return found;
+  const present = new Set<ProjectMarker>();
+  for (const marker of PROJECT_MARKERS) if (await exists(join(cwd, marker))) present.add(marker);
+  return projectTargets(cwd, present);
 }
 
 /** Frameworks installed for the user (in $HOME or via their state-dir env vars). */

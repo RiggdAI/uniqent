@@ -1,8 +1,8 @@
 import type { McpServer } from '@uniqent/spec';
-import { resolvePlaceholders } from '@uniqent/core';
-import type { Bundle } from '@uniqent/core';
-import { assertMcpCredentialScope } from '@uniqent/adapter-sdk';
-import type { ResolvedCredentials } from '@uniqent/adapter-sdk';
+import { resolvePlaceholders } from '@uniqent/core/pure';
+import type { Bundle } from '@uniqent/core/pure';
+import { assertMcpCredentialScope } from '@uniqent/adapter-sdk/pure';
+import type { ResolvedCredentials } from '@uniqent/adapter-sdk/pure';
 
 const CREDENTIAL_REF_RE = /\$\{credentialRef:([^}]+)\}/g;
 

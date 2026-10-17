@@ -1,14 +1,29 @@
-import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { ReactFlow, Background, BackgroundVariant, type Node } from '@xyflow/react';
-import { Download, Rocket, CheckCircle2, XCircle, Brain } from 'lucide-react';
-import type { StudioState, CatalogView } from './types';
+import { listen } from '@tauri-apps/api/event';
+import {
+  Download,
+  Rocket,
+  CheckCircle2,
+  XCircle,
+  Brain,
+  FolderOpen,
+  ScanSearch,
+  X,
+} from 'lucide-react';
+import type { StudioState, CatalogView, OpenedBundle } from './types';
 import { api } from './api';
+import { openStep, routeDrop, type DropAction, type DroppedItem } from './capture';
+import { DroppedLines } from './DroppedLines';
 import { buildGraph } from './canvas/graph';
 import { nodeTypes } from './canvas/nodes';
 import { Palette } from './Palette';
 import { Inspector } from './Inspector';
 import { Button } from './components/ui/button';
-import { cn } from './lib/utils';
+import { cn, errorText } from './lib/utils';
+
+/** Where a bundle to open comes from: the native open dialog or a file Rust granted from a drop. */
+type OpenSource = { kind: 'dialog' } | { kind: 'dropped'; path: string };
 
 // Lazy-loaded so the force-graph/d3 weight only ships when the brain is opened.
 const MemoryBrain = lazy(() => import('./MemoryBrain').then((m) => ({ default: m.MemoryBrain })));
@@ -22,6 +37,20 @@ export function App() {
   const [error, setError] = useState('');
   const [brainOpen, setBrainOpen] = useState(false);
   const [issuesOpen, setIssuesOpen] = useState(false);
+  // What the last Open (dialog or drop) loaded: its signature and every line it could not hold.
+  const [opened, setOpened] = useState<OpenedBundle | null>(null);
+  // The last window drop: what to do with it, and why Rust refused any dropped path.
+  const [drop, setDrop] = useState<DropAction | null>(null);
+  const [dropRefused, setDropRefused] = useState<string[]>([]);
+  // A dropped folder handed to the vault or capture panel.
+  const [droppedDir, setDroppedDir] = useState<string | null>(null);
+  // An Open waiting for the user to confirm it may replace the current brain.
+  const [confirmOpen, setConfirmOpen] = useState<OpenSource | null>(null);
+  // The current state for the drop listener, which is registered once.
+  const stateRef = useRef<StudioState | null>(null);
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
   const [paletteCollapsed, setPaletteCollapsed] = useState(
     () => localStorage.getItem('uq.palette.collapsed') === '1',
   );
@@ -42,6 +71,25 @@ export function App() {
       .catch((e: unknown) => setError(String(e)));
   }, []);
 
+  // Drops are granted by Rust from the OS event; the payload only lists what it granted.
+  useEffect(() => {
+    const unlisten = [
+      listen<DroppedItem[]>('studio://dropped', (e) => {
+        setDropRefused([]);
+        const action = routeDrop(e.payload);
+        if (action.kind === 'open-bundle') {
+          setDrop(null);
+          requestOpen({ kind: 'dropped', path: action.path });
+        } else {
+          setConfirmOpen(null);
+          setDrop(action);
+        }
+      }),
+      listen<string[]>('studio://drop-refused', (e) => setDropRefused(e.payload)),
+    ];
+    return () => unlisten.forEach((u) => void u.then((stop) => stop()));
+  }, []);
+
   function apply(p: Promise<StudioState>): void {
     setBusy(true);
     setError('');
@@ -54,20 +102,53 @@ export function App() {
     setBusy(true);
     setError('');
     try {
-      const res = await api.export(true);
-      const bytes = Uint8Array.from(atob(res.bytesBase64), (c) => c.charCodeAt(0));
-      const url = URL.createObjectURL(new Blob([bytes], { type: 'application/gzip' }));
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = res.filename;
-      a.click();
-      URL.revokeObjectURL(url);
-      setExportMsg(`Exported ${res.filename} · signed ${res.signed} · verified ${res.verified}`);
+      const path = await api.saveBundle();
+      if (path) setExportMsg(`Saved ${path} (signed)`);
     } catch (e) {
-      setError(String(e));
+      setError(errorText(e));
     } finally {
       setBusy(false);
     }
+  }
+
+  /** Swap in an opened bundle (dialog or drop); null = the dialog was cancelled. */
+  async function openWith(p: Promise<OpenedBundle | null>): Promise<void> {
+    setBusy(true);
+    setError('');
+    try {
+      const res = await p;
+      if (!res) return;
+      setState(res.state);
+      setSelection(null);
+      setOpened(res);
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function startOpen(source: OpenSource): void {
+    setConfirmOpen(null);
+    void openWith(source.kind === 'dialog' ? api.openBundle() : api.openDroppedBundle(source.path));
+  }
+
+  /** Open now over an empty brain, else ask first: opening replaces the brain (see openStep). */
+  function requestOpen(source: OpenSource): void {
+    const current = stateRef.current;
+    if (!current) {
+      setError('Studio is still loading the brain; open the bundle again in a moment');
+      return;
+    }
+    if (openStep(current) === 'open') startOpen(source);
+    else setConfirmOpen(source);
+  }
+
+  /** Hand a dropped folder to the vault import or capture panel. */
+  function openDroppedDir(dir: string, panel: 'vault' | 'capture'): void {
+    setDroppedDir(dir);
+    setSelection(panel);
+    setDrop(null);
   }
 
   const graph = useMemo(() => (state ? buildGraph(state) : { nodes: [], edges: [] }), [state]);
@@ -138,6 +219,31 @@ export function App() {
             {state.manifest.displayName}
           </span>
           <Button
+            data-testid="open-btn"
+            aria-label="Open"
+            variant="outline"
+            size="sm"
+            disabled={busy}
+            onClick={() => {
+              setDrop(null);
+              requestOpen({ kind: 'dialog' });
+            }}
+          >
+            <FolderOpen className="size-4" /> <span className="hidden sm:inline">Open…</span>
+          </Button>
+          <Button
+            data-testid="capture-btn"
+            aria-label="Capture an agent"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setDroppedDir(null);
+              setSelection('capture');
+            }}
+          >
+            <ScanSearch className="size-4" /> <span className="hidden sm:inline">Capture</span>
+          </Button>
+          <Button
             data-testid="brain-btn"
             aria-label="Memory brain"
             variant="outline"
@@ -194,6 +300,8 @@ export function App() {
             catalog={catalog}
             apply={apply}
             onClose={() => setSelection(null)}
+            droppedDir={droppedDir}
+            onReplaced={() => setOpened(null)}
           />
         </div>
       )}
@@ -223,7 +331,11 @@ export function App() {
         <span className="text-muted-foreground">·</span>
         <span className="text-muted-foreground">{credsRequired} credential(s) required</span>
         {exportMsg && <span className="ml-auto truncate text-muted-foreground">{exportMsg}</span>}
-        {error && <span className="ml-auto truncate text-destructive">{error}</span>}
+        {error && (
+          <span title={error} className="ml-auto truncate text-destructive">
+            {error}
+          </span>
+        )}
       </footer>
 
       {issuesOpen && !v.ok && (
@@ -247,6 +359,119 @@ export function App() {
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {opened && (
+        <div
+          data-testid="open-report"
+          className="absolute right-3 top-17 z-30 max-h-72 w-[min(28rem,calc(100vw-1.5rem))] space-y-2 overflow-auto rounded-xl border bg-card/95 p-3 text-xs shadow-lg backdrop-blur-sm"
+        >
+          <div className="flex items-start justify-between gap-2">
+            <span className="font-medium">Opened {opened.state.manifest.displayName}</span>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Close open report"
+              onClick={() => setOpened(null)}
+            >
+              <X className="size-4" />
+            </Button>
+          </div>
+          {opened.signature === 'unsigned' && (
+            <p data-testid="open-unsigned" className="text-amber-400">
+              This bundle is unsigned: Studio cannot tell who made it or whether it was changed.
+            </p>
+          )}
+          <DroppedLines testid="open-dropped" dropped={opened.dropped} />
+        </div>
+      )}
+
+      {(drop || dropRefused.length > 0 || confirmOpen) && (
+        <div
+          data-testid="drop-panel"
+          className="absolute left-1/2 top-17 z-30 w-[min(28rem,calc(100vw-1.5rem))] -translate-x-1/2 space-y-2 rounded-xl border bg-card/95 p-3 text-xs shadow-lg backdrop-blur-sm"
+        >
+          <div className="flex items-start justify-between gap-2">
+            {drop?.kind === 'choose-vault-or-capture' ? (
+              <span className="min-w-0 truncate">
+                Dropped folder <code>{drop.dir}</code>
+              </span>
+            ) : (
+              <span />
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Close drop panel"
+              onClick={() => {
+                setDrop(null);
+                setDropRefused([]);
+                setConfirmOpen(null);
+              }}
+            >
+              <X className="size-4" />
+            </Button>
+          </div>
+          {drop?.kind === 'choose-vault-or-capture' && (
+            <div className="flex gap-2">
+              <Button
+                data-testid="drop-vault"
+                variant="outline"
+                size="sm"
+                onClick={() => openDroppedDir(drop.dir, 'vault')}
+              >
+                Import as vault
+              </Button>
+              <Button
+                data-testid="drop-capture"
+                variant="outline"
+                size="sm"
+                onClick={() => openDroppedDir(drop.dir, 'capture')}
+              >
+                Capture agent
+              </Button>
+            </div>
+          )}
+          {confirmOpen && (
+            <div className="space-y-2">
+              <p data-testid="open-replace-warning">
+                Opening{' '}
+                {confirmOpen.kind === 'dropped' ? <code>{confirmOpen.path}</code> : 'a bundle'}{' '}
+                replaces the current brain, {state.manifest.displayName}; Studio does not keep it.
+                Export it first to keep it.
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  data-testid="open-replace-confirm"
+                  variant="outline"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => startOpen(confirmOpen)}
+                >
+                  Open — replaces the current brain
+                </Button>
+                <Button
+                  data-testid="open-replace-cancel"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setConfirmOpen(null)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+          {drop?.kind === 'unsupported' && (
+            <p data-testid="drop-unsupported">drop a .uniqent file or a folder</p>
+          )}
+          {dropRefused.length > 0 && (
+            <ul data-testid="drop-refused" className="space-y-1 text-destructive">
+              {dropRefused.map((r, i) => (
+                <li key={i}>{r}</li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 

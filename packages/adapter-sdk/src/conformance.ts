@@ -2,7 +2,8 @@ import { readdir, readFile, stat } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
 import type { Bundle } from '@uniqent/core';
 import type { Adapter } from './types.js';
-import { PathEscapeError, resolveInside } from './paths.js';
+import { resolveInside } from './paths.js';
+import { PathEscapeError } from './pure-paths.js';
 
 const SECRET_PATTERNS: RegExp[] = [
   /\bsk-[A-Za-z0-9]{20,}/,

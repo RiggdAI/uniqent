@@ -1,5 +1,5 @@
-import type { Bundle } from '@uniqent/core';
-import { stripMemoryMarkup } from '@uniqent/builder';
+import type { Bundle } from '@uniqent/core/pure';
+import { stripMemoryMarkup } from '@uniqent/builder/memory';
 
 export const MANAGED_BEGIN = '<!-- uniqent:begin -->';
 export const MANAGED_END = '<!-- uniqent:end -->';

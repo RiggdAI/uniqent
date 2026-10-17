@@ -81,6 +81,8 @@ export interface CatalogView {
 export interface InstallPlan {
   writes: Array<{ path: string; summary: string }>;
   mcpRegistrations: string[];
+  /** describeMcpServers: the command each MCP server runs or the URL it contacts (refs, no values). */
+  mcpServers: string[];
   channelRegistrations: string[];
   lossiness: Array<{ component: string; issue: string; action: string }>;
   requiresCredentials: string[];
@@ -91,6 +93,31 @@ export interface InstallResult {
   notes: string[];
 }
 
+/** Rust `framework_homes`: where Hermes and OpenClaw live on this machine. */
+export interface FrameworkHomes {
+  home: string;
+  /** `error` (else null) says why a home is unusable; `present` is then false. */
+  targets: Array<{
+    id: 'hermes' | 'openclaw';
+    root: string;
+    present: boolean;
+    error: string | null;
+  }>;
+  /** `~/.claude` exists (Claude Code itself installs into a picked project folder). */
+  claudeCodeUser: boolean;
+}
+
+/** Rust `load_bundle_files`: the new session state and every line the session could not hold. */
+export interface LoadedBundle {
+  state: StudioState;
+  dropped: string[];
+}
+
+/** Rust `open_bundle` / `open_dropped_bundle` (a signed bundle that fails to verify is refused). */
+export interface OpenedBundle extends LoadedBundle {
+  signature: 'valid' | 'unsigned';
+}
+
 export interface TaskInput {
   name?: string;
   triggerType?: 'schedule' | 'event' | 'manual';
@@ -98,13 +125,6 @@ export interface TaskInput {
   event?: string;
   actionKind?: string;
   prompt?: string;
-}
-
-export interface ExportResult {
-  filename: string;
-  bytesBase64: string;
-  signed: boolean;
-  verified: boolean;
 }
 
 export interface McpHubResult {

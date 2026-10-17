@@ -21,6 +21,10 @@
     "./memory": {
       "types": "./dist/memory-entry.d.ts",
       "default": "./dist/memory-entry.js"
+    },
+    "./brain": {
+      "types": "./dist/brain-entry.d.ts",
+      "default": "./dist/brain-entry.js"
     }
   },
   "files": [

@@ -629,5 +629,55 @@
       "credentials": [],
       "lossiness": ["skipped server \"ghost\": it has neither a command nor a url"]
     }
+  },
+  {
+    "name": "canonical-empty-command",
+    "input": {
+      "id": "x",
+      "transport": "stdio",
+      "command": "",
+      "auth": {
+        "type": "none"
+      }
+    },
+    "expected": {
+      "servers": [],
+      "credentials": [],
+      "lossiness": ["skipped server \"x\": it has neither a command nor a url"]
+    }
+  },
+  {
+    "name": "canonical-empty-url",
+    "input": {
+      "id": "x",
+      "transport": "sse",
+      "url": "",
+      "auth": {
+        "type": "none"
+      }
+    },
+    "expected": {
+      "servers": [],
+      "credentials": [],
+      "lossiness": ["skipped server \"x\": it has neither a command nor a url"]
+    }
+  },
+  {
+    "name": "remote-empty-secret-header-name",
+    "input": {
+      "mcpServers": {
+        "svc": {
+          "url": "https://api.x.com/mcp",
+          "headers": {
+            "": "sk-abcdefghijklmnopqrstuvwxyz0123"
+          }
+        }
+      }
+    },
+    "expected": {
+      "servers": [],
+      "credentials": [],
+      "lossiness": ["skipped a server: auth type \"header\" requires headerName"]
+    }
   }
 ]
