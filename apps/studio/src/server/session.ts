@@ -16,6 +16,9 @@ import {
   publishMemoryPack,
   importVault,
   normalizeMcpConfig,
+  skillNameFor,
+  fetchSkillMd,
+  DEFAULT_MEMORY_REGISTRY,
 } from '@uniqent/builder';
 import type {
   BrainMeta,
@@ -33,7 +36,6 @@ import type {
 import { readdir, readFile } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
 
-const DEFAULT_MEMORY_REGISTRY = 'https://uniqent.ai';
 import { validateBundle, generateKeypair, sign, pack, verify } from '@uniqent/core';
 import type { ValidationResult, Keypair } from '@uniqent/core';
 import { Slug } from '@uniqent/spec';
@@ -63,43 +65,6 @@ const DEFAULT_META: BrainMeta = {
   license: 'CC0-1.0',
   tags: [],
 };
-
-/** The `name:` declared in a SKILL.md YAML frontmatter block, if any. */
-function frontmatterName(skillMd: string): string | undefined {
-  const block = /^---\r?\n([\s\S]*?)\r?\n---/.exec(skillMd)?.[1];
-  const line = block?.split(/\r?\n/).find((l) => /^name\s*:/.test(l));
-  const value = line
-    ?.replace(/^name\s*:\s*/, '')
-    .trim()
-    .replace(/^(['"])(.*)\1$/, '$2');
-  return value ? value : undefined;
-}
-
-/**
- * The directory holding a SKILL.md URL (or the stem of a `<name>.md` URL). GitHub URLs carry an
- * `<owner>/<repo>/<ref>` prefix (`…/blob/<ref>` on github.com) whose ref segment (`HEAD`, a branch)
- * is never a skill name; a SKILL.md at the repo root is named after the repo.
- */
-function skillDirFromUrl(url: URL): string | undefined {
-  const parts = url.pathname.split('/').filter(Boolean);
-  const file = parts.pop() ?? '';
-  if (!/^skill\.md$/i.test(file)) return file.replace(/\.md$/i, '') || undefined;
-  const refEnd =
-    url.hostname === 'raw.githubusercontent.com' ? 3 : url.hostname === 'github.com' ? 4 : 0;
-  const dirs = parts.slice(refEnd);
-  return dirs[dirs.length - 1] ?? (refEnd > 0 ? parts[1] : undefined);
-}
-
-/** Name a fetched skill: its SKILL.md frontmatter `name`, else the directory it lives in. */
-function skillNameFor(url: string, skillMd: string): string {
-  const name = frontmatterName(skillMd) ?? skillDirFromUrl(new URL(url));
-  if (!name) {
-    throw new Error(
-      `cannot name the skill from ${url}: its SKILL.md has no frontmatter "name:" and the URL has no skill directory`,
-    );
-  }
-  return name;
-}
 
 /** A skill name that is not slug-safe (it becomes a directory name on install). */
 export class InvalidSkillNameError extends Error {
@@ -347,6 +312,7 @@ export class StudioSession {
       };
       if (typeof raw.importance === 'number') item.importance = raw.importance;
       if (raw.visibility === 'personal') item.visibility = 'personal';
+      if (typeof raw.source === 'string') item.source = raw.source;
       this.brain.addMemory(item);
     }
     return kept.length;
@@ -380,7 +346,7 @@ export class StudioSession {
 
   /** Search the hosted memory hub (uniqent.ai by default) for shareable memory packs. */
   searchMemoryHub(query: string, registry?: string): Promise<MemoryHubSearch> {
-    return searchMemoryHub(query, registry || DEFAULT_MEMORY_REGISTRY);
+    return searchMemoryHub(fetch, query, registry || DEFAULT_MEMORY_REGISTRY, undefined);
   }
 
   /**
@@ -394,18 +360,23 @@ export class StudioSession {
       .filter((f) => f.visibility !== 'personal')
       .map((f) => ({ kind: f.kind, text: f.text }));
     if (facts.length === 0) throw new Error('no shareable memory to publish');
-    return publishMemoryPack(registry || DEFAULT_MEMORY_REGISTRY, token, {
-      slug: m.name,
-      name: m.displayName,
-      description: m.description,
-      tags: m.tags,
-      facts,
-    });
+    return publishMemoryPack(
+      fetch,
+      registry || DEFAULT_MEMORY_REGISTRY,
+      token,
+      { slug: m.name, name: m.displayName, description: m.description, tags: m.tags, facts },
+      undefined,
+    );
   }
 
   /** Pull a memory pack's facts from the hub into this brain (kinds preserved). Returns the count. */
   async addMemoryPack(slug: string, registry?: string): Promise<number> {
-    const facts = await fetchMemoryPack(registry || DEFAULT_MEMORY_REGISTRY, slug);
+    const facts = await fetchMemoryPack(
+      fetch,
+      registry || DEFAULT_MEMORY_REGISTRY,
+      slug,
+      undefined,
+    );
     for (const f of facts) {
       this.brain.addMemory({
         id: this.nextFactId(this.memoryIds()),
@@ -508,21 +479,15 @@ export class StudioSession {
   }
 
   /** Fetch a SKILL.md by URL; throws with the status when the server does not return it. */
-  private async fetchSkillMd(url: string): Promise<string> {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`fetch ${url} failed: ${res.status} ${res.statusText}`);
-    return res.text();
-  }
-
   /** Install a skill from anywhere: fetch a SKILL.md by URL, named by its frontmatter. */
   async importSkillFromUrl(url: string): Promise<void> {
-    const skillMd = await this.fetchSkillMd(url);
+    const skillMd = await fetchSkillMd(fetch, url, undefined);
     this.addCustomSkill(skillNameFor(url, skillMd), skillMd);
   }
 
   /** Add a skill-hub result: fetch its SKILL.md and add it under the hub result's `name`. */
   async importHubSkill(url: string, name: string): Promise<void> {
-    this.addCustomSkill(name, await this.fetchSkillMd(url));
+    this.addCustomSkill(name, await fetchSkillMd(fetch, url, undefined));
   }
 
   /** Ensure a credential requirement exists for an MCP server's auth.credentialRef. */
@@ -609,12 +574,19 @@ export class StudioSession {
 
   /** Search MCP hubs (MCP Registry + Smithery + any custom JSON indexes) for servers to add. */
   searchHubMcp(query: string): Promise<HubSearch<McpHubResult>> {
-    return searchMcpHubs(query, defaultMcpSources({ jsonIndexUrls: this.hubIndexUrls }));
+    return searchMcpHubs(query, defaultMcpSources({ fetch, jsonIndexUrls: this.hubIndexUrls }));
   }
 
   /** Search skill hubs (GitHub repos + any custom JSON indexes) for skills to import. */
   searchHubSkills(query: string): Promise<HubSearch<SkillHubResult>> {
-    return searchSkillHubs(query, defaultSkillSources({ jsonIndexUrls: this.hubIndexUrls }));
+    return searchSkillHubs(
+      query,
+      defaultSkillSources({
+        fetch,
+        jsonIndexUrls: this.hubIndexUrls,
+        githubToken: process.env.GITHUB_TOKEN,
+      }),
+    );
   }
 
   /** Add a discovered MCP server (its server + every declared credential). Throws if invalid. */

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { CatalogSource, SkillHubResult, SourceResults } from './types.js';
-import { HubHttpError, bodySnippet, hubFetch } from './http.js';
+import { HubHttpError, bodySnippet, hubFetch, type FetchFn } from './http.js';
 
 const ENDPOINT = 'https://api.github.com/search/repositories';
 const RAW_BASE = 'https://raw.githubusercontent.com';
@@ -70,10 +70,11 @@ function githubHint(res: Response, hasToken: boolean): string {
 }
 
 export interface GithubSkillsOptions {
+  fetch: FetchFn;
   endpoint?: string;
   perPage?: number;
-  /** A token raises the unauthenticated search rate limit (10/min). Falls back to GITHUB_TOKEN. */
-  token?: string;
+  /** A token raises the unauthenticated search rate limit (10/min); undefined = unauthenticated. */
+  token: string | undefined;
 }
 
 /**
@@ -81,7 +82,7 @@ export interface GithubSkillsOptions {
  * candidates; each is kept only if its SKILL.md actually exists on the default branch (fetched
  * from raw.githubusercontent.com, which does not count against the API rate limit).
  */
-export function githubSkillsSource(opts: GithubSkillsOptions = {}): CatalogSource {
+export function githubSkillsSource(opts: GithubSkillsOptions): CatalogSource {
   const endpoint = opts.endpoint ?? ENDPOINT;
   const perPage = opts.perPage ?? 20;
   return {
@@ -93,16 +94,18 @@ export function githubSkillsSource(opts: GithubSkillsOptions = {}): CatalogSourc
     ): Promise<SourceResults<SkillHubResult>> {
       const q = `${query} SKILL.md`.trim();
       const url = `${endpoint}?q=${encodeURIComponent(q)}&per_page=${perPage}&sort=stars`;
-      const token = opts.token ?? process.env.GITHUB_TOKEN;
+      const token = opts.token;
       const headers: Record<string, string> = { Accept: 'application/vnd.github+json' };
       if (token) headers.Authorization = `Bearer ${token}`;
-      const res = await hubFetch('GitHub', url, headers, signal);
+      const res = await hubFetch(opts.fetch, 'GitHub', url, headers, signal);
       if (!res.ok) {
         const hint = githubHint(res, !!token);
         throw new HubHttpError('GitHub', url, res.status, await bodySnippet(res), hint);
       }
       const repos = parseGithubSearch(await res.json());
-      const verified = await Promise.all(repos.map((repo) => fetchRootSkill(repo, signal)));
+      const verified = await Promise.all(
+        repos.map((repo) => fetchRootSkill(opts.fetch, repo, signal)),
+      );
       return {
         results: verified
           .filter((v): v is VerifiedSkillRepo => v !== null)
@@ -115,11 +118,12 @@ export function githubSkillsSource(opts: GithubSkillsOptions = {}): CatalogSourc
 
 /** Fetch a repo's root SKILL.md; null when it has none (404), throws on any other failure. */
 async function fetchRootSkill(
+  fetchFn: FetchFn,
   repo: GithubRepo,
   signal: AbortSignal | undefined,
 ): Promise<VerifiedSkillRepo | null> {
   const skillUrl = `${RAW_BASE}/${repo.full_name}/${repo.default_branch}/SKILL.md`;
-  const res = await hubFetch('GitHub', skillUrl, {}, signal);
+  const res = await hubFetch(fetchFn, 'GitHub', skillUrl, {}, signal);
   if (res.status === 404) return null;
   if (!res.ok) throw new HubHttpError('GitHub', skillUrl, res.status, await bodySnippet(res), '');
   return { repo, skillUrl, skillMd: await res.text() };

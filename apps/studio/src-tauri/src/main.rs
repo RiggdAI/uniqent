@@ -6,7 +6,12 @@ use uniqent_studio::session::Session;
 
 fn main() {
     tauri::Builder::default()
-        .manage(AppState(Mutex::new(Session::new())))
+        .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_dialog::init())
+        .manage(AppState {
+            session: Mutex::new(Session::new()),
+            granted_dirs: Mutex::new(vec![]),
+        })
         .invoke_handler(tauri::generate_handler![
             commands::state,
             commands::catalog,
@@ -43,6 +48,15 @@ fn main() {
             // Profile
             commands::get_profile,
             commands::set_profile,
+            // Hubs + publish
+            commands::add_mcp_hub_result,
+            commands::hub_indexes,
+            commands::set_hub_indexes,
+            commands::publish_payload,
+            commands::registry_token,
+            // Folders
+            commands::pick_folder,
+            commands::read_vault,
         ])
         .run(tauri::generate_context!())
         .expect("error while running uniqent studio");

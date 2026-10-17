@@ -66,6 +66,8 @@ const ImportItem = z.object({
   createdAt: IsoUtcDateTime.optional(),
   importance: Importance,
   visibility: Visibility.optional(),
+  /** Provenance, e.g. the vault note a memory came from. */
+  source: z.string().optional(),
 });
 export const MemoryImportBody = z
   .object({

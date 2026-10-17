@@ -145,17 +145,60 @@ uniqent search coding && uniqent install dev-powerpack --target hermes --root ~/
 
 ## Studio (visual builder)
 
+Studio runs as a native desktop app (Tauri) or in your browser from a local server. Both need a
+clone — see [Build from source](#build-from-source) below.
+
 ```bash
-pnpm install && pnpm build             # from a clone; builds Studio and the packages it uses
-pnpm --filter @uniqent/studio start   # local-first; open the URL it prints
+pnpm --filter @uniqent/studio native:dev   # native app with hot reload
+pnpm --filter @uniqent/studio start        # browser version on http://localhost:4173
 ```
 
 ## Build from source
 
-Requires Node 22.13+ and pnpm (`corepack enable` provisions the pinned version).
+**Prerequisites**
+
+- Node.js **22.13+** and **pnpm 12** — `corepack enable` provisions the exact pnpm pinned in
+  `package.json`.
+- For the native Studio app only: **Rust** (stable, via [rustup](https://rustup.rs)) and, on macOS,
+  the Xcode Command Line Tools (`xcode-select --install`). macOS is the supported desktop target
+  today.
+
+**Build and test**
 
 ```bash
-pnpm install && pnpm build && pnpm test
+git clone https://github.com/RiggdAI/uniqent.git && cd uniqent
+corepack enable
+pnpm install
+pnpm build                       # all packages + Studio (web UI and local server)
+
+pnpm test                        # every package's tests
+pnpm typecheck && pnpm lint && pnpm format:check
+(cd apps/studio/src-tauri && cargo test)   # native app's Rust tests
+```
+
+**Run the CLI from source**
+
+```bash
+node packages/cli/dist/bin.js --help
+node packages/cli/dist/bin.js try research-analyst --target claude-code --root /tmp/demo --yes
+```
+
+**Run Studio**
+
+```bash
+pnpm --filter @uniqent/studio start        # browser: http://localhost:4173 (UNIQENT_STUDIO_PORT to change)
+pnpm --filter @uniqent/studio native:dev   # native app, dev mode (Vite hot reload + Rust backend)
+pnpm --filter @uniqent/studio native:build # release build → Studio.app + .dmg
+```
+
+The release build lands in `apps/studio/src-tauri/target/release/bundle/` (`macos/Uniqent Studio.app`
+and `dmg/*.dmg`). Builds are unsigned for now: the first time, right-click the app → **Open**.
+
+**Regenerate generated files** (only after changing their sources)
+
+```bash
+pnpm --filter @uniqent/spec gen             # JSON Schema + docs/SPEC.md, after editing packages/spec
+pnpm --filter @uniqent/studio fixtures:ports # cross-language parity fixtures, after changing ported TS logic
 ```
 
 ---

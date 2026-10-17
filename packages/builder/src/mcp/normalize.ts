@@ -1,6 +1,6 @@
 import type { McpServer, CredentialRequirement } from '@uniqent/spec';
 import { McpServer as McpServerSchema } from '@uniqent/spec';
-import { isLikelySecretValue } from '@uniqent/core';
+import { isLikelySecretValue } from '@uniqent/core/pure';
 import { slugifyId } from '../hubs/types.js';
 
 export interface NormalizeResult {

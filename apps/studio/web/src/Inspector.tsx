@@ -12,7 +12,8 @@ import type {
   MemoryPackResult,
   VaultImport,
 } from './types';
-import { api } from './api';
+import { api, isNative } from './api';
+import { canPublish } from './publish';
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
 import { Textarea } from './components/ui/textarea';
@@ -291,6 +292,16 @@ function VaultImportPanel({ apply }: { apply: (p: Promise<StudioState>) => void 
   const [withProfile, setWithProfile] = useState(true);
   const [done, setDone] = useState<VaultImport['stats'] | null>(null);
 
+  async function chooseFolder(): Promise<void> {
+    setErr(null);
+    try {
+      const picked = await api.chooseFolder();
+      if (picked) setDir(picked);
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+  }
+
   async function doPreview(): Promise<void> {
     setBusy(true);
     setErr(null);
@@ -336,12 +347,29 @@ function VaultImportPanel({ apply }: { apply: (p: Promise<StudioState>) => void 
         notes become episodic).
       </p>
       <div className="flex items-center gap-2">
-        <Input
-          data-testid="vault-dir"
-          placeholder="/Users/you/Documents/MyVault"
-          value={dir}
-          onChange={(e) => setDir(e.target.value)}
-        />
+        {isNative ? (
+          <>
+            <Button
+              data-testid="vault-choose"
+              variant="outline"
+              size="sm"
+              disabled={busy}
+              onClick={chooseFolder}
+            >
+              Choose folder…
+            </Button>
+            <span data-testid="vault-dir" className="truncate text-xs text-muted-foreground">
+              {dir || 'No folder chosen'}
+            </span>
+          </>
+        ) : (
+          <Input
+            data-testid="vault-dir"
+            placeholder="/Users/you/Documents/MyVault"
+            value={dir}
+            onChange={(e) => setDir(e.target.value)}
+          />
+        )}
         <Button
           data-testid="vault-preview"
           variant="outline"
@@ -1212,19 +1240,21 @@ function InstallPanel({ catalog }: { catalog: CatalogView }) {
 function HubIndexManager() {
   const [indexes, setIndexes] = useState<string[]>([]);
   const [url, setUrl] = useState('');
+  const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     api
       .hubIndexes()
       .then((r) => setIndexes(r.indexes))
-      .catch(() => {});
+      .catch((e: unknown) => setErr(errorText(e)));
   }, []);
 
   function save(next: string[]): void {
+    setErr(null);
     api
       .setHubIndexes(next)
       .then((r) => setIndexes(r.indexes))
-      .catch(() => {});
+      .catch((e: unknown) => setErr(errorText(e)));
   }
 
   return (
@@ -1277,6 +1307,11 @@ function HubIndexManager() {
             Add hub
           </Button>
         </div>
+        {err && (
+          <p data-testid="hub-index-error" className="text-xs text-destructive">
+            {err}
+          </p>
+        )}
       </div>
     </details>
   );
@@ -1740,20 +1775,25 @@ function MemoryHubPanel({ apply }: { apply: (p: Promise<StudioState>) => void })
         <Label>Publish this brain's memory</Label>
         <p className="text-xs text-muted-foreground">
           Share this brain's <b>shareable</b> facts as a pack on the hub (personal memory never
-          leaves). Needs a publish token.
+          leaves).{' '}
+          {isNative
+            ? 'Uses your `uniqent login` token unless you paste one.'
+            : 'Needs a publish token.'}
         </p>
         <div className="flex gap-2">
           <Input
             data-testid="memory-hub-token"
             type="password"
-            placeholder="publish token"
+            placeholder={
+              isNative ? 'publish token (optional — uses uniqent login)' : 'publish token'
+            }
             value={token}
             onChange={(e) => setToken(e.target.value)}
           />
           <Button
             data-testid="memory-hub-publish"
             onClick={() => publish()}
-            disabled={publishing || token.trim().length === 0}
+            disabled={publishing || !canPublish(token, isNative)}
           >
             {publishing ? 'Publishing…' : 'Publish'}
           </Button>

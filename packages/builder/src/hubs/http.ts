@@ -7,6 +7,9 @@ export const HUB_RETRY_DELAY_MS = 500;
 /** How much of an error response body to quote in the thrown message. */
 const BODY_SNIPPET_CHARS = 300;
 
+/** The fetch function a caller supplies: Node's global fetch, or Tauri's plugin-http fetch. */
+export type FetchFn = (input: string, init: RequestInit) => Promise<Response>;
+
 /** A hub answered with a non-success status. Carries the status and a body snippet. */
 export class HubHttpError extends Error {
   constructor(
@@ -38,6 +41,7 @@ function describe(err: unknown): string {
  * never retried.
  */
 export async function hubFetch(
+  fetchFn: FetchFn,
   source: string,
   url: string,
   headers: Record<string, string>,
@@ -48,7 +52,7 @@ export async function hubFetch(
     const timeout = AbortSignal.timeout(HUB_REQUEST_TIMEOUT_MS);
     const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
     try {
-      const res = await fetch(url, { headers, signal: combined });
+      const res = await fetchFn(url, { headers, signal: combined });
       if (res.status < 500) return res;
       lastError = new HubHttpError(source, url, res.status, await bodySnippet(res), '');
     } catch (err) {
@@ -73,12 +77,13 @@ export async function hubFetch(
 
 /** hubFetch + require a 2xx + parse JSON. Throws HubHttpError (status + body) otherwise. */
 export async function hubFetchJson(
+  fetchFn: FetchFn,
   source: string,
   url: string,
   headers: Record<string, string>,
   signal: AbortSignal | undefined,
 ): Promise<unknown> {
-  const res = await hubFetch(source, url, headers, signal);
+  const res = await hubFetch(fetchFn, source, url, headers, signal);
   if (!res.ok) throw new HubHttpError(source, url, res.status, await bodySnippet(res), '');
   return res.json();
 }
